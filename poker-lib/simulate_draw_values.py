@@ -90,9 +90,9 @@ def game_full_sim(round, tries_per_draw):
     # Now, have the hand simulate simulate every possible draw, and record results.
     # NOTE: Don't copy the deck!
     cashier = JacksOrBetter() # "976-9-6" Jacks or Better -- with 100% long-term payout.
-    draw_hand.simulate_all_draws(deck=deck, tries=tries_per_draw, payout_table=cashier)
+    draw_hand.simulate_all_draws(deck=deck, tries=tries_per_draw, payout_table=cashier, debug=False)
 
-    print draw_hand
+    #print draw_hand
 
     # What's the average payout, for the best move?
     pay_him = draw_hand.best_result.average_value
@@ -125,7 +125,7 @@ def generated_cases(sample_size, tries_per_draw, output_file_name):
 
             # Hack, to show matrix for final hand.
             #print hand_to_matrix(hand.final_hand)
-            pretty_print_hand_matrix(hand.final_hand)
+            #pretty_print_hand_matrix(hand.final_hand)
 
         round += 1
         end_round_time = time.time()

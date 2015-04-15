@@ -463,8 +463,9 @@ class PokerHand(object):
     # For "dealt_cards", tries every possible draw X times, and saves results in a matrix.
     # NOTE: We *completely* ignore draw_cards, final_hand, etc. 
     # NOTE: At the end, deck should contain cards it started with. Possibly, re-shuffled.
-    def simulate_all_draws(self, deck, tries, payout_table):
-        print '\nsimulating all draws for dealt hand [%s]' % (','.join([str(card) for card in self.dealt_cards]))
+    def simulate_all_draws(self, deck, tries, payout_table, debug=True):
+        if debug:
+            print '\nsimulating all draws for dealt hand [%s]' % (','.join([str(card) for card in self.dealt_cards]))
         self.sim_results = []
         for i in range(len(all_draw_patterns)):
             draw_pattern = all_draw_patterns[i]
@@ -497,14 +498,15 @@ class PokerHand(object):
 
         
         # print [draw pattern] : [result]
-        print 'All %d sim results for hand [%s]:' % (len(self.sim_results), ','.join([str(card) for card in self.dealt_cards]))
-        for i in range(len(all_draw_patterns)):
-            draw_pattern = all_draw_patterns[i]
-            draw_cards = []
-            for draw_pos in draw_pattern:
-                draw_cards.append(self.dealt_cards[draw_pos])
-            sim_result = self.sim_results[i]
-            print '\t[%s]:\t%s' % (','.join([str(card) for card in draw_cards]), str(sim_result))
+        if debug:
+            print 'All %d sim results for hand [%s]:' % (len(self.sim_results), ','.join([str(card) for card in self.dealt_cards]))
+            for i in range(len(all_draw_patterns)):
+                draw_pattern = all_draw_patterns[i]
+                draw_cards = []
+                for draw_pos in draw_pattern:
+                    draw_cards.append(self.dealt_cards[draw_pos])
+                sim_result = self.sim_results[i]
+                print '\t[%s]:\t%s' % (','.join([str(card) for card in draw_cards]), str(sim_result))
 
         # Now, also save the best move.
         # NOTE: Need to have each average evaluated!
