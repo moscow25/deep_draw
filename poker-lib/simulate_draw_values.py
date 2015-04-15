@@ -108,7 +108,8 @@ def generated_cases(sample_size, tries_per_draw, output_file_name):
     if output_file_name:
         output_file = open(output_file_name, 'w')
         csv_writer = csv.writer(output_file)
-        csv_writer.writerow(POKER_FULL_SIM_HEADER)
+	# Don't print header
+        # csv_writer.writerow(POKER_FULL_SIM_HEADER)
         csv_header_map = CreateMapFromCSVKey(POKER_FULL_SIM_HEADER)
     else:
         csv_writer = None
@@ -141,7 +142,7 @@ def generated_cases(sample_size, tries_per_draw, output_file_name):
     print '\naverage return: %.2f\tmax return: %.1f' % (np.mean(result_values), max(result_values))
 
 if __name__ == '__main__':
-    samples = 20000
+    samples = 50000
     tries_per_draw = 1000 
     output_file_name = '%d_full_sim_samples.csv' % samples
     # TODO: Take num samples from command line.

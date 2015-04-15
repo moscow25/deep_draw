@@ -45,7 +45,7 @@ King	= 11
 Ace     = 12
 ranksArray = [Deuce, Trey, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace]
 #print 'ranks: %s' % ranksArray
-royalRanksSet = { Ten, Jack, Queen, King, Ace }
+royalRanksSet = set([ Ten, Jack, Queen, King, Ace ])
 
 ROYAL_FLUSH     = 10
 STRAIGHT_FLUSH	= 1
