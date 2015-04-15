@@ -142,8 +142,20 @@ def generated_cases(sample_size, tries_per_draw, output_file_name):
     print '\naverage return: %.2f\tmax return: %.1f' % (np.mean(result_values), max(result_values))
 
 if __name__ == '__main__':
+    # TODO: Set from command line
     samples = 50000
     tries_per_draw = 1000 
+
+    # default 
     output_file_name = '%d_full_sim_samples.csv' % samples
+
+    # Output filename if given
+    # TODO: set via command line flagz
+    if len(sys.argv) >= 2:
+        filename = sys.argv[1]
+        output_file_name = filename
+
+    print 'will save %d lines to %s' % (samples, output_file_name)
+
     # TODO: Take num samples from command line.
     generated_cases(sample_size=samples, tries_per_draw=tries_per_draw, output_file_name=output_file_name)
