@@ -84,7 +84,7 @@ else:
         return pickle.load(f, encoding=encoding)
 
 DATA_URL = '' # 'http://deeplearning.net/data/mnist/mnist.pkl.gz'
-DATA_FILENAME = '../data/20000_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' #'../data/40000_full_sim_samples.csv'
+DATA_FILENAME = '../data/100k_full_sim_samples.csv' # '../data/20000_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' #'../data/40000_full_sim_samples.csv'
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
