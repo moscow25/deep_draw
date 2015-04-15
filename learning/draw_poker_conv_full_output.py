@@ -307,6 +307,7 @@ def main(num_epochs=NUM_EPOCHS):
     dataset = load_data()
 
     print("Building model and compiling functions...")
+    sys.stdout.flush() # Helps keep track of output live in re-directed out
     output_layer = build_model(
         input_height=dataset['input_height'],
         input_width=dataset['input_width'],
@@ -329,6 +330,7 @@ def main(num_epochs=NUM_EPOCHS):
     print("Starting training...")
     now = time.time()
     try:
+        sys.stdout.flush() # Helps keep track of output live in re-directed out
         for epoch in train(iter_funcs, dataset):
             print("Epoch {} of {} took {:.3f}s".format(
                 epoch['number'], num_epochs, time.time() - now))
