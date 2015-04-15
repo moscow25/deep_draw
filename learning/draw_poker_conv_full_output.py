@@ -330,8 +330,8 @@ def main(num_epochs=NUM_EPOCHS):
     print("Starting training...")
     now = time.time()
     try:
-        sys.stdout.flush() # Helps keep track of output live in re-directed out
         for epoch in train(iter_funcs, dataset):
+            sys.stdout.flush() # Helps keep track of output live in re-directed out
             print("Epoch {} of {} took {:.3f}s".format(
                 epoch['number'], num_epochs, time.time() - now))
             now = time.time()
