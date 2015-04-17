@@ -84,7 +84,7 @@ else:
         return pickle.load(f, encoding=encoding)
 
 DATA_URL = '' # 'http://deeplearning.net/data/mnist/mnist.pkl.gz'
-DATA_FILENAME = '../data/100k_full_sim_samples.csv' # '../data/20000_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' #'../data/40000_full_sim_samples.csv'
+DATA_FILENAME = '../data/300k_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' # '../data/20000_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' #'../data/40000_full_sim_samples.csv'
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
@@ -187,9 +187,13 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             # Skip any mail-formed lines.
             try:
                 hand_input, output_class, output_array = read_poker_line(line, csv_key_map)
-            except IndexError:
+            except (IndexError, ValueError):
                 print('\nskipping malformed input line:\n|%s|\n' % line)
                 continue
+
+	    if (hands % 10000) == 0:
+		print('Loaded %d hands...' % hands)
+
             # Assumes that output_array is really just 0-31 for best class.
             # TODO: Just output array and class every time, choose which one to use!
             #output_class = output_array
