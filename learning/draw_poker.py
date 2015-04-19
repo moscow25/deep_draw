@@ -84,7 +84,9 @@ else:
         return pickle.load(f, encoding=encoding)
 
 DATA_URL = '' # 'http://deeplearning.net/data/mnist/mnist.pkl.gz'
-DATA_FILENAME = '../data/300k_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' # '../data/20000_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' #'../data/40000_full_sim_samples.csv'
+DATA_FILENAME = '../data/40k-super_sim_full_vector.csv' # smaller data set, 5k samples per hand point 
+#'../data/300k_full_sim_samples.csv' # big data set, 1k samples per generated hand point
+# '../data/100k_full_sim_samples.csv' # '../data/20000_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' #'../data/40000_full_sim_samples.csv'
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
