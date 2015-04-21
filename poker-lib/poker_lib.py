@@ -5,6 +5,7 @@ import re
 import random
 import numpy as np
 import scipy.stats as ss
+import itertools
 from poker_hashes import *
 from poker_util import *
 
@@ -114,6 +115,15 @@ all_draw_patterns = [ set([]),
 
 print all_draw_patterns
 
+
+# There are X ways to scramble the suits in a hand. Note that any mapping still results in same output.
+# Scramble is always from [CLUB, DIAMOND, HEART, SPADE]
+all_suit_scrambles_array = itertools.permutations([CLUB, DIAMOND, HEART, SPADE])
+all_suit_scrambles_maps = [{CLUB: permutation[0], DIAMOND: permutation[1], HEART: permutation[2], SPADE: permutation[3]} for permutation in all_suit_scrambles_array]
+
+print all_suit_scrambles_maps
+
+
 # stuff for simulation, 32 categories of output (above)
 # All the data to store, from a hand simulation
 POKER_FULL_SIM_HEADER = ['hand', 'best_value', 'best_draw', 'sample_size', 'pay_scheme']
@@ -172,6 +182,30 @@ class Card(object):
 
     def __str__(self):
         return '%s%s' % (valueSymbol[self.value], suitSymbol[self.suit])
+
+# card from string Ks
+def card_from_string(card_str):
+    return Card(suit=suitFromChar[card_str[1]], value=valueFromChar[card_str[0]])
+
+# Return array of equivalent hands (same order, different suits)
+# NOTE: array of cards, not strings.
+def hand_suit_scrambles(hand_array):
+    # to-string of hands seen
+    unique_strings = set([])
+    uniques = [] # output of card arrays
+    
+    for suit_scramble in all_suit_scrambles_maps:
+        new_hand = [Card(suit=suit_scramble[card.suit], value=card.value) for card in hand_array]
+        new_hand_string = hand_string(new_hand)
+        if not(new_hand_string in unique_strings):
+            uniques.append(new_hand)
+            unique_strings.add(new_hand_string)
+
+    #print('for hand %s, found %d unique hands equivalent by suit permutation' % (hand_string(hand_array), len(uniques)))
+    #print unique_strings
+
+    return uniques
+
 
 # Type of hand, from raw rank.
 PAIR_JACKS_MIN_RANK = 4205
