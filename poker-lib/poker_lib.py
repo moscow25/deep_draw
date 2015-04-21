@@ -278,21 +278,25 @@ def hand_rank_five_card(hand):
 # Helper function to turn a poker hand (array of cards) into 2D array.
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
 # NOTE: Try 17x17 padding!
-def hand_to_matrix(poker_hand, pad_to_fit=False):
+def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=15):
     # initialize empty 4x13 matrix
     # Unless pad to fit... in which case pad to 18x18 # 14x14
     if pad_to_fit:
-        matrix = np.array([[0 for x in range(17)] for x in range(17)], np.int32)
+        matrix = np.array([[0 for x in range(pad_size)] for x in range(pad_size)], np.int32)
     else:
         matrix = np.array([[0 for x in range(len(ranksArray))] for x in range(len(suitsArray))], np.int32)
     for card in poker_hand:
         #print card
         #print ([suits_to_matrix[card.suit]], [card.value])
         if pad_to_fit:
-            # add 5 empty rows to start, and 5 empty rows to finish
-            suit_offset = 6
-            # add empty column to start 
-            value_offset = 2
+            if pad_size == 17:
+                # add 5 empty rows to start, and 5 empty rows to finish
+                suit_offset = 6
+                # add empty column to start 
+                value_offset = 2
+            elif pad_size == 15:
+                suit_offset = 5
+                value_offset = 1
         else:
             suit_offset = 0
             value_offset = 0

@@ -92,7 +92,7 @@ DATA_FILENAME = '../data/100k-super_sim_full_vector.csv' # smaller data set, 5k 
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
-MAX_INPUT_SIZE = 70000 #40000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 1000000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 2000
 NUM_EPOCHS = 100 # 20 # 100

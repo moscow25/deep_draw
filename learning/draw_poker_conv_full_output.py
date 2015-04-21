@@ -5,6 +5,8 @@ import theano
 import theano.tensor as T
 import theano.printing as tp # theano.printing.pprint(variable) [tp.pprint(var)]
 import time
+import pickle
+import os.path # checking file existence, etc
 import numpy as np
 
 from poker_lib import *
@@ -28,7 +30,7 @@ VALIDATION_SIZE = 5000
 TEST_SIZE = 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
-BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
+BORDER_SHAPE = "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
@@ -137,6 +139,8 @@ def build_model(input_width, input_height, output_dim,
     print('convolution layer l_conv1_1. Shape %s' % str(l_conv1_1.get_output_shape()))
 
     l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 2))
+    # Try *not pooling* in the suit layer...
+    #l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 1))
 
     print('maxPool layer l_pool1. Shape %s' % str(l_pool1.get_output_shape()))
 
@@ -175,7 +179,10 @@ def build_model(input_width, input_height, output_dim,
     print('convolution layer l_conv2_2. Shape %s' % str(l_conv2_2.get_output_shape()))
 
     # Question? No need for Max-pool for already narrow network... NO
+    # Try *not pooling* in the suit layer...
     l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 2))
+    #l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 1))
+
     print('maxPool layer l_pool2. Shape %s' % str(l_pool2.get_output_shape()))
 
     # Add 3rd convolution layer!
@@ -269,7 +276,7 @@ def create_iter_functions_full_output(dataset, output_layer,
     updates_nesterov = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
 
     # "AdaDelta" by Matt Zeiler -- no learning rate or momentum...
-    print('Using AdaDelta adaptive learning, with epsilon %s, learning rate %.2f!' % (str(ADA_DELTA_EPSILON), ADA_LEARNING_RATE))
+    print('Using AdaDelta adaptive learning after %d epochs, with epsilon %s, learning rate %.2f!' % (EPOCH_SWITCH_ADAPT, str(ADA_DELTA_EPSILON), ADA_LEARNING_RATE))
     updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=ADA_LEARNING_RATE, epsilon=ADA_DELTA_EPSILON) #learning_rate=learning_rate)
 
     # Function to train with nesterov momentum...
@@ -349,8 +356,32 @@ def predict_model(output_layer, test_batch):
     softmax_debug = [DRAW_VALUE_KEYS[i] for i in softmax_choices]
     print(softmax_debug)
 
+# Pickle the model. Can be un-pickled, if building same network.
+def save_model(out_file=None, output_layer=None):
+    # TODO: Should save layer throughout
+    # Save the layer to file...
+    if out_file and output_layer:
+        # Get all param values (for fixed network)
+        all_param_values = lasagne.layers.get_all_param_values(output_layer)
+        #print('all param values: %d' % len(all_param_values))
 
-def main(num_epochs=NUM_EPOCHS):
+        # For testing, to prove (to yourself) that saving & loading work correctly
+        """
+        # load the values back into the model...
+        lasagne.layers.set_all_param_values(output_layer, all_param_values)
+
+        # show that values are the same...
+        print('predictions should be same after re-load')
+        test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
+        predict_model(output_layer=output_layer, test_batch=test_batch)
+        """
+
+        # save values to output file!
+        print('pickling model %d param values to %s' % (len(all_param_values), out_file))
+        with open(out_file, 'wb') as f:
+            pickle.dump(all_param_values, f, -1)
+
+def main(num_epochs=NUM_EPOCHS, out_file=None):
     print("Loading data...")
     dataset = load_data()
 
@@ -361,6 +392,18 @@ def main(num_epochs=NUM_EPOCHS):
         input_width=dataset['input_width'],
         output_dim=dataset['output_dim'],
         )
+
+    # Optionally, load in previous model parameters, from pickle!
+    # NOTE: Network shape must match *exactly*
+    if os.path.isfile(out_file):
+        print('Existing model in file %s. Attempt to load it!' % out_file)
+        all_param_values_from_file = np.load(out_file)
+        print('Loaded values %d' % len(all_param_values_from_file))
+        lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file)
+        print('Successfully initialized model with previous saved params!')
+    else:
+        print('No existing model file (or skipping intialization) %s' % out_file)
+
 
     #iter_funcs = create_iter_functions(
     #    dataset,
@@ -388,6 +431,9 @@ def main(num_epochs=NUM_EPOCHS):
             print("  validation accuracy:\t\t{:.2f} %%".format(
                 epoch['valid_accuracy'] * 100))
 
+            # Save model, after every epoch.
+            save_model(out_file=out_file, output_layer=output_layer)
+
             if epoch['number'] >= num_epochs:
                 break
 
@@ -411,12 +457,12 @@ def main(num_epochs=NUM_EPOCHS):
     test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
     predict_model(output_layer=output_layer, test_batch=test_batch)
 
-    print('again, the test cases: \n%s' % test_cases)
-
-    #print(predict(output_layer[x=test_batch]))
+    print('again, the test cases: \n%s' % test_cases)    
 
     return output_layer
 
 
 if __name__ == '__main__':
-    main()
+
+    output_layer_filename = 'draw_poker_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_model.pickle' % (LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS)
+    main(out_file=output_layer_filename)
