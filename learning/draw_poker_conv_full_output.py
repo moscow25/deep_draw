@@ -112,9 +112,12 @@ def build_model(input_width, input_height, output_dim,
         l_in,
         num_filters=16, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
+        border_mode="full", # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
+
+    print('convolution layer l_conv1. Shape %s' % str(l_conv1.get_output_shape()))
 
     # No hard rule that we need to pool after every 3x3!
     # l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
@@ -122,10 +125,15 @@ def build_model(input_width, input_height, output_dim,
         l_conv1,
         num_filters=16, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
+        border_mode="full", # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
+    print('convolution layer l_conv1_1. Shape %s' % str(l_conv1_1.get_output_shape()))
+
     l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 2))
+
+    print('maxPool layer l_pool1. Shape %s' % str(l_pool1.get_output_shape()))
 
     # try 3rd conv layer
     #l_conv1_2 = lasagne.layers.Conv2DLayer(
@@ -141,9 +149,12 @@ def build_model(input_width, input_height, output_dim,
         l_pool1,
         num_filters=32, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
+        border_mode="full", # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
+
+    print('convolution layer l_conv2. Shape %s' % str(l_conv2.get_output_shape()))
 
     # Add 4th convolution layer...
     # l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
@@ -151,10 +162,16 @@ def build_model(input_width, input_height, output_dim,
         l_conv2,
         num_filters=32, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
+        border_mode="full", # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
+
+    print('convolution layer l_conv2_2. Shape %s' % str(l_conv2_2.get_output_shape()))
+
     l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 2))
+
+    print('maxPool layer l_pool2. Shape %s' % str(l_pool2.get_output_shape()))
 
     # Add 3rd convolution layer!
     #l_conv3 = lasagne.layers.Conv2DLayer(
@@ -173,7 +190,11 @@ def build_model(input_width, input_height, output_dim,
         W=lasagne.init.GlorotUniform(),
         )
 
+    print('hidden layer l_hidden1. Shape %s' % str(l_hidden1.get_output_shape()))
+
     l_hidden1_dropout = lasagne.layers.DropoutLayer(l_hidden1, p=0.5)
+
+    print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.get_output_shape()))
 
     #l_hidden2 = lasagne.layers.DenseLayer(
     #     l_hidden1_dropout,
@@ -188,6 +209,8 @@ def build_model(input_width, input_height, output_dim,
         nonlinearity=lasagne.nonlinearities.rectify, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
         W=lasagne.init.GlorotUniform(),
         )
+
+    print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.get_output_shape())))
 
     return l_out
 
