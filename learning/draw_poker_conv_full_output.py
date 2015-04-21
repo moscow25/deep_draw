@@ -28,6 +28,7 @@ VALIDATION_SIZE = 1000
 TEST_SIZE = 1000
 NUM_EPOCHS = 200 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
+BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.1 #0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
@@ -112,7 +113,7 @@ def build_model(input_width, input_height, output_dim,
         l_in,
         num_filters=16, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-        border_mode="full", # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
@@ -125,7 +126,7 @@ def build_model(input_width, input_height, output_dim,
         l_conv1,
         num_filters=16, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-        border_mode="full", # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
@@ -149,7 +150,7 @@ def build_model(input_width, input_height, output_dim,
         l_pool1,
         num_filters=32, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
-        border_mode="full", # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
@@ -162,7 +163,7 @@ def build_model(input_width, input_height, output_dim,
         l_conv2,
         num_filters=32, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
-        border_mode="full", # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )

@@ -84,7 +84,8 @@ else:
         return pickle.load(f, encoding=encoding)
 
 DATA_URL = '' # 'http://deeplearning.net/data/mnist/mnist.pkl.gz'
-DATA_FILENAME = '../data/100k-super_sim_full_vector.csv' # more data, still 5k samples per point; see if improvement on more inexact data?  
+DATA_FILENAME = '../data/100k-super_sim_full_vector.csv' # smaller data set, 5k samples per hand point 
+#'../data/100k-super_sim_full_vector.csv' # more data, still 5k samples per point; see if improvement on more inexact data?  
 #'../data/40k-super_sim_full_vector.csv' # smaller data set, 5k samples per hand point 
 #'../data/300k_full_sim_samples.csv' # big data set, 1k samples per generated hand point
 # '../data/100k_full_sim_samples.csv' # '../data/20000_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' #'../data/40000_full_sim_samples.csv'
@@ -92,8 +93,8 @@ DATA_FILENAME = '../data/100k-super_sim_full_vector.csv' # more data, still 5k s
 # '../data/20000_full_sim_samples.csv'
 
 MAX_INPUT_SIZE = 1000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 1000
-TEST_SIZE = 1000
+VALIDATION_SIZE = 2000
+TEST_SIZE = 2000
 NUM_EPOCHS = 100 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 NUM_HIDDEN_UNITS = 512
@@ -370,8 +371,12 @@ def create_iter_functions(dataset, output_layer,
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
 
     all_params = lasagne.layers.get_all_params(output_layer)
-    updates = lasagne.updates.nesterov_momentum(
-        loss_train, all_params, learning_rate, momentum)
+
+    # Default: Nesterov momentum. Try something else?
+    # updates = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
+
+    # "AdaDelta" by Matt Zeiler -- no learning rate or momentum...
+    updates = lasagne.updates.adadelta(loss_train, all_params)
 
     # Add a function.... to evaluate the result of an input!
     #evaluate = theano.function()
