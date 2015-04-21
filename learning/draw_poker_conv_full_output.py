@@ -23,15 +23,16 @@ Why? Lets us give more weight to important decisions. And also, system has to di
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '20000_full_sim_samples.csv' #'10000_A_full_sim_samples.csv' # 'mnist.pkl.gz'
 
-MAX_INPUT_SIZE = 1000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 1000
-TEST_SIZE = 1000
-NUM_EPOCHS = 200 # 20 # 20 # 100
+MAX_INPUT_SIZE = 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 2000
+TEST_SIZE = 2000
+NUM_EPOCHS = 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
-LEARNING_RATE = 0.1 #0.1 #  0.05 # 0.01 # 0.02 # 0.01
+LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
+EPOCH_SWITCH_ADAPT = 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 
 
 def load_data():
@@ -170,8 +171,8 @@ def build_model(input_width, input_height, output_dim,
 
     print('convolution layer l_conv2_2. Shape %s' % str(l_conv2_2.get_output_shape()))
 
+    # Question? No need for Max-pool for already narrow network... NO
     l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 2))
-
     print('maxPool layer l_pool2. Shape %s' % str(l_pool2.get_output_shape()))
 
     # Add 3rd convolution layer!
@@ -260,15 +261,33 @@ def create_iter_functions_full_output(dataset, output_layer,
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
 
     all_params = lasagne.layers.get_all_params(output_layer)
-    updates = lasagne.updates.nesterov_momentum(
-        loss_train, all_params, learning_rate, momentum)
+    # Default: Nesterov momentum. Try something else?
+    print('Using updates.nesterov_momentum with learning rate %.2f, momentum %.2f' % (learning_rate, momentum))
+    updates_nesterov = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
 
-    # Add a function.... to evaluate the result of an input!
-    #evaluate = theano.function()
+    # "AdaDelta" by Matt Zeiler -- no learning rate or momentum...
+    print('Using AdaDelta adaptive learning, with initial learning rate %.2f!' % learning_rate)
+    updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=learning_rate)
 
-    iter_train = theano.function(
+    # Function to train with nesterov momentum...
+    iter_train_nesterov = theano.function(
         [batch_index], loss_train,
-        updates=updates,
+        updates=updates_nesterov,
+        givens={
+            X_batch: dataset['X_train'][batch_slice],
+            # Not computing 'accuracy' on training... [though we should]
+            #y_batch: dataset['y_train'][batch_slice],
+            z_batch: dataset['z_train'][batch_slice],
+        },
+    )
+
+    # Still the default training function
+    iter_train = iter_train_nesterov
+
+    # Try training with AdaDelta (adaptive training)
+    iter_train_ada_delta= theano.function(
+        [batch_index], loss_train,
+        updates=updates_ada_delta,
         givens={
             X_batch: dataset['X_train'][batch_slice],
             # Not computing 'accuracy' on training... [though we should]
@@ -297,6 +316,8 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     return dict(
         train=iter_train,
+        train_nesterov=iter_train_nesterov,
+        train_ada_delta=iter_train_ada_delta,
         valid=iter_valid,
         test=iter_test,
     )
@@ -354,7 +375,7 @@ def main(num_epochs=NUM_EPOCHS):
     print("Starting training...")
     now = time.time()
     try:
-        for epoch in train(iter_funcs, dataset):
+        for epoch in train(iter_funcs, dataset, epoch_switch_adapt=EPOCH_SWITCH_ADAPT):
             sys.stdout.flush() # Helps keep track of output live in re-directed out
             print("Epoch {} of {} took {:.3f}s".format(
                 epoch['number'], num_epochs, time.time() - now))

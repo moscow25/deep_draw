@@ -412,8 +412,8 @@ def create_iter_functions(dataset, output_layer,
         test=iter_test,
     )
 
-
-def train(iter_funcs, dataset, batch_size=BATCH_SIZE):
+# Pass epoch_switch_adapt variable, to switch for adaptive training...
+def train(iter_funcs, dataset, batch_size=BATCH_SIZE, epoch_switch_adapt=10000):
     """Train the model with `dataset` with mini-batch training. Each
        mini-batch has `batch_size` recordings.
     """
@@ -422,9 +422,18 @@ def train(iter_funcs, dataset, batch_size=BATCH_SIZE):
 
     for epoch in itertools.count(1):
         batch_train_losses = []
-        for b in range(num_batches_train):
-            batch_train_loss = iter_funcs['train'](b)
-            batch_train_losses.append(batch_train_loss)
+
+        # Hack: after X number of runs... switch to adaptive training!
+        if epoch <= epoch_switch_adapt:
+            print('default train for epoch %d' % epoch)
+            for b in range(num_batches_train):
+                batch_train_loss = iter_funcs['train'](b)
+                batch_train_losses.append(batch_train_loss)
+        else:
+            print('adaptive training for epock %d' % epoch)
+            for b in range(num_batches_train):
+                batch_train_loss = iter_funcs['train_ada_delta'](b)
+                batch_train_losses.append(batch_train_loss)
 
         avg_train_loss = np.mean(batch_train_losses)
 
