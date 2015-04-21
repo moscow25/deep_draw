@@ -92,7 +92,7 @@ DATA_FILENAME = '../data/100k-super_sim_full_vector.csv' # smaller data set, 5k 
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
-MAX_INPUT_SIZE = 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 70000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 2000
 NUM_EPOCHS = 100 # 20 # 100
@@ -119,7 +119,11 @@ def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50):
 
     # All 4-24 of these permutations are equivalent data (just move suits)
     # Keep first X if so declared.
-    cards_array_permutations = hand_suit_scrambles(cards_array_original)[0:max_inputs]
+    if max_inputs > 1:
+        cards_array_permutations = hand_suit_scrambles(cards_array_original)[0:max_inputs]
+    else:
+        # Shortcut if only one output...
+        cards_array_permutations = [cards_array_original]
 
     cards_inputs_all = []
     for cards_array in cards_array_permutations:
@@ -163,7 +167,7 @@ def read_poker_line(data_array, csv_key_map):
     """
 
     # array of equivalent inputs
-    cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']])
+    cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1)
 
     # Ok now translate the 32-low output row.
     output_values = [adjust_float_value(float(data_array[csv_key_map[draw_value_key]])) for draw_value_key in DRAW_VALUE_KEYS] # np.array([float(data_array[csv_key_map[draw_value_key]]) for draw_value_key in DRAW_VALUE_KEYS], np.float32)
@@ -195,7 +199,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     last_hands_print = -1
     lines = 0
     # Sample down even harder, if outputting equivalent hands by permuted suit (fewer examples for flushes)
-    sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES # DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_KEEP_ALL
+    sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES # DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_KEEP_ALL
     # compute histogram of how many hands, output "correct draw" to each of 32 choices
     y_count_by_bucket = [0 for i in range(32)] 
     for line in csv_reader:
@@ -224,8 +228,11 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
 
             # Create an output, for each equivalent input...
             for hand_input in hand_inputs_all:
-                if (hands % 10000) == 0 and hands != last_hands_print:
-                    print('Loaded %d hands...' % hands)
+                if (hands % 5000) == 0 and hands != last_hands_print:
+                    print('\nLoaded %d hands...\n' % hands)
+                    print(line)
+                    print(output_class)
+                    print(output_array)
                     last_hands_print = hands
 
                 # If requested, sample out some too common cases. 
