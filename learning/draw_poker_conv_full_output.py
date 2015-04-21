@@ -34,7 +34,8 @@ NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 1 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
-ADA_DELTA_EPSILON = 1e-4 # default is smaller, be more aggressive...
+ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
+ADA_LEARNING_RATE = 1.0 # algorithm confuses this
 
 
 def load_data():
@@ -268,8 +269,8 @@ def create_iter_functions_full_output(dataset, output_layer,
     updates_nesterov = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
 
     # "AdaDelta" by Matt Zeiler -- no learning rate or momentum...
-    print('Using AdaDelta adaptive learning, with epsilon %s, learning rate %.2f!' % (str(ADA_DELTA_EPSILON), learning_rate))
-    updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=learning_rate, epsilon=ADA_DELTA_EPSILON) #learning_rate=learning_rate)
+    print('Using AdaDelta adaptive learning, with epsilon %s, learning rate %.2f!' % (str(ADA_DELTA_EPSILON), ADA_LEARNING_RATE))
+    updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=ADA_LEARNING_RATE, epsilon=ADA_DELTA_EPSILON) #learning_rate=learning_rate)
 
     # Function to train with nesterov momentum...
     iter_train_nesterov = theano.function(
