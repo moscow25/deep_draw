@@ -92,7 +92,7 @@ DATA_FILENAME = '../data/100k-super_sim_full_vector.csv' # smaller data set, 5k 
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
-MAX_INPUT_SIZE = 1000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 2000
 NUM_EPOCHS = 100 # 20 # 100
@@ -106,18 +106,31 @@ MOMENTUM = 0.9
 DATA_SAMPLING_KEEP_ALL = [1.0 for i in range(32)]
 # Choose 50% of "keep two cards" moves, and 50% of "keep one card" moves
 DATA_SAMPLING_REDUCE_KEEP_TWO = [1.0] + [0.5] * 5 + [0.5] * 10 + [1.0] * 10 + [1.0] * 5 + [1.0] 
+DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10 + [0.50] * 10 + [0.50] * 5 + [1.0] 
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
-def cards_input_from_string(hand_string, pad_to_fit = True):
+def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50):
     hand_array = hand_string_to_array(hand_string)
 
     # Now turn the array of Card abbreviations into numpy array of of input
-    cards_array = [Card(suit=suitFromChar[card_str[1]], value=valueFromChar[card_str[0]]) for card_str in hand_array]
-    assert(len(cards_array) == 5)
-    cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], np.int32)
+    cards_array_original = [card_from_string(card_str) for card_str in hand_array]
+    assert(len(cards_array_original) == 5)
 
-    return cards_input
+    # All 4-24 of these permutations are equivalent data (just move suits)
+    # Keep first X if so declared.
+    cards_array_permutations = hand_suit_scrambles(cards_array_original)[0:max_inputs]
+
+    cards_inputs_all = []
+    for cards_array in cards_array_permutations:
+        cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], np.int32)
+        cards_inputs_all.append(cards_input)
+
+    return cards_inputs_all
+
+# Special case, to output first one!
+def cards_input_from_string(hand_string, pad_to_fit = True):
+    return cards_inputs_from_string(hand_string, pad_to_fit, max_inputs=1)[0]
 
 # a hack, since we aren't able to implement liner loss in Theano...
 # To remove, or reduce problems with really big values... map values above 2.0 points to sqrt(remainder)
@@ -149,7 +162,8 @@ def read_poker_line(data_array, csv_key_map):
     cards_input = np.array([card_to_matrix(cards_array[0]), card_to_matrix(cards_array[1]), card_to_matrix(cards_array[2]), card_to_matrix(cards_array[3]), card_to_matrix(cards_array[4])], np.int32)
     """
 
-    cards_input = cards_input_from_string(data_array[csv_key_map['hand']])
+    # array of equivalent inputs
+    cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']])
 
     # Ok now translate the 32-low output row.
     output_values = [adjust_float_value(float(data_array[csv_key_map[draw_value_key]])) for draw_value_key in DRAW_VALUE_KEYS] # np.array([float(data_array[csv_key_map[draw_value_key]]) for draw_value_key in DRAW_VALUE_KEYS], np.float32)
@@ -164,7 +178,7 @@ def read_poker_line(data_array, csv_key_map):
         """
 
     # Output all three things. Cards input, best category (0-32) and 32-row vector, of the weights
-    return (cards_input, output_category, output_values) 
+    return (cards_inputs, output_category, output_values) 
     
 # Read CSV lines, create giant numpy arrays of the input & output values.
 def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True):
@@ -178,10 +192,17 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     y_train_not_np = []
     z_train_not_np = [] # 32-length vectors for all weights
     hands = 0
-    sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_KEEP_ALL
+    last_hands_print = -1
+    lines = 0
+    # Sample down even harder, if outputting equivalent hands by permuted suit (fewer examples for flushes)
+    sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES # DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_KEEP_ALL
     # compute histogram of how many hands, output "correct draw" to each of 32 choices
     y_count_by_bucket = [0 for i in range(32)] 
     for line in csv_reader:
+        lines += 1
+        if lines % 10000 == 0:
+            print('Read %d lines' % lines)
+
         # Read the CSV key, so we look for columns in the data, not fixed positions.
         if not csv_key:
             print('CSV key' + str(line))
@@ -190,35 +211,39 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
         else:
             # Skip any mail-formed lines.
             try:
-                hand_input, output_class, output_array = read_poker_line(line, csv_key_map)
+                # NOTE: hand_inputs represents array of *equivalent* inputs
+                hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map)
             except (IndexError, ValueError):
                 print('\nskipping malformed input line:\n|%s|\n' % line)
                 continue
 
-	    if (hands % 10000) == 0:
-		print('Loaded %d hands...' % hands)
 
             # Assumes that output_array is really just 0-31 for best class.
             # TODO: Just output array and class every time, choose which one to use!
             #output_class = output_array
 
-            # If requested, sample out some too common cases. 
-            # A. Better balance
-            # B. Faster training
-            if sampling_policy:
-                output_percent = sampling_policy[output_class]
-                if random.random() > output_percent:
-                    #print('(item skipped for class %s' % DRAW_VALUE_KEYS[output_class])
-                    continue
+            # Create an output, for each equivalent input...
+            for hand_input in hand_inputs_all:
+                if (hands % 10000) == 0 and hands != last_hands_print:
+                    print('Loaded %d hands...' % hands)
+                    last_hands_print = hands
 
-            # count class, if item chosen
-            y_count_by_bucket[output_class] += 1
+                # If requested, sample out some too common cases. 
+                # A. Better balance
+                # B. Faster training
+                if sampling_policy:
+                    output_percent = sampling_policy[output_class]
+                    if random.random() > output_percent:
+                        continue
 
-            X_train_not_np.append(hand_input)
-            y_train_not_np.append(output_class)
-            z_train_not_np.append(output_array)
+                # count class, if item chosen
+                y_count_by_bucket[output_class] += 1
 
-            hands += 1
+                X_train_not_np.append(hand_input)
+                y_train_not_np.append(output_class)
+                z_train_not_np.append(output_array)
+
+                hands += 1
 
             if hands >= max_input:
                 break

@@ -23,16 +23,18 @@ Why? Lets us give more weight to important decisions. And also, system has to di
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '20000_full_sim_samples.csv' #'10000_A_full_sim_samples.csv' # 'mnist.pkl.gz'
 
-MAX_INPUT_SIZE = 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 2000
-TEST_SIZE = 2000
+###MAX_INPUT_SIZE = 10000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 5000
+TEST_SIZE = 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
+NUM_FILTERS = 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
-EPOCH_SWITCH_ADAPT = 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
+EPOCH_SWITCH_ADAPT = 1 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
+ADA_DELTA_EPSILON = 1e-4 # default is smaller, be more aggressive...
 
 
 def load_data():
@@ -112,7 +114,7 @@ def build_model(input_width, input_height, output_dim,
 
     l_conv1 = lasagne.layers.Conv2DLayer(
         l_in,
-        num_filters=16, #16, #32,
+        num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
         border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
@@ -125,7 +127,7 @@ def build_model(input_width, input_height, output_dim,
     # l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
     l_conv1_1 = lasagne.layers.Conv2DLayer(
         l_conv1,
-        num_filters=16, #16, #32,
+        num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
         border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
@@ -149,7 +151,7 @@ def build_model(input_width, input_height, output_dim,
 
     l_conv2 = lasagne.layers.Conv2DLayer(
         l_pool1,
-        num_filters=32, #16, #32,
+        num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
         border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
@@ -162,7 +164,7 @@ def build_model(input_width, input_height, output_dim,
     # l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
     l_conv2_2 = lasagne.layers.Conv2DLayer(
         l_conv2,
-        num_filters=32, #16, #32,
+        num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
         border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
@@ -266,8 +268,8 @@ def create_iter_functions_full_output(dataset, output_layer,
     updates_nesterov = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
 
     # "AdaDelta" by Matt Zeiler -- no learning rate or momentum...
-    print('Using AdaDelta adaptive learning, with initial learning rate %.2f!' % learning_rate)
-    updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=learning_rate)
+    print('Using AdaDelta adaptive learning, with epsilon %s, learning rate %.2f!' % (str(ADA_DELTA_EPSILON), learning_rate))
+    updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=learning_rate, epsilon=ADA_DELTA_EPSILON) #learning_rate=learning_rate)
 
     # Function to train with nesterov momentum...
     iter_train_nesterov = theano.function(
