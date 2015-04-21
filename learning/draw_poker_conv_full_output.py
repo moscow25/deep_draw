@@ -29,7 +29,7 @@ TEST_SIZE = 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
-NUM_FILTERS = 32 # 16 # increases 2x at higher level
+NUM_FILTERS = 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
