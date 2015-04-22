@@ -356,6 +356,83 @@ def predict_model(output_layer, test_batch):
     softmax_debug = [DRAW_VALUE_KEYS[i] for i in softmax_choices]
     print(softmax_debug)
 
+
+# Get 0-BATCH_SIZE hands, evaluate, and return matrix of vectors
+def evaluate_batch_hands(output_layer, test_cases): 
+    now = time.time()
+    for i in range(BATCH_SIZE - len(test_cases)):
+        test_cases.append(test_cases[0])
+    test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
+
+    print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
+    now = time.time()
+
+    pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+    print('%.2fs to get_output' % (time.time() - now))
+    now = time.time()
+
+    #print('Prediciton: %s' % pred)
+    #print(tp.pprint(pred))
+    softmax_values = pred.eval()
+    print('%.2fs to eval() output' % (time.time() - now))
+    now = time.time()
+
+    return softmax_values
+
+
+# Return 32-point vector.
+# Make a batch, to evaluate single hand. Expensive!!
+def evaluate_single_hand(output_layer, hand_string_dealt): #, test_batch = None, test_cases = TEST_CASES):
+    test_cases = [hand_string_dealt]
+    softmax_values = evaluate_batch_hands(output_layer, test_cases)
+
+    """
+    # fill in test batch
+    # TODO: Is there a function to try single value??
+    # TODO: At least setup dummy batch, where we can just edit the first element??
+    now = time.time()
+    if not test_cases or len(test_cases) != BATCH_SIZE:
+        print('filling in test cases to get to BATCH_SIZE %d' % BATCH_SIZE)
+        test_cases = [hand_string_dealt]
+        for i in range(BATCH_SIZE - len(test_cases)):
+            test_cases.append(test_cases[0])
+    else:
+        print('replacing test case')
+        test_cases[0] = hand_string_dealt
+    test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
+
+    print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
+    now = time.time()
+
+    pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+    print('%.2fs to get_output' % (time.time() - now))
+    now = time.time()
+
+    #print('Prediciton: %s' % pred)
+    #print(tp.pprint(pred))
+    softmax_values = pred.eval()
+    print('%.2fs to eval() output' % (time.time() - now))
+    now = time.time()
+    #print(softmax_values)
+    """
+
+    """
+    pred_max = T.argmax(pred, axis=1)
+
+    print('Maximums %s' % pred_max)
+    #print(tp.pprint(pred_max))
+
+    softmax_choices = pred_max.eval()
+    print(softmax_choices)
+
+    # now debug the softmax choices...
+    softmax_debug = [DRAW_VALUE_KEYS[i] for i in softmax_choices]
+    print(softmax_debug)
+    """
+
+    return softmax_values[0]
+
+
 # Pickle the model. Can be un-pickled, if building same network.
 def save_model(out_file=None, output_layer=None):
     # TODO: Should save layer throughout
