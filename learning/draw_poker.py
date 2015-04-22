@@ -84,7 +84,7 @@ else:
         return pickle.load(f, encoding=encoding)
 
 DATA_URL = '' # 'http://deeplearning.net/data/mnist/mnist.pkl.gz'
-DATA_FILENAME = '../data/100k-super_sim_full_vector.csv' # smaller data set, 5k samples per hand point 
+DATA_FILENAME = '../data/250k_full_sim_combined.csv' # full dataset, with preference to better data (more samples per point)
 #'../data/100k-super_sim_full_vector.csv' # more data, still 5k samples per point; see if improvement on more inexact data?  
 #'../data/40k-super_sim_full_vector.csv' # smaller data set, 5k samples per hand point 
 #'../data/300k_full_sim_samples.csv' # big data set, 1k samples per generated hand point
@@ -92,7 +92,7 @@ DATA_FILENAME = '../data/100k-super_sim_full_vector.csv' # smaller data set, 5k 
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
-MAX_INPUT_SIZE = 1000000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 2000
 NUM_EPOCHS = 100 # 20 # 100
@@ -106,7 +106,10 @@ MOMENTUM = 0.9
 DATA_SAMPLING_KEEP_ALL = [1.0 for i in range(32)]
 # Choose 50% of "keep two cards" moves, and 50% of "keep one card" moves
 DATA_SAMPLING_REDUCE_KEEP_TWO = [1.0] + [0.5] * 5 + [0.5] * 10 + [1.0] * 10 + [1.0] * 5 + [1.0] 
-DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10 + [0.50] * 10 + [0.25] * 5 + [1.0] 
+DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10 + [0.50] * 10 + [0.25] * 5 + [1.0]
+
+# Focus on straights, flushes, draws and pat hands. [vast majority of cards option to 2-card draw anyway...]
+DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.10] * 10 + [0.7] * 10 + [1.0] * 5 + [1.0] 
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
@@ -199,7 +202,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     last_hands_print = -1
     lines = 0
     # Sample down even harder, if outputting equivalent hands by permuted suit (fewer examples for flushes)
-    sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES # DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_KEEP_ALL
+    sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES #DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES # DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_KEEP_ALL
     # compute histogram of how many hands, output "correct draw" to each of 32 choices
     y_count_by_bucket = [0 for i in range(32)] 
     for line in csv_reader:

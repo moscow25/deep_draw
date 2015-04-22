@@ -364,8 +364,8 @@ def play(sample_size, output_file_name, model_filename=None):
         
         # Size must match exactly!
         output_layer = build_model(
-            15, #input_height=dataset['input_height'],
-            15, #input_width=dataset['input_width'],
+            17, # 15, #input_height=dataset['input_height'],
+            17, # 15, #input_width=dataset['input_width'],
             32, #output_dim=dataset['output_dim'],
         )
 
@@ -430,7 +430,7 @@ def play(sample_size, output_file_name, model_filename=None):
 
                 round += 1
             
-            print('\n%d hands took %.2fs. Running return: %.2f. Expected return: %.2f' % (len(results), 
+            print('\n%d hands took %.2fs. Running return: %.3f. Expected return: %.3f' % (len(results), 
                                                                                           time.time() - now, 
                                                                                           np.mean(results), 
                                                                                           np.mean(expected_results)))
@@ -445,8 +445,8 @@ def play(sample_size, output_file_name, model_filename=None):
 
     print '\npaid %s' % sorted(results, reverse=True)[0:100]
     print '\nexpected %s' % sorted(expected_results, reverse=True)[0:100]
-    print '\nstats:\tave: %.2f\tstdev: %.2f\tskew: %.2f' % (np.mean(results), np.std(results), ss.skew(results))
-    print '\nexpected:\tave: %.2f\tstdev: %.2f\tskew: %.2f' % (np.mean(expected_results), np.std(expected_results), ss.skew(expected_results))
+    print '\nstats:\tave: %.3f\tstdev: %.2f\tskew: %.2f' % (np.mean(results), np.std(results), ss.skew(results))
+    print '\nexpected:\tave: %.3f\tstdev: %.2f\tskew: %.2f' % (np.mean(expected_results), np.std(expected_results), ss.skew(expected_results))
 
     sys.stdout.flush()
 

@@ -30,14 +30,14 @@ VALIDATION_SIZE = 5000
 TEST_SIZE = 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
-BORDER_SHAPE = "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
+BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
-ADA_LEARNING_RATE = 1.0 # algorithm confuses this
+ADA_LEARNING_RATE = 0.5 # algorithm confuses this
 
 
 def load_data():
@@ -521,8 +521,9 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     #test_batch = dataset['X_test']
 
     # Test cases -- it keeps the two aces. But can it recognize a straight? A flush? Trips? Draw?? Two pair??
-    test_cases = ['As,Ad,4d,3s,2c', 'As,Ks,Qs,Js,Ts', '3h,3s,3d,5c,6d', '3h,4s,3d,5c,6d', '2h,3s,4d,6c,5s',
-                  '8s,Ad,Kd,8c,Jd', '8s,Ad,2d,7c,Jd', '2d,7d,8d,9d,4d', '7c,8c,Tc,Js,Qh', '2c,8s,5h,8d,2s',
+    test_cases = ['As,Ad,4d,3s,2c', '6d,7d,8d,9d,Kh', 'Jh,Td,9s,8s,5s', 'As,Ks,Qs,Js,Ts', '3h,3s,3d,5c,6d', 
+                  '3h,4s,3d,5c,6d', '2h,3s,4d,6c,5s', '8s,Ad,Kd,8c,Jd', '8s,Ad,2d,7c,Jd', '2d,7d,8d,9d,4d',
+                  '7c,8c,Tc,Js,Qh', '2c,8s,5h,8d,2s', '6s,5s,Kd,3c,4h', 'As,Ks,Qs,Js,Qc',
                   '[8s,9c,8c,Kd,7h]', '[Qh,3h,6c,5s,4s]', '[Jh,Td,9s,Ks,5s]', '[6c,4d,Ts,Jc,6s]', 
                   '[4h,8h,2c,7d,3h]', '[2c,Ac,Tc,6d,3d]', '[Ad,3c,Tc,4d,5d]'] 
 
@@ -541,5 +542,5 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
 if __name__ == '__main__':
 
-    output_layer_filename = 'draw_poker_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_model.pickle' % (LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS)
+    output_layer_filename = 'draw_poker_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_%s_border_model.pickle' % (LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS, BORDER_SHAPE)
     main(out_file=output_layer_filename)

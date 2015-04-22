@@ -278,7 +278,7 @@ def hand_rank_five_card(hand):
 # Helper function to turn a poker hand (array of cards) into 2D array.
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
 # NOTE: Try 17x17 padding!
-def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=15):
+def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=17):
     # initialize empty 4x13 matrix
     # Unless pad to fit... in which case pad to 18x18 # 14x14
     if pad_to_fit:
