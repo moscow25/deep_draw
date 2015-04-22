@@ -109,7 +109,7 @@ DATA_SAMPLING_REDUCE_KEEP_TWO = [1.0] + [0.5] * 5 + [0.5] * 10 + [1.0] * 10 + [1
 DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10 + [0.50] * 10 + [0.25] * 5 + [1.0]
 
 # Focus on straights, flushes, draws and pat hands. [vast majority of cards option to 2-card draw anyway...]
-DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.10] * 10 + [0.7] * 10 + [1.0] * 5 + [1.0] 
+DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 + [0.7] * 10 + [1.0] * 5 + [1.0] 
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
@@ -202,7 +202,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     last_hands_print = -1
     lines = 0
     # Sample down even harder, if outputting equivalent hands by permuted suit (fewer examples for flushes)
-    sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES #DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES # DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_KEEP_ALL
+    sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES #DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES # DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_KEEP_ALL
     # compute histogram of how many hands, output "correct draw" to each of 32 choices
     y_count_by_bucket = [0 for i in range(32)] 
     for line in csv_reader:
