@@ -405,6 +405,7 @@ def play(sample_size, output_file_name, model_filename=None):
     now = time.time()
     try:
         while round < sample_size:
+            sys.stdout.flush()
             #hand, payout, expected_payout = game(round, cashier, player=player)
             # Need to batch games. Since network evaluation so expensive!
             hand_batch, payout_batch, expected_payout_batch = game_batch(round, cashier, player=player)
@@ -446,7 +447,9 @@ def play(sample_size, output_file_name, model_filename=None):
     print '\nexpected %s' % sorted(expected_results, reverse=True)[0:100]
     print '\nstats:\tave: %.2f\tstdev: %.2f\tskew: %.2f' % (np.mean(results), np.std(results), ss.skew(results))
     print '\nexpected:\tave: %.2f\tstdev: %.2f\tskew: %.2f' % (np.mean(expected_results), np.std(expected_results), ss.skew(expected_results))
-        
+
+    sys.stdout.flush()
+
 if __name__ == '__main__':
     samples = 100000
     output_file_name = '%d_samples_model_choices.csv' % samples
