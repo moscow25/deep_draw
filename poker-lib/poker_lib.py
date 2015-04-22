@@ -183,6 +183,9 @@ class Card(object):
     def __str__(self):
         return '%s%s' % (valueSymbol[self.value], suitSymbol[self.suit])
 
+    def __eq__(self, other):
+        return (self.suit == other.suit and self.value == other.value)
+
 # card from string Ks
 def card_from_string(card_str):
     return Card(suit=suitFromChar[card_str[1]], value=valueFromChar[card_str[0]])
@@ -393,6 +396,7 @@ class HandSimResult(object):
         # For reference, and debug
         self.draw_index = 0 # int i in [32] row array of possible 5-card draws.
         self.draw_cards = [] # cards kept (for debug)
+        self.draw_string = '' # also for debug, or indexing
 
         # Actual results
         self.results = []
@@ -520,7 +524,11 @@ class PokerHand(object):
 
             sim_result = HandSimResult()
             sim_result.draw_index = i
+
+            # save for lookup, and debug
             sim_result.draw_cards = draw_cards
+            sim_result.draw_string = hand_string(draw_cards)
+
             for x in range(tries_local):
                 # Returns hand rank, and puts cards back in the deck
                 hand_rank = self.draw_in_place(deck, draw_pattern)
@@ -533,7 +541,6 @@ class PokerHand(object):
             # Hack, as we just use fixed order of all_draw_patterns to match results
             sim_result.evaluate()
             self.sim_results.append(sim_result)
-
         
         # print [draw pattern] : [result]
         if debug:
@@ -558,6 +565,16 @@ class PokerHand(object):
 
         self.best_result = best_result
 
+    # Look up value, for draw given cards kept
+    # NOTE: To compare AI results, for example, versus simulation...
+    # NOTE: Card order... is important! Since we do exact string matching.
+    def find_draw_value_for_string(self, draw_cards_string):
+        for sim_result in self.sim_results:
+            if sim_result.draw_string == draw_cards_string:
+                print('found sim_result at position %d' % sim_result.draw_index)
+                return sim_result.average_value
+        print('ERROR: unable to find result for %s' % draw_cards_string)
+        return None
 
     # Recieves string of ints, for positions to draw form (0-4 for 5-card hand)
     # example: '340' draws three cards.
@@ -625,6 +642,25 @@ class PokerDeck(object):
             for card in deal_cards:
                 self.dealt_cards.append(card)
         return deal_cards
+
+    # remove specific cards, to simulate draw
+    def deal_cards(self, cards_array, track_deal=False):
+        deal_cards = []
+        deck_after = []
+        for card in self.cards:
+            if card in cards_array:
+                deal_cards.append(card)
+                if track_deal:
+                    self.dealt_cards.append(card)
+            else:
+                deck_after.append(card)
+
+        assert(len(deal_cards) == len(cards_array))
+        self.cards = deck_after
+
+        # Return in the same order...
+        #return deal_cards
+        return cards_array
 
     # shortcut, for single card
     def deal_single(self, track_deal=True):

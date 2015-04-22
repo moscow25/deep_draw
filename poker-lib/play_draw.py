@@ -1,5 +1,3 @@
-# TODO: remove un-used chess components
-
 import sys
 import csv
 import logging
@@ -22,26 +20,6 @@ from draw_poker_conv_full_output import build_model
 from draw_poker_conv_full_output import predict_model # outputs result for [BATCH x data]
 from draw_poker_conv_full_output import evaluate_single_hand # single hand... returns 32-point vector
 from draw_poker_conv_full_output import evaluate_batch_hands # much faster to evaluate a batch of hands
-
-
-"""
-#import train
-import pickle
-import theano
-import theano.tensor as T
-#import math
-import chess, chess.pgn
-#from parse_game import bb2array
-import heapq
-import time
-#import re
-import string
-#import numpy
-import sunfish
-import pickle
-#import random
-import traceback
-"""
 
 """
 Author: Nikolai Yakovenko
@@ -266,6 +244,9 @@ def game_batch(round, cashier, player):
     # Now perform all moves, in a batch.
     player.complete_batch_moves()
 
+    # For reference... to compare visually
+    print(all_draw_patterns)
+
     # Now evaluate final hands, and store return values...
     draw_hands = []
     payouts = []
@@ -288,7 +269,7 @@ def game_batch(round, cashier, player):
         draw_hands.append(draw_hand)
         payouts.append(pay_him)
         expected_payouts.append(expected_payout)
-    
+
     return (draw_hands, payouts, expected_payouts)
 
 # Play a round of poker
@@ -332,15 +313,15 @@ def game(round, cashier, player=None):
 def output_hand_csv(poker_hand, header_map):
     output_map = {}
     if poker_hand.dealt_cards:
-        output_map['dealt_cards'] = ''.join([str(card) for card in poker_hand.dealt_cards])
+        output_map['dealt_cards'] = hand_string(poker_hand.dealt_cards)
     if poker_hand.held_cards:
-        output_map['held_cards'] = ''.join([str(card) for card in poker_hand.held_cards])
+        output_map['held_cards'] = hand_string(poker_hand.held_cards)
     if poker_hand.discards:
-        output_map['discards'] = ''.join([str(card) for card in poker_hand.discards])
+        output_map['discards'] = hand_string(poker_hand.discards)
     if poker_hand.draw_cards:
-        output_map['draw_cards'] = ''.join([str(card) for card in poker_hand.draw_cards])
+        output_map['draw_cards'] = hand_string(poker_hand.draw_cards)
     if poker_hand.final_hand:
-        output_map['final_hand'] = ''.join([str(card) for card in poker_hand.final_hand])
+        output_map['final_hand'] = hand_string(poker_hand.final_hand)
     output_map['rank'] = poker_hand.rank
     output_map['category'] = poker_hand.category
     output_map['category_name'] = poker_hand.category_name
@@ -383,6 +364,8 @@ def play(sample_size, output_file_name, model_filename=None):
             test_cases.append(test_cases[1])
         test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
         predict_model(output_layer=output_layer, test_batch=test_batch)
+
+        print('Cases again %s' % str(test_cases))
 
         print('Creating player, based on this pickled model...')
 
@@ -459,6 +442,9 @@ if __name__ == '__main__':
     model_filename = None
     if len(sys.argv) >= 2:
         model_filename = sys.argv[1]
+
+        # Uniquely ID details
+        output_file_name = '%d_samples_model_choices_%s.csv' % (samples, model_filename)
 
     # TODO: Take num samples from command line.
     play(sample_size=samples, output_file_name=output_file_name, model_filename=model_filename)
