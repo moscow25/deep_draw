@@ -122,6 +122,7 @@ def evaluate_draws(input_filename, output_filename, tries_per_draw, max_input=50
 
             # Skip any mall-formed lines.
             try:
+		sys.stdout.flush()
                 print('\n----------------')
                 # Run simulation, and save results...
                 result = evaluate_draw_line(line, csv_key_map, tries_per_draw, cashier)
@@ -180,7 +181,7 @@ def evaluate_draws(input_filename, output_filename, tries_per_draw, max_input=50
 
 if __name__ == '__main__':
     tries_per_draw = 2000
-    max_input = 20 # hands to examine
+    max_input = 500 # hands to examine
     # Load CSV with POKER_GAME_HEADER header.
     if len(sys.argv) >= 2:
         input_filename = sys.argv[1]
