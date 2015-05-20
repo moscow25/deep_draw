@@ -48,6 +48,7 @@ ranksArray = [Deuce, Trey, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen
 #print 'ranks: %s' % ranksArray
 royalRanksSet = set([ Ten, Jack, Queen, King, Ace ])
 
+# High card hands
 ROYAL_FLUSH     = 10
 STRAIGHT_FLUSH	= 1
 FOUR_OF_A_KIND	= 2
@@ -60,6 +61,17 @@ JACKS_OR_BETTER = 77 # useful category, for Jacks-or-better payout structure
 ONE_PAIR	= 8
 HIGH_CARD	= 9
 
+# Lowball hands
+DEUCE_WHEEL     = 101
+DEUCE_SEVEN     = 102
+DEUCE_EIGHT     = 103
+DEUCE_NINE      = 104
+DEUCE_TEN       = 105
+DEUCE_JACK      = 106
+DEUCE_QUEEN     = 107;
+DEUCE_KING      = 108;
+DEUCE_ACE_OR_BETTER = 123
+
 categoryName = {ROYAL_FLUSH: 'royal', 
                 STRAIGHT_FLUSH: 'straight flush',
                 FOUR_OF_A_KIND: 'quads',
@@ -70,7 +82,70 @@ categoryName = {ROYAL_FLUSH: 'royal',
                 TWO_PAIR: 'two pair',
                 JACKS_OR_BETTER: 'jacks+',
                 ONE_PAIR: 'pair',
-                HIGH_CARD: 'hi card'}
+                HIGH_CARD: 'hi card',
+                DEUCE_WHEEL: 'wheel low',
+                DEUCE_SEVEN: 'seven low',
+                DEUCE_EIGHT: 'eight low',
+                DEUCE_NINE: 'nine low',
+                DEUCE_TEN: 'ten low',
+                DEUCE_JACK: 'jack low',
+                DEUCE_QUEEN: 'queen low',
+                DEUCE_KING: 'king low',
+                DEUCE_ACE_OR_BETTER: 'ace+ low',
+}
+
+########
+# Perhaps belongs in its own file... but enums & names for various poker actions.
+# Why are 3-bets and 4-bets different than raises? Human-different concepts.
+POST_BIG_BLIND = 301
+POST_SMALL_BLIND = 302
+CALL_SMALL_BLIND = 303 ## Not used.
+CALL_SMALL_STREET = 304
+CALL_BIG_STREET = 305
+BET_SMALL_STREET = 306
+BET_BIG_STREET = 307
+RAISE_SMALL_BLIND = 308 ## Not used.
+RAISE_SMALL_STREET = 309
+RAISE_BIG_STREET = 310
+BET_3_SMALL_STREET = 311 ## Not used.
+BET_3_BIG_STREET = 312 ## Not used.
+BET_4_SMALL_STREET = 313 ## Not used.
+BET_4_BIG_STREET = 314 ## Not used.
+CHECK_HAND = 350
+FOLD_HAND = 399
+
+actionsArray = [POST_BIG_BLIND, POST_SMALL_BLIND, 
+                CALL_SMALL_BLIND, CALL_SMALL_STREET, CALL_BIG_STREET,
+                BET_SMALL_STREET, BET_BIG_STREET, 
+                RAISE_SMALL_BLIND, RAISE_SMALL_STREET, RAISE_BIG_STREET,
+                BET_3_SMALL_STREET, BET_3_BIG_STREET, 
+                BET_4_SMALL_STREET, BET_4_BIG_STREET,
+                CHECK_HAND, FOLD_HAND ]
+
+# Could use better names...
+actionName = {POST_BIG_BLIND: 'pos_BB', POST_SMALL_BLIND: 'pos_SB', 
+              CALL_SMALL_BLIND: 'call_SB', CALL_SMALL_STREET: 'call_small', CALL_BIG_STREET: 'call_big',
+              BET_SMALL_STREET: 'bet_small', BET_BIG_STREET: 'bet_big', 
+              RAISE_SMALL_BLIND: 'raise_SB', RAISE_SMALL_STREET: 'raise_small', RAISE_BIG_STREET: 'raise_big',
+              BET_3_SMALL_STREET: '3bet_s', BET_3_BIG_STREET: '3bet_b', 
+              BET_4_SMALL_STREET: '4bet_s', BET_4_BIG_STREET: '4bet_b',
+              CHECK_HAND: 'check', FOLD_HAND: 'FOLD' }
+
+# We also hard-code the limits.
+# 50-100 blinds, then 100 and 200 bet sizes on small and big streets
+SMALL_BET_SIZE = 100
+BIG_BET_SIZE = 2 * SMALL_BET_SIZE
+BIG_BLIND_SIZE = SMALL_BET_SIZE
+SMALL_BLIND_SIZE = SMALL_BET_SIZE / 2
+
+# Cap at 2... until we're ready to test 3 & 4 betting. 
+MAXIMUM_BETS_ALLOWED = 4 # 2 # 4 # 5
+
+# Enum, for betting rounds...
+PRE_DRAW_BET_ROUND = 1
+DRAW_1_BET_ROUND = 2
+DRAW_2_BET_ROUND = 3
+DRAW_3_BET_ROUND = 4
 
 #///////////////////////////////////////////////////////
 #    /*
@@ -188,7 +263,10 @@ class Card(object):
 
 # card from string Ks
 def card_from_string(card_str):
-    return Card(suit=suitFromChar[card_str[1]], value=valueFromChar[card_str[0]])
+    try:
+        return Card(suit=suitFromChar[card_str[1]], value=valueFromChar[card_str[0]])
+    except KeyError:
+        raise KeyError('Invalid card_str! |%s|' % card_str)
 
 # Return array of equivalent hands (same order, different suits)
 # NOTE: array of cards, not strings.
@@ -209,6 +287,16 @@ def hand_suit_scrambles(hand_array):
 
     return uniques
 
+# Given array of cards... return [0-32] value of the draw, from draw string. Brute force string comparison.
+def get_draw_category_index(hand_array, draw_string, debug = False):
+    # produce 32-item vector from the hand array (as strings)
+    hand_array_draws = [hand_string([hand_array[i] for i in draw_pattern]) for draw_pattern in all_draw_patterns]
+    if debug:
+        print('all draws for this hand: %s' % hand_array_draws)
+    found_index = hand_array_draws.index(draw_string)
+    if debug:
+        print('found at index %d' % found_index)
+    return found_index
 
 # Type of hand, from raw rank.
 PAIR_JACKS_MIN_RANK = 4205
@@ -225,8 +313,31 @@ def hand_category(val):
     if (val == 1):   return(ROYAL_FLUSH);
     return(STRAIGHT_FLUSH);                   #   10 straight-flushes
 
+# Categories... for 2-7 lowball.
+WHEEL_RANK = 7462
+WORST_HAND_RANK = (WHEEL_RANK + 1)
+SEVEN_HI_MIN_RANK = WHEEL_RANK # worst possible hand (or best, if we playing lowball)
+EIGHT_HI_MIN_RANK = 7458
+NINE_HI_MIN_RANK = 7444
+TEN_HI_MIN_RANK = 7410
+JACK_HI_MIN_RANK = 7341
+QUEEN_HI_MIN_RANK = 7216
+KING_HI_MIN_RANK = 7007
+ACE_HI_MIN_RANK = 6678
+
+def hand_category_deuce(val):
+    if (val == WHEEL_RANK):         return DEUCE_WHEEL;
+    if (val > EIGHT_HI_MIN_RANK):   return DEUCE_SEVEN;
+    if (val > NINE_HI_MIN_RANK):    return DEUCE_EIGHT;
+    if (val > TEN_HI_MIN_RANK):     return DEUCE_NINE;
+    if (val > JACK_HI_MIN_RANK):    return DEUCE_TEN;
+    if (val > QUEEN_HI_MIN_RANK):   return DEUCE_JACK;
+    if (val > KING_HI_MIN_RANK):    return DEUCE_QUEEN;
+    if (val > ACE_HI_MIN_RANK):     return DEUCE_KING;
+    return DEUCE_ACE_OR_BETTER;
+
 # Binary search, on products array. Not sure why no better way... but as long as it works.
-def  hard_findit(key):
+def hard_findit(key):
     low = 0
     high = 4887
     mid = 0
@@ -242,8 +353,6 @@ def  hard_findit(key):
 
     print "ERROR:  no match found; key = %d" % key
     return( -1 );
-
-
 
 # Takes 5-card hand array as input
 def hand_rank_five_card(hand):
@@ -277,6 +386,44 @@ def hand_rank_five_card(hand):
     q_findit = hard_findit(q_hard)
     #print 'found q_findit: %d' % q_findit
     return values[q_findit]
+
+# Using similar lookup methods... get 0-1000 final hand heuristic... for Deuce game. 
+def deuce_heuristic_five_card(hand):
+    deuce_rank = deuce_rank_five_card(hand)
+    deuce_heuristic = deuce_lo_values[deuce_rank]
+
+    print('For hand %s, deuce rank of hand is %d, resultin in heuristic value of %d' % (hand_string(hand), deuce_rank, deuce_heuristic))
+    return deuce_heuristic
+
+DEUCE_FLUSH_RANK = 1313
+DEUCE_PAIR_RANK = 1279
+def deuce_rank_five_card(hand):
+    c0 = hand[0].hashTag
+    c1 = hand[1].hashTag
+    c2 = hand[2].hashTag
+    c3 = hand[3].hashTag
+    c4 = hand[4].hashTag
+
+    # Unique hand hash -- flushes excluded.
+    q = (c0|c1|c2|c3|c4) >> 16
+
+    #print 'trying easy product q = %d' % q
+    #print format(q, '#032b')
+
+    # check for Flushes and StraightFlushes
+    if ( c0 & c1 & c2 & c3 & c4 & 0xF000 ):
+        #print 'looking in flushes'
+        return DEUCE_FLUSH_RANK
+   
+    # check for Straights and HighCard hands
+    # Array will output, exactly rank for hand in 2-7 lowball world. Best hand = rank #1
+    # NOTE: We need to map this directly, as in other games... straight might be ok, etc.
+    s = lo_hands_deuce[q]
+    if s:
+        return s
+
+    # Otherwise, we're dealing with a pair+ hand (but not straight or flush.
+    return DEUCE_PAIR_RANK
 
 # Helper function to turn a poker hand (array of cards) into 2D array.
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
@@ -606,14 +753,20 @@ class PokerHand(object):
         self.category = hand_category(self.rank)
         self.category_name = categoryName[self.category]
 
+        # Also, compute lowball category (it's cheap)
+        self.deuce_category = hand_category_deuce(self.rank)
+        self.deuce_category_name = categoryName[self.deuce_category]
+        self.deuce_heuristic = deuce_heuristic_five_card(self.final_hand) # 0-1000 value for completed hand
+
     def __str__(self):
-        return '%d-card hand\ndealt: [%s]\nheld: [%s]\ndiscarded: [%s]\ndraw: [%s]\nfinal: [%s] (rank: %d, category: %s)' % (len(self.dealt_cards),
+        return '%d-card hand\ndealt: [%s]\nheld: [%s]\ndiscarded: [%s]\ndraw: [%s]\nfinal: [%s] (rank: %d, category: %s) (%s, %d)' % (len(self.dealt_cards),
                                                                                       ','.join([str(card) for card in self.dealt_cards]),
                                                                                       ','.join([str(card) for card in self.held_cards]),
                                                                                       ','.join([str(card) for card in self.discards]),
                                                                                       ','.join([str(card) for card in self.draw_cards]),
                                                                                       ','.join([str(card) for card in self.final_hand]),
-                                                                                      self.rank, self.category_name)
+                                                                                      self.rank, self.category_name,
+                                                                                      self.deuce_category_name, self.deuce_heuristic)
             
         
 

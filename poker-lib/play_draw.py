@@ -89,6 +89,7 @@ class ManualPlayer(CardPlayer):
         # TODO
         raise NotImplementedError()
 
+"""
 # Uses logic to read the hand, pre-process for structures like 4-flush, pairs, etc.
 # Then uses fixed, hardcoded rules, to make a decision.
 class RuleBasedPlayer(CardPlayer):
@@ -126,6 +127,7 @@ class WizardJacksPlayer(RuleBasedPlayer):
          # -- best royal flush draw
          # -- best straight flush draw
          # -- straight draw, etc
+"""
 
 
 # Plays based on a Theano function evaluation!
@@ -331,7 +333,6 @@ def output_hand_csv(poker_hand, header_map):
     return output_row
 
 # Play a bunch of hands, and record results for training
-# For now... just takes random actions.
 def play(sample_size, output_file_name, model_filename=None):
     # Compute rewards with payout table
     cashier = JacksOrBetter() # "976-9-6" Jacks or Better -- with 100% long-term payout.
@@ -409,7 +410,8 @@ def play(sample_size, output_file_name, model_filename=None):
 
                 # Hack, to show matrix for final hand.
                 # print hand_to_matrix(hand.final_hand)
-                #pretty_print_hand_matrix(hand.final_hand)
+                print(hand_string(hand.final_hand))
+                pretty_print_hand_matrix(hand.final_hand)
 
                 round += 1
             
@@ -434,7 +436,7 @@ def play(sample_size, output_file_name, model_filename=None):
     sys.stdout.flush()
 
 if __name__ == '__main__':
-    samples = 100000
+    samples = 100
     output_file_name = '%d_samples_model_choices.csv' % samples
 
     # Input model filename if given
