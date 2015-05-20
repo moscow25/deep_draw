@@ -428,7 +428,8 @@ def deuce_rank_five_card(hand):
 # Helper function to turn a poker hand (array of cards) into 2D array.
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
 # NOTE: Try 17x17 padding!
-def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=17):
+HAND_TO_MATRIX_PAD_SIZE = 17
+def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=HAND_TO_MATRIX_PAD_SIZE):
     # initialize empty 4x13 matrix
     # Unless pad to fit... in which case pad to 18x18 # 14x14
     if pad_to_fit:
@@ -468,6 +469,11 @@ def pretty_print_hand_matrix(poker_hand):
         row = suitSymbol[suit] + ''.join([(str(c) if c  else '.') for c in matrix[suits_to_matrix[suit]]])
         print row
     
+# create a matrix with same shape as a card... filled with given value
+# NOTE: Always padded.
+def card_to_matrix_fill(fill, pad_size = HAND_TO_MATRIX_PAD_SIZE):
+    matrix = np.array([[fill for x in range(pad_size)] for x in range(pad_size)], np.int32)
+    return matrix
 
 # Interface for payout table. Just a wrapper around a table.
 class PayoutTable(object):

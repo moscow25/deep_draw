@@ -92,13 +92,13 @@ DATA_FILENAME = '../data/250k_full_sim_combined.csv' # full dataset, with prefer
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
-MAX_INPUT_SIZE = 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 2000
 NUM_EPOCHS = 100 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 NUM_HIDDEN_UNITS = 512
-LEARNING_RATE = 0.02 # Try faster learning # 0.01
+LEARNING_RATE = 0.1 # Try faster learning # 0.01
 MOMENTUM = 0.9
 
 # Do we include all data? Sure... but maybe not.
@@ -111,14 +111,24 @@ DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10
 # Focus on straights, flushes, draws and pat hands. [vast majority of cards option to 2-card draw anyway...]
 DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 + [0.7] * 10 + [1.0] * 5 + [1.0] 
 
+# Pull levers, to zero-out some inputs... while keeping same shape.
+NUM_DRAWS_ALL_ZERO = True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
+
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
-def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50):
+def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50,
+                             include_num_draws=False, num_draws=None):
     hand_array = hand_string_to_array(hand_string)
 
     # Now turn the array of Card abbreviations into numpy array of of input
     cards_array_original = [card_from_string(card_str) for card_str in hand_array]
     assert(len(cards_array_original) == 5)
+
+    # If we also adding "number of draws" as input, do so here.
+    if include_num_draws:
+        # Returns [card_3, card_2, card_1] as three fake cards, matching input format for actual cards.
+        num_draws_input = num_draws_input_from_string(num_draws)
+        assert len(num_draws_input) == 3, 'Incorrect length of input for number of draws %s!' % num_draws_input
 
     # All 4-24 of these permutations are equivalent data (just move suits)
     # Keep first X if so declared.
@@ -130,7 +140,10 @@ def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50):
 
     cards_inputs_all = []
     for cards_array in cards_array_permutations:
-        cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], np.int32)
+        if include_num_draws:
+            cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), num_draws_input[0], num_draws_input[1], num_draws_input[2]], np.int32)
+        else:
+            cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], np.int32)
         cards_inputs_all.append(cards_input)
 
     return cards_inputs_all
@@ -139,56 +152,101 @@ def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50):
 def cards_input_from_string(hand_string, pad_to_fit = True):
     return cards_inputs_from_string(hand_string, pad_to_fit, max_inputs=1)[0]
 
+# For encoding number of draws left (0-3), encode 3 "cards", of all 0's, or all 1's
+# 3 draws: [1], [1], [1]
+# 2 draws: [0], [1], [1]
+# 1 draws: [0], [0], [1]
+# 0 draws: [0], [0], [0]
+def num_draws_input_from_string(num_draws_string, num_draws_all_zero = NUM_DRAWS_ALL_ZERO):
+    num_draws = int(num_draws_string)
+    card_1 = card_to_matrix_fill(0)
+    card_2 = card_to_matrix_fill(0)
+    card_3 = card_to_matrix_fill(0)
+    
+    # We may want ot zero out this input...
+    # Why? To initialize with same shape, but less information.
+    if not num_draws_all_zero:
+        if num_draws >= 3:
+            card_3 = card_to_matrix_fill(1)
+        if num_draws >= 2:
+            card_2 = card_to_matrix_fill(1)
+        if num_draws >= 1:
+            card_1 = card_to_matrix_fill(1)
+
+    return [card_3, card_2, card_1]
+
+
 # a hack, since we aren't able to implement liner loss in Theano...
 # To remove, or reduce problems with really big values... map values above 2.0 points to sqrt(remainder)
 # 25.00 to 6.80
 # 50.00 to 8.93
-def adjust_float_value(hand_val):
-    # Use small value if mean square error. Big value if linear error...
-    base = 4.0 # 50.0 # 2.0
-    if hand_val <= base:
-        return hand_val
+def adjust_float_value(hand_val, mode = 'video'):
+    if mode and mode == 'video':
+        # Use small value if mean square error. Big value if linear error...
+        base = 4.0 # 50.0 # 2.0
+        if hand_val <= base:
+            return hand_val
+        else:
+            remainder = hand_val - base
+            remainder_reduce = math.sqrt(remainder)
+            total = base + remainder_reduce
+            #print('regressing high hand value %.2f to %.2f' % (hand_val, total))
+            return total
+    elif mode and mode == 'deuce':
+        # For Deuce... we get values on 0-1000 scale. Adjust these to [0.0, 1.0] scale. Easier to train.
+        assert hand_val >= 0 and hand_val <= 1000, '\'deuce\' value out of range %s' % hand_val
+        return hand_val * 0.001
     else:
-        remainder = hand_val - base
-        remainder_reduce = math.sqrt(remainder)
-        total = base + remainder_reduce
-        #print('regressing high hand value %.2f to %.2f' % (hand_val, total))
-        return total
+        # Unknown mode. 
+        print('Warning! Unknown mode %s for value %s' % (mode, hand_val))
+        return hand_val
 
 # Turn each hand into an input (cards array) + output (32-line value)
 # if output_best_class==TRUE, instead outputs index 0-32 of the best value (for softmax category output)
 # Why? A. Easier to train B. Can re-use MNIST setup.
-def read_poker_line(data_array, csv_key_map):
-    # Get the input hand, and into an array
-    """
-    hand_array = hand_string_to_array(data_array[csv_key_map['hand']])
+def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_draws = False):
+    # array of equivalent inputs (if we choose to create more data by permuting suits)
+    # NOTE: Usually... we don't do that.
+    # NOTE: We can also, optionally, expand input to include other data, like number of draws made.
+    # It might be more proper to append this... but logically, easier to place in the original np.array
+    cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
+                                            include_num_draws=include_num_draws, num_draws=data_array[csv_key_map['draws_left']])
 
-    # Now turn the array of Card abbreviations into numpy array of of input
-    cards_array = [Card(suit=suitFromChar[card_str[1]], value=valueFromChar[card_str[0]]) for card_str in hand_array]
-    assert(len(cards_array) == 5)
-    cards_input = np.array([card_to_matrix(cards_array[0]), card_to_matrix(cards_array[1]), card_to_matrix(cards_array[2]), card_to_matrix(cards_array[3]), card_to_matrix(cards_array[4])], np.int32)
-    """
-
-    # array of equivalent inputs
-    cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1)
+    #print(cards_inputs[0])
+    #print((cards_inputs[0]).shape)
+    #sys.exit(-5)
 
     # Ok now translate the 32-low output row.
-    output_values = [adjust_float_value(float(data_array[csv_key_map[draw_value_key]])) for draw_value_key in DRAW_VALUE_KEYS] # np.array([float(data_array[csv_key_map[draw_value_key]]) for draw_value_key in DRAW_VALUE_KEYS], np.float32)
-    best_output = max(output_values)
-    output_category = output_values.index(best_output)
-
-    """
-    if output_best_class:
-        return (cards_input, output_category)
+    if csv_key_map.has_key('[]_value'):
+        # full 32-output vector.
+        # NOTE: We should *not* adjust floats... except when massively skewed data. For example... 800-9-6 video poker payout.
+        # NOTE: Different games... will have different adjustment models.
+        if adjust_floats:
+            output_values = [adjust_float_value(float(data_array[csv_key_map[draw_value_key]]), mode=adjust_floats) for draw_value_key in DRAW_VALUE_KEYS] 
+        else:
+            output_values = [float(data_array[csv_key_map[draw_value_key]]) for draw_value_key in DRAW_VALUE_KEYS] 
+        best_output = max(output_values)
+        output_category = output_values.index(best_output)
     else:
-        return (cards_input, output_values)   
-        """
+        # just "best hand," in which case we need to look it up...
+        assert(csv_key_map.has_key('best_draw'))
+        
+        best_draw_string = data_array[csv_key_map['best_draw']]
+        #print('best draw for hands is %s. Need to compute the array index...' % best_draw_string)
+        hand_string = data_array[csv_key_map['hand']]
+        output_category = get_draw_category_index(hand_string_to_array(hand_string), best_draw_string)
+        #print('found it at draw index %d!!' % output_category)
+
+        assert(output_category >= 0)
+
+        output_values = [0]*32 # Hack to just return empty array.
+               
 
     # Output all three things. Cards input, best category (0-32) and 32-row vector, of the weights
     return (cards_inputs, output_category, output_values) 
     
 # Read CSV lines, create giant numpy arrays of the input & output values.
-def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True):
+def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True, keep_all_data=False, adjust_floats='video', include_num_draws = False):
     csv_reader = csv.reader(open(filename, 'rU'))
 
     csv_key = None
@@ -201,8 +259,13 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     hands = 0
     last_hands_print = -1
     lines = 0
+
     # Sample down even harder, if outputting equivalent hands by permuted suit (fewer examples for flushes)
-    sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES #DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES # DATA_SAMPLING_REDUCE_KEEP_TWO # DATA_SAMPLING_KEEP_ALL
+    if keep_all_data:
+        sampling_policy = DATA_SAMPLING_KEEP_ALL
+    else:
+        sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO 
+
     # compute histogram of how many hands, output "correct draw" to each of 32 choices
     y_count_by_bucket = [0 for i in range(32)] 
     for line in csv_reader:
@@ -219,8 +282,10 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             # Skip any mail-formed lines.
             try:
                 # NOTE: hand_inputs represents array of *equivalent* inputs
-                hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map)
-            except (IndexError, ValueError):
+                hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = adjust_floats, include_num_draws=include_num_draws)
+            
+                # except (IndexError): # Fewer errors, for debugging
+            except (IndexError, ValueError, KeyError): # Any reading error
                 print('\nskipping malformed input line:\n|%s|\n' % line)
                 continue
 
@@ -234,6 +299,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 if (hands % 5000) == 0 and hands != last_hands_print:
                     print('\nLoaded %d hands...\n' % hands)
                     print(line)
+                    print(hand_input.shape)
                     print(output_class)
                     print(output_array)
                     last_hands_print = hands
