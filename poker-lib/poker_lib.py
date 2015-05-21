@@ -472,7 +472,16 @@ def pretty_print_hand_matrix(poker_hand):
 # create a matrix with same shape as a card... filled with given value
 # NOTE: Always padded.
 def card_to_matrix_fill(fill, pad_size = HAND_TO_MATRIX_PAD_SIZE):
-    matrix = np.array([[fill for x in range(pad_size)] for x in range(pad_size)], np.int32)
+    #matrix = np.array([[fill for x in range(pad_size)] for x in range(pad_size)], np.int32)
+    matrix = np.array([[0 for x in range(pad_size)] for x in range(pad_size)], np.int32)
+    # Fill with fill... but just the spot where cards go.
+    # add 5 empty rows to start, and 5 empty rows to finish
+    suit_offset = 6
+    # add empty column to start 
+    value_offset = 2
+    for suit in suitsArray:
+        for rank in ranksArray:
+             matrix[suits_to_matrix[suit] + suit_offset][rank + value_offset] = fill
     return matrix
 
 # Interface for payout table. Just a wrapper around a table.

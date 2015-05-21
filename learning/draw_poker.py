@@ -92,7 +92,7 @@ DATA_FILENAME = '../data/250k_full_sim_combined.csv' # full dataset, with prefer
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
-MAX_INPUT_SIZE = 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 100000 # 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 2000
 NUM_EPOCHS = 100 # 20 # 100
@@ -112,7 +112,7 @@ DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10
 DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 + [0.7] * 10 + [1.0] * 5 + [1.0] 
 
 # Pull levers, to zero-out some inputs... while keeping same shape.
-NUM_DRAWS_ALL_ZERO = True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
+NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
@@ -149,8 +149,9 @@ def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50,
     return cards_inputs_all
 
 # Special case, to output first one!
-def cards_input_from_string(hand_string, pad_to_fit = True):
-    return cards_inputs_from_string(hand_string, pad_to_fit, max_inputs=1)[0]
+def cards_input_from_string(hand_string, pad_to_fit = True, include_num_draws=False, num_draws=None):
+    return cards_inputs_from_string(hand_string, pad_to_fit, max_inputs=1,
+                                    include_num_draws = include_num_draws, num_draws=num_draws)[0]
 
 # For encoding number of draws left (0-3), encode 3 "cards", of all 0's, or all 1's
 # 3 draws: [1], [1], [1]
@@ -299,6 +300,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 if (hands % 5000) == 0 and hands != last_hands_print:
                     print('\nLoaded %d hands...\n' % hands)
                     print(line)
+                    #print(hand_input)
                     print(hand_input.shape)
                     print(output_class)
                     print(output_array)

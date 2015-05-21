@@ -30,11 +30,11 @@ TEST_SIZE = 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
-NUM_FILTERS = 16 # 32 # 16 # increases 2x at higher level
+NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
-EPOCH_SWITCH_ADAPT = 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
+EPOCH_SWITCH_ADAPT = 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
 ADA_LEARNING_RATE = 0.5 # algorithm confuses this
 
@@ -478,18 +478,23 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
     # Test cases -- for Deuce. Can it keep good hands, break pairs, etc? 
     # NOTE: These cases, and entire training... do *not* include number of draw rounds left. Add that!
-    test_cases = ['As,Ad,4d,3s,2c', 'As,Ks,Qs,Js,Ts', '3h,3s,3d,5c,6d', '3h,4s,3d,5c,6d', '2h,3s,4d,6c,5s',
-                  '8s,Ad,Kd,8c,Jd', '8s,Ad,2d,7c,Jd', '2d,7d,8d,9d,4d', '7c,8c,Tc,Js,Qh', '2c,8s,5h,8d,2s',
-                  '[8s,9c,8c,Kd,7h]', '[Qh,3h,6c,5s,4s]', '[Jh,Td,9s,Ks,5s]', '[6c,4d,Ts,Jc,6s]', 
-                  '[4h,8h,2c,7d,3h]', '[2c,Ac,Tc,6d,3d]', '[Ad,3c,Tc,4d,5d]', '3d,Jc,7d,Ac,6s',
-                  '7h,Kc,5s,2d,Tc', '5c,6h,Jc,7h,2d', 'Ts,As,3s,2d,4h'] 
+    test_cases = [['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,3s,3d,5c,6d', 3],
+                  ['3h,4s,3d,5c,6d', 2], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 3],
+                  ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1], 
+                  ['7c,8c,Tc,Js,Qh', 3], ['2c,8s,5h,8d,2s', 2],
+                  ['[8s,9c,8c,Kd,7h]', 2], ['[Qh,3h,6c,5s,4s]', 1], ['[Jh,Td,9s,Ks,5s]', 1],
+                  ['[6c,4d,Ts,Jc,6s]', 3], ['[4h,8h,2c,7d,3h]', 2], ['[2c,Ac,Tc,6d,3d]', 1], 
+                  ['[Ad,3c,Tc,4d,5d]', 1], ['3d,Jc,7d,Ac,6s', 2],
+                  ['7h,Kc,5s,2d,Tc', 3], ['5c,6h,Jc,7h,2d', 1], ['Ts,As,3s,2d,4h', 3]] 
 
     print('looking at some test cases: %s' % test_cases)
 
     # Fill in test cases to get to batch size?
     for i in range(BATCH_SIZE - len(test_cases)):
         test_cases.append(test_cases[1])
-    test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
+    # Test_batch... 5 cards, no 3-card "round" encoding.
+    # test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
+    test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=True, num_draws=case[1]) for case in test_cases], np.int32)
     predict_model(output_layer=output_layer, test_batch=test_batch)
 
     print('again, the test cases: \n%s' % test_cases)    
