@@ -32,6 +32,9 @@ SMALL_ERROR_THRESHOLD = 0.25 # anything bigger, is a major error
 # Initialize, to run through inputs, and not read all...
 SKIP_LINE_PROBABILITY = 0.80
 
+# How many errors in debug?
+NUM_SHOW_ERRORS = 25 
+
 # Get relevant data, simulate draw, and notice differences.
 def evaluate_draw_line(line, csv_key_map, tries_per_draw, cashier):
     dealt_hand_string = line[csv_key_map['dealt_cards']]
@@ -155,7 +158,7 @@ def evaluate_draws(input_filename, output_filename, tries_per_draw, max_input=50
             print('%d no error\t%d tiny error\t%d small error\t%d big error\n\tbiggest errors:' % (no_error, tiny_error, small_error, large_error)) 
 
             # Show biggest errors so far...
-            biggest_errors = sorted(error_results, reverse=True)[0:5]
+            biggest_errors = sorted(error_results, reverse=True)[0:NUM_SHOW_ERRORS]
             for big_error in biggest_errors:
                 print big_error
 
@@ -181,7 +184,7 @@ def evaluate_draws(input_filename, output_filename, tries_per_draw, max_input=50
 
 if __name__ == '__main__':
     tries_per_draw = 2000
-    max_input = 500 # hands to examine
+    max_input = 2000 # hands to examine
     # Load CSV with POKER_GAME_HEADER header.
     if len(sys.argv) >= 2:
         input_filename = sys.argv[1]
