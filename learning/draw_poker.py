@@ -92,7 +92,7 @@ DATA_FILENAME = '../data/250k_full_sim_combined.csv' # full dataset, with prefer
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
-MAX_INPUT_SIZE = 100000 # 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 250000 #100000 # 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 2000
 NUM_EPOCHS = 100 # 20 # 100
@@ -299,7 +299,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = adjust_floats, include_num_draws=include_num_draws)
             
                 # except (IndexError): # Fewer errors, for debugging
-            except (IndexError, ValueError, KeyError): # Any reading error
+            except (IndexError, ValueError, KeyError, AssertionError): # Any reading error
                 print('\nskipping malformed input line:\n|%s|\n' % line)
                 continue
 

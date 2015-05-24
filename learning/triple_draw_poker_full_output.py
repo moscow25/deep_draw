@@ -21,7 +21,8 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
+DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values.
+# '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
 ###MAX_INPUT_SIZE = 10000 # 10000000 # Remove this constraint, as needed
