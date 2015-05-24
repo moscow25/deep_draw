@@ -15,6 +15,12 @@ import theano.tensor as T
 from poker_lib import *
 from poker_util import *
 
+from draw_poker import cards_input_from_string
+from triple_draw_poker_full_output import build_model
+from triple_draw_poker_full_output import predict_model # outputs result for [BATCH x data]
+from triple_draw_poker_full_output import evaluate_single_hand # single hand... returns 32-point vector
+# from triple_draw_poker_full_output import evaluate_batch_hands # much faster to evaluate a batch of hands
+
 """
 Author: Nikolai Yakovenko
 Copyright: PokerPoker, LLC 2015
@@ -28,9 +34,13 @@ The game is hard-coded to implement triple draw. But should be possible, to swit
 models and final hand evaluations, to accomodate any other draw game.
 """
 
+BATCH_SIZE = 100 # Across all cases
+
 # Heuristics, to evaluate hand actions. On 0-1000 scale, where wheel is 1000 points, and bad hand is 50-100 points.
 # Meant to map to rough % of winning at showdown. Tuned for ring game, so random hand << 500.
 RANDOM_HAND_HEURISTIC_BASELINE = 300 # baseline, before looking at any cards.
+
+
 
 # Cashier for 2-7 lowball. Evaluates hands, as well as compares hands.
 class DeuceLowball(PayoutTable):
@@ -59,6 +69,11 @@ class TripleDrawAIPlayer():
     # TODO: Initialize model to use, etc.
     def __init__(self):
         self.draw_hand = None
+
+        # TODO: Name, and track, multiple models. 
+        # This is the draw model. Also, outputs the heuristic (value) of a hand, given # of draws left.
+        self.output_layer = None 
+
         # Current 0-1000 value, based on cards held, and approximation of value from draw model.
         # For example, if no more draws... heuristic is actual hand.
         self.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
@@ -66,10 +81,47 @@ class TripleDrawAIPlayer():
         # TODO: Use this to track number of cards discarded, etc. Obviously, don't look at opponent's cards.
         self.opponent_hand = None
 
+    # Takes action on the hand. But first... get Theano output...
+    def draw_move(self, deck, num_draws = 1):
+        # TODO: Make sure we collect the correct cards, from the hand!
+        hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
+        print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
+
+        # Get 32-length vector for each possible draw, from the model.
+        hand_draws_vector = evaluate_single_hand(self.output_layer, hand_string_dealt, num_draws = num_draws) #, test_batch=self.test_batch)
+
+        print('All 32 values: %s' % str(hand_draws_vector))
+
+        best_draw = np.argmax(hand_draws_vector)
+        
+        print('Best draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
+        expected_payout = hand_draws_vector[best_draw] # keep this, and average it, as well
+        
+        draw_string = ''
+        for i in range(0,5):
+            if not (i in all_draw_patterns[best_draw]):
+                draw_string += '%d' % i
+
+        print('Draw string from AI! |%s|' % draw_string)
+
+        discards = self.draw_hand.draw(draw_string)
+        deck.take_discards(discards)
+        new_cards = deck.deal(len(discards))
+        self.draw_hand.deal(new_cards, final_hand=True)
+        
+        return expected_payout
+
+
+
     # Apply current model, based on known information, to draw 0-5 cards from the deck.
-    # TODO: We should log this, and output information useful for tracking.
-    def draw(self, deck=None, round=1):
-        # Total placeholder. Draw random cards.
+    def draw(self, deck, num_draws = 1):
+        self.draw_move(deck, num_draws)
+
+        # TODO: We should log this, and output information useful for tracking.
+        #self.draw_random(deck)
+
+    # Total placeholder. Draw random cards.
+    def draw_random(self, deck=None):
         draw_string = ''
         for i in range(0,5):
             if random.random() > 0.50:
@@ -409,26 +461,26 @@ class TripleDrawDealer():
             # Similar to "player.move()" in the single-draw video poker context
             # NOTE: Player already knows his own hand.
             # TODO: We should also integrate context, like hand history, pot size, opponent's actions.
-            self.player_blind.draw(deck=self.deck, round=1)
-            self.player_button.draw(deck=self.deck, round=1)
+            self.player_blind.draw(deck=self.deck, num_draws=3)
+            self.player_button.draw(deck=self.deck, num_draws=3)
 
         # TODO: Next round. For now... just evalute these hands & declare a winner.
 
     # Declare a winner... assuming hand ends now.
     def get_hand_result(self, cashier):
         if self.player_blind.live and not self.player_button.live:
-            print('Player blind wins by default. %d chips in the pot. %s' % (self.pot_size, self.player_blind.draw_hand))
+            print('\nPlayer F wins by default. %d chips in the pot. %s' % (self.pot_size, self.player_blind.draw_hand))
         elif not self.player_blind.live and self.player_button.live:
-            print('Player button wins by default. %d chips in the pot. %s' % (self.pot_size, self.player_button.draw_hand))
+            print('\nPlayer B wins by default. %d chips in the pot. %s' % (self.pot_size, self.player_button.draw_hand))
         elif not self.player_blind.live and not self.player_button.live:
             print('Error! both players are dead.')
         else:
             # TODO: Handle ties & split pots!
             best_hand = cashier.showdown([self.player_blind.draw_hand, self.player_button.draw_hand])
             if best_hand == self.player_blind.draw_hand:
-                print('Blind player wins on showdown! %d chips in the pot.' % self.pot_size)
+                print('\nPlayer F wins on showdown! %d chips in the pot.' % self.pot_size)
             elif best_hand == self.player_button.draw_hand:
-                print('Button player wins on showdown! %d chips in the pot.' % self.pot_size)
+                print('\nPlayer B wins on showdown! %d chips in the pot.' % self.pot_size)
             else:
                 print('Tie! or Error. %d chips in the pot.' % self.pot_size)
 
@@ -463,17 +515,58 @@ def play(sample_size, output_file_name, model_filename=None):
     # Compute hand values, or compare hands.
     cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
 
+    # If model file provided, unpack model, and create intelligent agent.
+    output_layer = None
+    if model_filename and os.path.isfile(model_filename):
+        print('\nExisting model in file %s. Attempt to load it!\n' % model_filename)
+        all_param_values_from_file = np.load(model_filename)
+        
+        # Size must match exactly!
+        output_layer = build_model(
+            17, # 15, #input_height=dataset['input_height'],
+            17, # 15, #input_width=dataset['input_width'],
+            32, #output_dim=dataset['output_dim'],
+        )
+
+        print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
+        lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file)
+
+        # Test the model, by giving it dummy inputs
+        # Test cases -- it keeps the two aces. But can it recognize a straight? A flush? Trips? Draw?? Two pair??
+        test_cases = [['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,3s,3d,5c,6d', 3],
+                      ['3h,4s,3d,5c,6d', 2], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 3],
+                      ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1]] 
+
+        for i in range(BATCH_SIZE - len(test_cases)):
+            test_cases.append(test_cases[1])
+        test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=True, num_draws=case[1]) for case in test_cases], np.int32)
+        predict_model(output_layer=output_layer, test_batch=test_batch)
+
+        print('Cases again %s' % str(test_cases))
+
+        print('Creating player, based on this pickled model...')
+    else:
+        print('No model provided or loaded. Expect error if model required. %s', model_filename)
+
     # We initialize deck, and dealer, every round. But players kept constant, and reset for each trial.
     # NOTE: This can, and will change, if we do repetative simulation, etc.
     player_one = TripleDrawAIPlayer()
     player_two = TripleDrawAIPlayer()
+    
+    # Add model, to players.
+    player_one.output_layer = output_layer
+    player_two.output_layer = output_layer
 
-
+    # Run a bunch of individual hands.
+    # Hack: Player one is always on the button...
     round = 0
     try:
+        now = time.time()
         while round < sample_size:
             # TODO: Implement human player, switch button.
             game_round(round, cashier, player_button=player_one, player_blind=player_two)
+
+            print ('hand %d took %.1f seconds...' % (round, time.time() - now))
 
             round += 1
 

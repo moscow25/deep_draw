@@ -374,7 +374,9 @@ def evaluate_batch_hands(output_layer, test_cases):
     now = time.time()
     for i in range(BATCH_SIZE - len(test_cases)):
         test_cases.append(test_cases[0])
-    test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
+    
+    # case = [hand_string, int(num_draws)]
+    test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=True, num_draws=case[1]) for case in test_cases], np.int32)
 
     print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
@@ -394,8 +396,8 @@ def evaluate_batch_hands(output_layer, test_cases):
 
 # Return 32-point vector.
 # Make a batch, to evaluate single hand. Expensive!!
-def evaluate_single_hand(output_layer, hand_string_dealt): #, test_batch = None, test_cases = TEST_CASES):
-    test_cases = [hand_string_dealt]
+def evaluate_single_hand(output_layer, hand_string_dealt, num_draws = 1):
+    test_cases = [[hand_string_dealt, num_draws]]
     softmax_values = evaluate_batch_hands(output_layer, test_cases)
     return softmax_values[0]
 
