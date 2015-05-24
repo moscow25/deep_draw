@@ -202,6 +202,17 @@ def adjust_float_value(hand_val, mode = 'video'):
         print('Warning! Unknown mode %s for value %s' % (mode, hand_val))
         return hand_val
 
+"""
+# return value [0.0, 1.0] odds to keep a hand, given "hold value"
+# Example: Keep all pairs, all straights, etc. Down-sample normal hands (no pair, etc)
+def sample_rate_for_hold_value(hold_value):
+    # Keep 100% of all pairs, straights & flushes
+    if hold_value <= 0.090:
+        return 1.0
+
+    # Keep 100% of all good pat lows
+"""
+
 # Turn each hand into an input (cards array) + output (32-line value)
 # if output_best_class==TRUE, instead outputs index 0-32 of the best value (for softmax category output)
 # Why? A. Easier to train B. Can re-use MNIST setup.
@@ -262,6 +273,8 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     lines = 0
 
     # Sample down even harder, if outputting equivalent hands by permuted suit (fewer examples for flushes)
+    # NOTE: This samples by "best class" [32]
+    # TODO: Alternatively, sample by the *value* of class[31] (keep all)
     if keep_all_data:
         sampling_policy = DATA_SAMPLING_KEEP_ALL
     else:
@@ -297,14 +310,8 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
 
             # Create an output, for each equivalent input...
             for hand_input in hand_inputs_all:
-                if (hands % 5000) == 0 and hands != last_hands_print:
-                    print('\nLoaded %d hands...\n' % hands)
-                    print(line)
-                    #print(hand_input)
-                    print(hand_input.shape)
-                    print(output_class)
-                    print(output_array)
-                    last_hands_print = hands
+                # Weight of last item in output_array == value of keeping all 5 cards.
+                hold_value = output_array[-1]
 
                 # If requested, sample out some too common cases. 
                 # A. Better balance
@@ -313,6 +320,26 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     output_percent = sampling_policy[output_class]
                     if random.random() > output_percent:
                         continue
+
+                """
+                # Alternatively, sample by the *value* of class[31] (keep all)
+                # Example: down-sample all, except dealt pairs, or dealt flushes, etc
+                if sample_by_hold_value:
+                    sample_rate = sample_rate_for_hold_value(hold_value)
+                    if random.random() > sample_rate:
+                        print('Skipping item with %s hold value!' % hold_value)
+                        continue
+                        """
+                
+                if (hands % 5000) == 0 and hands != last_hands_print:
+                    print('\nLoaded %d hands...\n' % hands)
+                    print(line)
+                    #print(hand_input)
+                    print(hand_input.shape)
+                    print(output_class)
+                    print('hold value %s' % hold_value)
+                    print(output_array)
+                    last_hands_print = hands
 
                 # count class, if item chosen
                 y_count_by_bucket[output_class] += 1
