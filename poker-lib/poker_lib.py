@@ -604,6 +604,8 @@ class PokerHand(object):
         self.rank = -1
         self.category = -1
         self.category_name = 'none'
+        self.deuce_category_name = 'none'
+        self.deuce_heuristic = 0
 
         # optionally, store reward here
         self.reward = 0
