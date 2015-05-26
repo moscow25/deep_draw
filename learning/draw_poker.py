@@ -92,7 +92,7 @@ DATA_FILENAME = '../data/250k_full_sim_combined.csv' # full dataset, with prefer
 # Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
 # '../data/20000_full_sim_samples.csv'
 
-MAX_INPUT_SIZE = 250000 #100000 # 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 20000 # 100000 # 100000  # 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 2000
 NUM_EPOCHS = 100 # 20 # 100
@@ -112,11 +112,12 @@ DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10
 DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 + [0.7] * 10 + [1.0] * 5 + [1.0] 
 
 # Pull levers, to zero-out some inputs... while keeping same shape.
-NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
+NUM_DRAWS_ALL_ZERO = False # True # False # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
+PAD_INPUT = False # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
-def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50,
+def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
                              include_num_draws=False, num_draws=None):
     hand_array = hand_string_to_array(hand_string)
 
@@ -127,7 +128,7 @@ def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50,
     # If we also adding "number of draws" as input, do so here.
     if include_num_draws:
         # Returns [card_3, card_2, card_1] as three fake cards, matching input format for actual cards.
-        num_draws_input = num_draws_input_from_string(num_draws)
+        num_draws_input = num_draws_input_from_string(num_draws, pad_to_fit=pad_to_fit)
         assert len(num_draws_input) == 3, 'Incorrect length of input for number of draws %s!' % num_draws_input
 
     # All 4-24 of these permutations are equivalent data (just move suits)
@@ -141,6 +142,7 @@ def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50,
     cards_inputs_all = []
     for cards_array in cards_array_permutations:
         if include_num_draws:
+            #print([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), num_draws_input[0], num_draws_input[1], num_draws_input[2]])
             cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), num_draws_input[0], num_draws_input[1], num_draws_input[2]], np.int32)
         else:
             cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], np.int32)
@@ -149,7 +151,7 @@ def cards_inputs_from_string(hand_string, pad_to_fit = True, max_inputs=50,
     return cards_inputs_all
 
 # Special case, to output first one!
-def cards_input_from_string(hand_string, pad_to_fit = True, include_num_draws=False, num_draws=None):
+def cards_input_from_string(hand_string, pad_to_fit = PAD_INPUT, include_num_draws=False, num_draws=None):
     return cards_inputs_from_string(hand_string, pad_to_fit, max_inputs=1,
                                     include_num_draws = include_num_draws, num_draws=num_draws)[0]
 
@@ -158,21 +160,21 @@ def cards_input_from_string(hand_string, pad_to_fit = True, include_num_draws=Fa
 # 2 draws: [0], [1], [1]
 # 1 draws: [0], [0], [1]
 # 0 draws: [0], [0], [0]
-def num_draws_input_from_string(num_draws_string, num_draws_all_zero = NUM_DRAWS_ALL_ZERO):
+def num_draws_input_from_string(num_draws_string, pad_to_fit = PAD_INPUT, num_draws_all_zero = NUM_DRAWS_ALL_ZERO):
     num_draws = int(num_draws_string)
-    card_1 = card_to_matrix_fill(0)
-    card_2 = card_to_matrix_fill(0)
-    card_3 = card_to_matrix_fill(0)
+    card_1 = card_to_matrix_fill(0, pad_to_fit = pad_to_fit)
+    card_2 = card_to_matrix_fill(0, pad_to_fit = pad_to_fit)
+    card_3 = card_to_matrix_fill(0, pad_to_fit = pad_to_fit)
     
     # We may want ot zero out this input...
     # Why? To initialize with same shape, but less information.
     if not num_draws_all_zero:
         if num_draws >= 3:
-            card_3 = card_to_matrix_fill(1)
+            card_3 = card_to_matrix_fill(1, pad_to_fit = pad_to_fit)
         if num_draws >= 2:
-            card_2 = card_to_matrix_fill(1)
+            card_2 = card_to_matrix_fill(1, pad_to_fit = pad_to_fit)
         if num_draws >= 1:
-            card_1 = card_to_matrix_fill(1)
+            card_1 = card_to_matrix_fill(1, pad_to_fit = pad_to_fit)
 
     return [card_3, card_2, card_1]
 
@@ -221,7 +223,7 @@ def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_
     # NOTE: Usually... we don't do that.
     # NOTE: We can also, optionally, expand input to include other data, like number of draws made.
     # It might be more proper to append this... but logically, easier to place in the original np.array
-    cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
+    cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1,
                                             include_num_draws=include_num_draws, num_draws=data_array[csv_key_map['draws_left']])
 
     #print(cards_inputs[0])
@@ -298,8 +300,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 # NOTE: hand_inputs represents array of *equivalent* inputs
                 hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = adjust_floats, include_num_draws=include_num_draws)
             
-                # except (IndexError): # Fewer errors, for debugging
-            except (IndexError, ValueError, KeyError, AssertionError): # Any reading error
+            except (IndexError, ValueError, KeyError, AssertionError): # Any reading error [for debug, catch fewer errors]
                 print('\nskipping malformed input line:\n|%s|\n' % line)
                 continue
 

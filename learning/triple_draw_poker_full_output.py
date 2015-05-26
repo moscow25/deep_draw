@@ -21,7 +21,8 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values.
+DATA_FILENAME = '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
+# '../data/500k_hands_sample_details_all.csv' # all 32 values.
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
@@ -30,14 +31,14 @@ VALIDATION_SIZE = 5000
 TEST_SIZE = 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
-BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
+BORDER_SHAPE = "same" # "valid" # "full" = pads to (possibly) expand "same" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
-EPOCH_SWITCH_ADAPT = 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
+EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
-ADA_LEARNING_RATE = 0.5 # algorithm confuses this
+ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this. For some reason, 0.5 works better... or not. It's supposed auto-adjust learning rate...
 
 # Here, we get into growing input information, beyond the 5-card hand.
 INCLUDE_NUM_DRAWS = True # 3 "cards" to encode number of draws left. ex. 2 draws: [0], [1], [1]
@@ -123,15 +124,16 @@ def build_model(input_width, input_height, output_dim,
 
     l_in = lasagne.layers.InputLayer(
         # Shape is *5* x width x height 
-        shape=(batch_size, num_input_cards, input_width, input_height),
+        #shape=(batch_size, num_input_cards, input_width, input_height),
+        shape=(batch_size, num_input_cards, input_height, input_width),
         )
 
-    print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_width, input_height))
+    print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
 
     l_conv1 = lasagne.layers.Conv2DLayer(
         l_in,
         num_filters=NUM_FILTERS, #16, #32,
-        filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
+        filter_size= (4,5), #Try cute, poker-hand 4x5 filter... (3,3), #(5,5), #(3,3), #(5, 5),
         border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -151,11 +153,13 @@ def build_model(input_width, input_height, output_dim,
         )
     print('convolution layer l_conv1_1. Shape %s' % str(l_conv1_1.get_output_shape()))
 
+    """
     l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 2))
     # Try *not pooling* in the suit layer...
     #l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 1))
 
     print('maxPool layer l_pool1. Shape %s' % str(l_pool1.get_output_shape()))
+    """
 
     # try 3rd conv layer
     #l_conv1_2 = lasagne.layers.Conv2DLayer(
@@ -168,7 +172,7 @@ def build_model(input_width, input_height, output_dim,
     #l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_2, ds=(2, 2))
 
     l_conv2 = lasagne.layers.Conv2DLayer(
-        l_pool1,
+        l_conv1_1, # l_pool1,
         num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
         border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
@@ -191,12 +195,14 @@ def build_model(input_width, input_height, output_dim,
 
     print('convolution layer l_conv2_2. Shape %s' % str(l_conv2_2.get_output_shape()))
 
+    """
     # Question? No need for Max-pool for already narrow network... NO
     # Try *not pooling* in the suit layer...
     l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 2))
     #l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 1))
 
     print('maxPool layer l_pool2. Shape %s' % str(l_pool2.get_output_shape()))
+    """
 
     # Add 3rd convolution layer!
     #l_conv3 = lasagne.layers.Conv2DLayer(
@@ -209,7 +215,7 @@ def build_model(input_width, input_height, output_dim,
     #l_pool3 = lasagne.layers.MaxPool2DLayer(l_conv3, ds=(2, 2))
 
     l_hidden1 = lasagne.layers.DenseLayer(
-        l_pool2, # l_pool3, # l_pool2,
+        l_conv2_2, # l_pool2, # l_pool3, # l_pool2,
         num_units=NUM_HIDDEN_UNITS,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -433,9 +439,18 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     # NOTE: Network shape must match *exactly*
     if os.path.isfile(out_file):
         print('Existing model in file %s. Attempt to load it!' % out_file)
-        all_param_values_from_file = np.load(out_file)
-        print('Loaded values %d' % len(all_param_values_from_file))
-        lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file)
+        all_param_values_from_file = np.load(out_file) # Use GPU utils! # np.load(out_file)
+        all_param_values_from_file_with_type = []
+        for value in all_param_values_from_file:
+            all_param_values_from_file_with_type.append(lasagne.utils.floatX(value))
+
+        print(all_param_values_from_file_with_type)
+
+        #print(all_param_values_from_file)
+        #all_param_values_from_file = lasagne.utils.floatX(all_param_values_from_file)
+        print('Loaded values %d' % len(all_param_values_from_file_with_type))
+
+        lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file_with_type)
         print('Successfully initialized model with previous saved params!')
     else:
         print('No existing model file (or skipping intialization) %s' % out_file)
