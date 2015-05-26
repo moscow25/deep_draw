@@ -644,7 +644,12 @@ def play(sample_size, output_file_name, model_filename=None):
 
         for i in range(BATCH_SIZE - len(test_cases)):
             test_cases.append(test_cases[1])
-        test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=True, num_draws=case[1]) for case in test_cases], np.int32)
+
+        # NOTE: Num_draws and full_hand must match trained model.
+        # TODO: Use shared environemnt variables...
+        test_batch = np.array([cards_input_from_string(hand_string=case[0], 
+                                                       include_num_draws=True, num_draws=case[1],
+                                                       include_full_hand = True) for case in test_cases], np.int32)
         predict_model(output_layer=output_layer, test_batch=test_batch)
 
         print('Cases again %s' % str(test_cases))

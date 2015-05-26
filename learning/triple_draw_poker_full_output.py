@@ -384,7 +384,9 @@ def evaluate_batch_hands(output_layer, test_cases):
         test_cases.append(test_cases[0])
     
     # case = [hand_string, int(num_draws)]
-    test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=True, num_draws=case[1]) for case in test_cases], np.int32)
+    test_batch = np.array([cards_input_from_string(hand_string=case[0],
+                                                   include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], 
+                                                   include_full_hand = INCLUDE_FULL_HAND) for case in test_cases], np.int32)
 
     print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
@@ -491,8 +493,9 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
     # Test cases -- for Deuce. Can it keep good hands, break pairs, etc? 
     # NOTE: These cases, and entire training... do *not* include number of draw rounds left. Add that!
-    test_cases = [['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,3s,3d,5c,6d', 3],
-                  ['3h,4s,3d,5c,6d', 2], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 3],
+    test_cases = [['As,Ad,4d,3s,2c', 1], ['2h,3s,4d,6c,5s', 1],
+                  ['3h,3s,3d,5c,6d', 3],  ['As,Ks,Qs,Js,Ts', 2],
+                  ['3h,4s,3d,5c,6d', 2], ['3s,2h,4d,8c,5s', 3],
                   ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1], 
                   ['7c,8c,Tc,Js,Qh', 3], ['2c,8s,5h,8d,2s', 2],
                   ['[8s,9c,8c,Kd,7h]', 2], ['[Qh,3h,6c,5s,4s]', 1], ['[Jh,Td,9s,Ks,5s]', 1],
