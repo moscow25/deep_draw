@@ -113,7 +113,7 @@ DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10
 DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 + [0.7] * 10 + [1.0] * 5 + [1.0] 
 
 # Pull levers, to zero-out some inputs... while keeping same shape.
-NUM_DRAWS_ALL_ZERO = True # False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
+NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
 PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
 
 # Bias training data? It's not just for single draw video poker..
