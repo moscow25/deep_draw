@@ -62,6 +62,9 @@ class DeuceLowball(PayoutTable):
             if hand.rank > best_rank:
                 best_hand = hand
                 best_rank = hand.rank
+            elif hand.rank == best_rank:
+                print('Need to implement ties & splits!')
+                raise NotImplementedError()
         return best_hand
 
 # Should inherit from more general player... when we nee one.
