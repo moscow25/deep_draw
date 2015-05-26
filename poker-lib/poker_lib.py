@@ -431,7 +431,7 @@ def deuce_rank_five_card(hand):
 HAND_TO_MATRIX_PAD_SIZE = 17
 def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=HAND_TO_MATRIX_PAD_SIZE):
     # initialize empty 4x13 matrix
-    # Unless pad to fit... in which case pad to 18x18 # 14x14
+    # Unless pad to fit... in which case pad to 17x17 # 14x14
     if pad_to_fit:
         matrix = np.array([[0 for x in range(pad_size)] for x in range(pad_size)], np.int32)
     else:
@@ -470,15 +470,27 @@ def pretty_print_hand_matrix(poker_hand):
         print row
     
 # create a matrix with same shape as a card... filled with given value
-# NOTE: Always padded.
-def card_to_matrix_fill(fill, pad_size = HAND_TO_MATRIX_PAD_SIZE):
+# TODO: Merge the *fill*, with card input..
+def card_to_matrix_fill(fill, pad_to_fit=True,  pad_size = HAND_TO_MATRIX_PAD_SIZE):
     #matrix = np.array([[fill for x in range(pad_size)] for x in range(pad_size)], np.int32)
-    matrix = np.array([[0 for x in range(pad_size)] for x in range(pad_size)], np.int32)
+    if pad_to_fit:
+        matrix = np.array([[0 for x in range(pad_size)] for x in range(pad_size)], np.int32)
+    else:
+        matrix = np.array([[0 for x in range(len(ranksArray))] for x in range(len(suitsArray))], np.int32)
     # Fill with fill... but just the spot where cards go.
     # add 5 empty rows to start, and 5 empty rows to finish
-    suit_offset = 6
-    # add empty column to start 
-    value_offset = 2
+    if pad_to_fit:
+        if pad_size == 17:
+            # add 5 empty rows to start, and 5 empty rows to finish
+            suit_offset = 6
+            # add empty column to start 
+            value_offset = 2
+        elif pad_size == 15:
+            suit_offset = 5
+            value_offset = 1
+    else:
+        suit_offset = 0
+        value_offset = 0
     for suit in suitsArray:
         for rank in ranksArray:
              matrix[suits_to_matrix[suit] + suit_offset][rank + value_offset] = fill

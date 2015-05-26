@@ -25,7 +25,7 @@ DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values.
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-###MAX_INPUT_SIZE = 10000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 20000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
@@ -37,7 +37,7 @@ LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
-ADA_LEARNING_RATE = 0.5 # algorithm confuses this
+ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
 
 # Here, we get into growing input information, beyond the 5-card hand.
 INCLUDE_NUM_DRAWS = True # 3 "cards" to encode number of draws left. ex. 2 draws: [0], [1], [1]
@@ -45,7 +45,7 @@ INCLUDE_NUM_DRAWS = True # 3 "cards" to encode number of draws left. ex. 2 draws
 def load_data():
     # Do *not* bias the data, or smooth out big weight values, as we would for video poker.
     # 'deuce' has its own adjustments...
-    data = _load_poker_csv(filename=DATA_FILENAME, keep_all_data=True, adjust_floats='deuce', include_num_draws = INCLUDE_NUM_DRAWS)
+    data = _load_poker_csv(filename=DATA_FILENAME, max_input = 20000, keep_all_data=True, adjust_floats='deuce', include_num_draws = INCLUDE_NUM_DRAWS)
 
     # X = input, y = best cateogy, z = all categories.
     X_all, y_all, z_all = data
@@ -121,12 +121,12 @@ def build_model(input_width, input_height, output_dim,
     if INCLUDE_NUM_DRAWS:
         num_input_cards += 3
 
+    # Shape is [cards + bits] x height x width
     l_in = lasagne.layers.InputLayer(
-        # Shape is *5* x width x height 
-        shape=(batch_size, num_input_cards, input_width, input_height),
+        shape=(batch_size, num_input_cards, input_height, input_width),
         )
 
-    print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_width, input_height))
+    print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
 
     l_conv1 = lasagne.layers.Conv2DLayer(
         l_in,
@@ -151,7 +151,7 @@ def build_model(input_width, input_height, output_dim,
         )
     print('convolution layer l_conv1_1. Shape %s' % str(l_conv1_1.get_output_shape()))
 
-    l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 2))
+    l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, pool_size=(2, 2))
     # Try *not pooling* in the suit layer...
     #l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 1))
 
@@ -193,7 +193,7 @@ def build_model(input_width, input_height, output_dim,
 
     # Question? No need for Max-pool for already narrow network... NO
     # Try *not pooling* in the suit layer...
-    l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 2))
+    l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, pool_size=(2, 2))
     #l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 1))
 
     print('maxPool layer l_pool2. Shape %s' % str(l_pool2.get_output_shape()))
@@ -433,9 +433,12 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     # NOTE: Network shape must match *exactly*
     if os.path.isfile(out_file):
         print('Existing model in file %s. Attempt to load it!' % out_file)
-        all_param_values_from_file = np.load(out_file)
-        print('Loaded values %d' % len(all_param_values_from_file))
-        lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file)
+        all_param_values_from_file = np.load(out_file) # Use GPU utils! # np.load(out_file)
+        all_param_values_from_file_with_type = []
+        for value in all_param_values_from_file:
+            all_param_values_from_file_with_type.append(lasagne.utils.floatX(value))
+        print('Loaded values %d' % len(all_param_values_from_file_with_type))
+        lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file_with_type)
         print('Successfully initialized model with previous saved params!')
     else:
         print('No existing model file (or skipping intialization) %s' % out_file)
