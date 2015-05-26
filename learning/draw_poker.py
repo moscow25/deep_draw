@@ -113,18 +113,31 @@ DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10
 DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 + [0.7] * 10 + [1.0] * 5 + [1.0] 
 
 # Pull levers, to zero-out some inputs... while keeping same shape.
-NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
+NUM_DRAWS_ALL_ZERO = True # False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
 PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
+
+# Bias training data? It's not just for single draw video poker..
+# hold value == [0.0, 1.0] value of keep-all-five hand.
+# Anything >= 0.5 is a really good pat hand
+# Anything <= 0.075 is a pair, straight or flush...
+SAMPLE_BY_HOLD_VALUE = True 
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
 def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
-                             include_num_draws=False, num_draws=None):
+                             include_num_draws=False, num_draws=None, include_full_hand = False):
     hand_array = hand_string_to_array(hand_string)
 
     # Now turn the array of Card abbreviations into numpy array of of input
     cards_array_original = [card_from_string(card_str) for card_str in hand_array]
     assert(len(cards_array_original) == 5)
+
+    # If we also for "full hand", also include a 6th "card" that's matrix of the entire hand.
+    # NOTE: We do *not* support permutations. If we want permutations... should permute this also.
+    if include_full_hand:
+        full_hand_to_matrix = hand_to_matrix(cards_array_original, pad_to_fit=pad_to_fit)
+        #print(hand_string)
+        #print(full_hand_to_matrix)
 
     # If we also adding "number of draws" as input, do so here.
     if include_num_draws:
@@ -143,17 +156,26 @@ def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
     cards_inputs_all = []
     for cards_array in cards_array_permutations:
         if include_num_draws:
-            cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), num_draws_input[0], num_draws_input[1], num_draws_input[2]], np.int32)
+            # NOTE: If doing permuations... full hand matrix will not match!
+            if include_full_hand:
+                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), full_hand_to_matrix, num_draws_input[0], num_draws_input[1], num_draws_input[2]], np.int32)
+            else:
+                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), num_draws_input[0], num_draws_input[1], num_draws_input[2]], np.int32)
         else:
-            cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], np.int32)
+            # NOTE: If doing permuations... full hand matrix will not match!
+            if include_full_hand:
+                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), full_hand_to_matrix], np.int32)
+            else:
+                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], np.int32)
         cards_inputs_all.append(cards_input)
 
     return cards_inputs_all
 
 # Special case, to output first one!
-def cards_input_from_string(hand_string, pad_to_fit = PAD_INPUT, include_num_draws=False, num_draws=None):
+def cards_input_from_string(hand_string, pad_to_fit = PAD_INPUT, include_num_draws=False, num_draws=None, include_full_hand = False):
     return cards_inputs_from_string(hand_string, pad_to_fit, max_inputs=1,
-                                    include_num_draws = include_num_draws, num_draws=num_draws)[0]
+                                    include_num_draws = include_num_draws, num_draws=num_draws,
+                                    include_full_hand = include_full_hand)[0]
 
 # For encoding number of draws left (0-3), encode 3 "cards", of all 0's, or all 1's
 # 3 draws: [1], [1], [1]
@@ -203,27 +225,38 @@ def adjust_float_value(hand_val, mode = 'video'):
         print('Warning! Unknown mode %s for value %s' % (mode, hand_val))
         return hand_val
 
-"""
+
 # return value [0.0, 1.0] odds to keep a hand, given "hold value"
 # Example: Keep all pairs, all straights, etc. Down-sample normal hands (no pair, etc)
 def sample_rate_for_hold_value(hold_value):
     # Keep 100% of all pairs, straights & flushes
-    if hold_value <= 0.090:
+    # NOTE: These are hands that should not be kept. Especially straights and flushes. Train on this!
+    if hold_value <= 0.080:
         return 1.0
 
-    # Keep 100% of all good pat lows
-"""
+    # Keep 100% of all good pat lows (9-low, 8-low, 7-low)
+    # NOTE: It's important that we know these values well. For betting evaluation, especially.
+    if hold_value >= 0.500:
+        return 1.0
+
+    # For the rest of the hands... interpolate a value, keeping best hands with highest likihood.
+    # Why? Well.. it's important not to have step-functions. Except, with discrete things like a pair.
+    xp = [0.1, 0.50]
+    fp = [0.3, 1.0] # Keep as few a 1/3 of most common examples (bad pat hand, no pair). And almost 100% of good pat hands.
+    prob_keep = np.interp(hold_value, xp, fp)
+    return prob_keep
 
 # Turn each hand into an input (cards array) + output (32-line value)
 # if output_best_class==TRUE, instead outputs index 0-32 of the best value (for softmax category output)
 # Why? A. Easier to train B. Can re-use MNIST setup.
-def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_draws = False):
+def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_draws = False, include_full_hand = False):
     # array of equivalent inputs (if we choose to create more data by permuting suits)
     # NOTE: Usually... we don't do that.
     # NOTE: We can also, optionally, expand input to include other data, like number of draws made.
     # It might be more proper to append this... but logically, easier to place in the original np.array
     cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
-                                            include_num_draws=include_num_draws, num_draws=data_array[csv_key_map['draws_left']])
+                                            include_num_draws=include_num_draws, num_draws=data_array[csv_key_map['draws_left']], 
+                                            include_full_hand = include_full_hand)
 
     #print(cards_inputs[0])
     #print((cards_inputs[0]).shape)
@@ -259,7 +292,7 @@ def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_
     return (cards_inputs, output_category, output_values) 
     
 # Read CSV lines, create giant numpy arrays of the input & output values.
-def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True, keep_all_data=False, adjust_floats='video', include_num_draws = False):
+def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True, keep_all_data=False, adjust_floats='video', include_num_draws = False, include_full_hand = False, sample_by_hold_value = SAMPLE_BY_HOLD_VALUE):
     csv_reader = csv.reader(open(filename, 'rU'))
 
     csv_key = None
@@ -297,7 +330,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             # Skip any mail-formed lines.
             try:
                 # NOTE: hand_inputs represents array of *equivalent* inputs
-                hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = adjust_floats, include_num_draws=include_num_draws)
+                hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = adjust_floats, include_num_draws=include_num_draws, include_full_hand = include_full_hand)
             
                 # except (IndexError): # Fewer errors, for debugging
             except (IndexError, ValueError, KeyError, AssertionError): # Any reading error
@@ -322,15 +355,15 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     if random.random() > output_percent:
                         continue
 
-                """
                 # Alternatively, sample by the *value* of class[31] (keep all)
                 # Example: down-sample all, except dealt pairs, or dealt flushes, etc
                 if sample_by_hold_value:
                     sample_rate = sample_rate_for_hold_value(hold_value)
                     if random.random() > sample_rate:
-                        print('Skipping item with %s hold value!' % hold_value)
+                        #if (hands % 5000) == 0 and hands != last_hands_print:
+                        #    print(line)
+                        #    print('Skipping item with %s hold value!\n' % hold_value)
                         continue
-                        """
                 
                 if (hands % 5000) == 0 and hands != last_hands_print:
                     print('\nLoaded %d hands...\n' % hands)

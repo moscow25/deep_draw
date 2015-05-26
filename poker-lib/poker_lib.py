@@ -431,7 +431,7 @@ def deuce_rank_five_card(hand):
 HAND_TO_MATRIX_PAD_SIZE = 17
 def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=HAND_TO_MATRIX_PAD_SIZE):
     # initialize empty 4x13 matrix
-    # Unless pad to fit... in which case pad to 17x17 # 14x14
+    # Unless pad to fit... in which case pad to 17x17
     if pad_to_fit:
         matrix = np.array([[0 for x in range(pad_size)] for x in range(pad_size)], np.int32)
     else:

@@ -25,7 +25,7 @@ DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values.
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 20000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 250000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
@@ -35,17 +35,20 @@ NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
-EPOCH_SWITCH_ADAPT = 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
+EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
 ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
 
 # Here, we get into growing input information, beyond the 5-card hand.
 INCLUDE_NUM_DRAWS = True # 3 "cards" to encode number of draws left. ex. 2 draws: [0], [1], [1]
+INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a single matrix [Good for detecting str8, pair, etc]
+
+# TODO: Include "empty" bits... so we can get a model started... which can be used as basis for next data?
 
 def load_data():
     # Do *not* bias the data, or smooth out big weight values, as we would for video poker.
     # 'deuce' has its own adjustments...
-    data = _load_poker_csv(filename=DATA_FILENAME, max_input = 20000, keep_all_data=True, adjust_floats='deuce', include_num_draws = INCLUDE_NUM_DRAWS)
+    data = _load_poker_csv(filename=DATA_FILENAME, max_input = MAX_INPUT_SIZE, keep_all_data=True, adjust_floats='deuce', include_num_draws = INCLUDE_NUM_DRAWS, include_full_hand = INCLUDE_FULL_HAND)
 
     # X = input, y = best cateogy, z = all categories.
     X_all, y_all, z_all = data
@@ -118,6 +121,10 @@ def build_model(input_width, input_height, output_dim,
     # Perhaps not efficient.... but easy to understand.
     # TODO: How to you encode entire hand history? Or even opponent draws & bets?
     num_input_cards = 5 
+    # One "card" with all five card matrix
+    if INCLUDE_FULL_HAND:
+        num_input_cards += 1
+    # 3 "bits" to encode where we are in the hand, in terms of number of draws.
     if INCLUDE_NUM_DRAWS:
         num_input_cards += 3
 
@@ -465,8 +472,8 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
             print("Epoch {} of {} took {:.3f}s".format(
                 epoch['number'], num_epochs, time.time() - now))
             now = time.time()
-            print("  training loss:\t\t{:.6f}".format(epoch['train_loss']))
-            print("  validation loss:\t\t{:.6f}".format(epoch['valid_loss']))
+            print("  training loss:\t\t{:.8f}".format(epoch['train_loss']))
+            print("  validation loss:\t\t{:.8f}".format(epoch['valid_loss']))
             print("  validation accuracy:\t\t{:.2f} %%".format(
                 epoch['valid_accuracy'] * 100))
 
@@ -500,7 +507,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
         test_cases.append(test_cases[1])
     # Test_batch... 5 cards, no 3-card "round" encoding.
     # test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
-    test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=True, num_draws=case[1]) for case in test_cases], np.int32)
+    test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND) for case in test_cases], np.int32)
     predict_model(output_layer=output_layer, test_batch=test_batch)
 
     print('again, the test cases: \n%s' % test_cases)    
@@ -509,6 +516,10 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
 
 if __name__ == '__main__':
+    # Additional flags... only if we inlcude in model
+    extra_flags = ''
+    if INCLUDE_FULL_HAND:
+        extra_flags += '_full_hand'
 
-    output_layer_filename = 'triple_draw_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_%s_border_%d_num_draws_model.pickle' % (LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS, BORDER_SHAPE, INCLUDE_NUM_DRAWS)
+    output_layer_filename = 'triple_draw_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_%s_border_%d_num_draws%s_model.pickle' % (LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS, BORDER_SHAPE, INCLUDE_NUM_DRAWS, extra_flags)
     main(out_file=output_layer_filename)
