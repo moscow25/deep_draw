@@ -47,17 +47,25 @@ RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %
 # TODO: Consider action so far (# of bets made this round)
 # TODO: Consider # of cards drawn by opponent
 # TODO: Consider other action so far...
-def baseline_heuristic_value(round):
+def baseline_heuristic_value(round, bets_this_round = 0):
+    baseline = RANDOM_HAND_HEURISTIC_BASELINE
     if round == PRE_DRAW_BET_ROUND:
-        return RANDOM_HAND_HEURISTIC_BASELINE
+        baseline = RANDOM_HAND_HEURISTIC_BASELINE
     elif round == DRAW_1_BET_ROUND:
-        return RANDOM_HAND_HEURISTIC_BASELINE + 0.05
+        baseline = RANDOM_HAND_HEURISTIC_BASELINE + 0.10
     elif round == DRAW_2_BET_ROUND:
-        return RANDOM_HAND_HEURISTIC_BASELINE + 0.10
+        baseline = RANDOM_HAND_HEURISTIC_BASELINE + 0.125
     elif round == DRAW_3_BET_ROUND:
         # Not a typo. Value doesn't change with final round... (in this hack, anyway)
         # NOTE: Where value really changes... is facing a bet. Or two. Or three.
-        return RANDOM_HAND_HEURISTIC_BASELINE + 0.10
+        baseline = RANDOM_HAND_HEURISTIC_BASELINE + 0.125
+        
+    # Increase the baseline... especially as we get into 3-bet and 4-bet territory.
+    if bets_this_round >= 1:
+        baseline += 0.05 * (bets_this_round) 
+        baseline += 0.025 * (bets_this_round - 1)
+
+    return baseline
 
 
 # Should inherit from more general player... when we nee one.
@@ -154,25 +162,36 @@ class TripleDrawAIPlayer():
         self.draw_hand.deal(new_cards, final_hand=True)
 
     # This should choose an action policy... based on things we know, randomness, CNN output, RL, etc
-    def choose_action(self, actions, round):
+    def choose_action(self, actions, round, bets_this_round = 0, has_button = True):
         print('Choosing among actions %s for round %s' % (actions, round))
         # self.choose_random_action(actions, round)
-        return self.choose_heuristic_action(allowed_actions = list(actions), round = round)
+        return self.choose_heuristic_action(allowed_actions = list(actions), 
+                                            round = round, 
+                                            bets_this_round = bets_this_round, 
+                                            has_button = has_button)
 
     # Use known game information, and especially hand heuristic... to output probability preference for actions.
     # (bet_raise, check_call, fold)
     # TODO: Pass along other important hand aspects here... # of bets made, hand history, opponent draw #, etc
-    def create_heuristic_action_distribution(self, round):
-        # Baseline is 2/2/1 bet/check/fold
+    def create_heuristic_action_distribution(self, round, bets_this_round = 0, has_button = True):
+        # Baseline is 2/2/0.5 bet/check/fold
         bet_raise = 2.0
-        check_call = 1.0
+        check_call = 2.0
         fold = 0.5 # 1.0
+
+        # If player is on the button, he should check less, and bet more. 
+        # TODO: This change a lot, once we look at previous draw & bet patterns.
+        # NOTE: What we want to avoid is player constantly betting into a much stronger hand.
+        if has_button:
+            bet_raise = 2.0
+            check_call = 1.0
+            fold = 0.5
 
         # See our value, and typical opponent hand value... adjust our betting pattern.
         hand_value = self.heuristic_value
-        baseline_value = baseline_heuristic_value(round)
+        baseline_value = baseline_heuristic_value(round, bets_this_round)
 
-        print('Player %s our hand value %.2f, compared to current baseline %.2f' % (self.name, hand_value, baseline_value))
+        print('Player %s (has_button %d) our hand value %.2f, compared to current baseline %.2f' % (self.name, has_button, hand_value, baseline_value))
         
         if hand_value > baseline_value:
             # Dramatically increase our bet/raise frequency, if hand is better than baseline.
@@ -192,20 +211,43 @@ class TripleDrawAIPlayer():
             # Start to fold more, especially if we are 0.20 or more behind expect opponenet hand (2-card draw vs pat hand, etc)
             fold_increase = 0.5 / 0.10 * (hand_value - baseline_value)
             print('increasing fold by %.2f' % fold_increase)
-            fold -= fold_increase            
+            fold -= fold_increase      
 
-        return (max(bet_raise, 0.0), check_call, max(fold, 0.0))
+        # Decrease folding as the pot grows... shift these to calls.
+        # NOTE: Also balances us out, in terms of not raising and folding too much. We won't over-fold to 4bet, etc
+        if bets_this_round > 1:
+            fold_decrease = 0.5 / 2 * (bets_this_round - 1) 
+            print('decreaseing fold by %.2f since much action this street.' % fold_decrease)
+            fold -= fold_decrease
+
+            print('incrase call by similar amount %.2f' % 2 * fold_decrease)
+            check_call += 2 * fold_decrease
+
+        # We should often consider some chance at a really aggressive action, even in bad spots.
+        # For example, on busted river...
+        raise_minimum = 0.0
+        if bets_this_round == 0:
+            raise_minimum += 0.25
+        if has_button and bets_this_round < 2:
+            raise_minimum += 0.25
+
+        if raise_minimum and raise_minimum > bet_raise:
+            print('resetting mimimum raise to %.2f. Fortune favors the bold!' % bet_raise)
+
+        return (max(bet_raise, raise_minimum), check_call, max(fold, 0.0))
         
 
     # Computes a distribution over actions, based on (hand_value, round, other info)
     # Then, probabilistically chooses a single action, from the distribution.
     # NOTE: allowed_actions needs to be a list... so that we can match probabilities for each.
-    def choose_heuristic_action(self, allowed_actions, round):
-        print('Allowed actions %s' % ([actionName[action] for action in allowed_actions]))
+    def choose_heuristic_action(self, allowed_actions, round, bets_this_round = 0, has_button = True):
+        #print('Allowed actions %s' % ([actionName[action] for action in allowed_actions]))
 
         # First, create a distribution over actions.
         # NOTE: Resulting distribution is *not* normalized. Could return (3, 2, 0.5)
-        (bet_raise, check_call, fold) = self.create_heuristic_action_distribution(round)
+        (bet_raise, check_call, fold) = self.create_heuristic_action_distribution(round, 
+                                                                                  bets_this_round = bets_this_round,
+                                                                                  has_button = has_button)
 
         # Normalize so sum adds to 1.0
         action_sum = bet_raise + check_call + fold
@@ -409,7 +451,10 @@ class TripleDrawDealer():
 
         # TODO: Here the agent... would choose a good action.
         print('TODO: Agent for player %s should choose a good action.' % self.action_on.name)
-        best_action = self.action_on.choose_action(actions=allowed_actions, round=round)
+        best_action = self.action_on.choose_action(actions=allowed_actions, 
+                                                   round=round, 
+                                                   bets_this_round = max(bet_on_action, bet_off_action) / bet_this_street,
+                                                   has_button = (self.action_on == self.player_button))
 
         # If action returned, complete the action... and keep going
         if (best_action):
