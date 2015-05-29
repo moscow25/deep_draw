@@ -14,6 +14,7 @@ import theano.tensor as T
 
 from poker_lib import *
 from poker_util import *
+from draw_poker_lib import * 
 
 from draw_poker import cards_input_from_string
 from triple_draw_poker_full_output import build_model
@@ -38,34 +39,26 @@ BATCH_SIZE = 100 # Across all cases
 
 # Heuristics, to evaluate hand actions. On 0-1000 scale, where wheel is 1000 points, and bad hand is 50-100 points.
 # Meant to map to rough % of winning at showdown. Tuned for ring game, so random hand << 500.
-RANDOM_HAND_HEURISTIC_BASELINE = 300 # baseline, before looking at any cards.
+RANDOM_HAND_HEURISTIC_BASELINE = 0.300 # baseline, before looking at any cards.
 
 RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %% of the time.
 
-# Cashier for 2-7 lowball. Evaluates hands, as well as compares hands.
-class DeuceLowball(PayoutTable):
-    #def __init__():
+# From experiments & guesses... what contitutes an 'average hand' (for our opponent), at this point?
+# TODO: Consider action so far (# of bets made this round)
+# TODO: Consider # of cards drawn by opponent
+# TODO: Consider other action so far...
+def baseline_heuristic_value(round):
+    if round == PRE_DRAW_BET_ROUND:
+        return RANDOM_HAND_HEURISTIC_BASELINE
+    elif round == DRAW_1_BET_ROUND:
+        return RANDOM_HAND_HEURISTIC_BASELINE + 0.05
+    elif round == DRAW_2_BET_ROUND:
+        return RANDOM_HAND_HEURISTIC_BASELINE + 0.10
+    elif round == DRAW_3_BET_ROUND:
+        # Not a typo. Value doesn't change with final round... (in this hack, anyway)
+        # NOTE: Where value really changes... is facing a bet. Or two. Or three.
+        return RANDOM_HAND_HEURISTIC_BASELINE + 0.10
 
-    # In this context, payout means 0-1000 heuristic value, for a final hand.
-    def payout(self, hand):
-        hand.evaluate() # computes ranks, including for 2-7 lowball
-        return hand.deuce_heuristic
-
-    # Compare hands.
-    # TODO: Hand split pots, other % payouts. Should really output [hand_id: % pot]
-    def showdown(self, hands):
-        # As a hack... output hand with best (2-7) rank. Ties go to best position...
-        best_rank = 0
-        best_hand = None
-        for hand in hands:
-            hand.evaluate()
-            if hand.rank > best_rank:
-                best_hand = hand
-                best_rank = hand.rank
-            elif hand.rank == best_rank:
-                print('Need to implement ties & splits!')
-                raise NotImplementedError()
-        return best_hand
 
 # Should inherit from more general player... when we nee one.
 class TripleDrawAIPlayer():
@@ -86,7 +79,6 @@ class TripleDrawAIPlayer():
 
     # Takes action on the hand. But first... get Theano output...
     def draw_move(self, deck, num_draws = 1):
-        # TODO: Make sure we collect the correct cards, from the hand!
         hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
         print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
 
@@ -114,7 +106,33 @@ class TripleDrawAIPlayer():
         
         return expected_payout
 
+    # Apply the CNN... to get "value" of the current hand. best draw for hands with draws left; current hand for no more draws.
+    # NOTE: Similar to draw_move() but we don't make any actual draws with the hand.
+    def update_hand_value(self, num_draws=0):
+        # For no more draws... use "final hand." Otherwise we run into issues with showdown, etc
+        if (num_draws >= 1):
+            hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
+        else:
+            hand_string_dealt = hand_string(self.draw_hand.final_hand)
 
+        print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
+
+        # Get 32-length vector for each possible draw, from the model.
+        hand_draws_vector = evaluate_single_hand(self.output_layer, hand_string_dealt, num_draws = max(num_draws, 1)) #, test_batch=self.test_batch)
+
+        # Except for num_draws == 0, value is value of the best draw...
+        if num_draws >= 1:
+            print('All 32 values: %s' % str(hand_draws_vector))
+            best_draw = np.argmax(hand_draws_vector)
+        else:
+            print('With no draws left, heurstic value is for pat hand.')
+            best_draw = 31
+        
+        print('Best draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
+        expected_payout = hand_draws_vector[best_draw] # keep this, and average it, as well
+        self.heuristic_value = expected_payout
+
+        return expected_payout
 
     # Apply current model, based on known information, to draw 0-5 cards from the deck.
     def draw(self, deck, num_draws = 1):
@@ -135,9 +153,114 @@ class TripleDrawAIPlayer():
         new_cards = deck.deal(len(discards))
         self.draw_hand.deal(new_cards, final_hand=True)
 
-    # TODO: This should choose an action policy...
+    # This should choose an action policy... based on things we know, randomness, CNN output, RL, etc
     def choose_action(self, actions, round):
-        return self.choose_random_action(actions, round)
+        print('Choosing among actions %s for round %s' % (actions, round))
+        # self.choose_random_action(actions, round)
+        return self.choose_heuristic_action(allowed_actions = list(actions), round = round)
+
+    # Use known game information, and especially hand heuristic... to output probability preference for actions.
+    # (bet_raise, check_call, fold)
+    # TODO: Pass along other important hand aspects here... # of bets made, hand history, opponent draw #, etc
+    def create_heuristic_action_distribution(self, round):
+        # Baseline is 2/2/1 bet/check/fold
+        bet_raise = 2.0
+        check_call = 1.0
+        fold = 0.5 # 1.0
+
+        # See our value, and typical opponent hand value... adjust our betting pattern.
+        hand_value = self.heuristic_value
+        baseline_value = baseline_heuristic_value(round)
+
+        print('Player %s our hand value %.2f, compared to current baseline %.2f' % (self.name, hand_value, baseline_value))
+        
+        if hand_value > baseline_value:
+            # Dramatically increase our bet/raise frequency, if hand is better than baseline.
+            bet_increase = 3.0 / 0.10 * (hand_value - baseline_value)
+            print('increasing bet/raise by %.2f' % bet_increase)
+            bet_raise += bet_increase
+            
+            fold_decrease = 0.5 / 0.10 * (hand_value - baseline_value)
+            print('decreasing fold by %.2f' % fold_decrease)
+            fold -= fold_decrease
+        elif hand_value < baseline_value:
+            # Quickly stop raising, if our hand is below expectation
+            bet_decrease = 1.0 / 0.10 * (hand_value - baseline_value)
+            print('decreasing bet/raise by %.2f' % bet_decrease)
+            bet_raise += bet_decrease
+            
+            # Start to fold more, especially if we are 0.20 or more behind expect opponenet hand (2-card draw vs pat hand, etc)
+            fold_increase = 0.5 / 0.10 * (hand_value - baseline_value)
+            print('increasing fold by %.2f' % fold_increase)
+            fold -= fold_increase            
+
+        return (max(bet_raise, 0.0), check_call, max(fold, 0.0))
+        
+
+    # Computes a distribution over actions, based on (hand_value, round, other info)
+    # Then, probabilistically chooses a single action, from the distribution.
+    # NOTE: allowed_actions needs to be a list... so that we can match probabilities for each.
+    def choose_heuristic_action(self, allowed_actions, round):
+        print('Allowed actions %s' % ([actionName[action] for action in allowed_actions]))
+
+        # First, create a distribution over actions.
+        # NOTE: Resulting distribution is *not* normalized. Could return (3, 2, 0.5)
+        (bet_raise, check_call, fold) = self.create_heuristic_action_distribution(round)
+
+        # Normalize so sum adds to 1.0
+        action_sum = bet_raise + check_call + fold
+        assert action_sum > 0.0, 'actions sum to impossible number %s' % [bet_raise, check_call, fold]
+
+        bet_raise /= action_sum
+        check_call /= action_sum
+        fold /= action_sum
+
+        # Match outputs above to actual game actions. Assign values directly to action.probability
+        print('(bet/raise %.2f, check/call %.2f, fold %.2f)' % (bet_raise, check_call, fold))
+        
+        # Good for easy lookup of "are we allowed to bet here"?
+        all_actions_set = set(allowed_actions)
+
+        action_probs = []
+        for action in allowed_actions:
+            probability = 0.0
+            if action == CALL_SMALL_STREET or  action == CALL_BIG_STREET:
+                print('CALL take all of the check/call credit: %s' % check_call)
+                probability += check_call
+                
+                # if we are not allowed to bet or raise... take that credit also. [betting capped, etc]
+                if not(set(ALL_BETS_SET) & all_actions_set):
+                    print('since no BET/RAISE, CALL takes all bet/raise credit: %s' % bet_raise)
+                    probability += bet_raise
+            elif action == BET_SMALL_STREET or action == BET_BIG_STREET:
+                print('BET take all of the bet/raise credit: %s' % bet_raise)
+                probability += bet_raise
+            elif action == RAISE_SMALL_STREET or action == RAISE_BIG_STREET:
+                print('RAISE take all of the bet/raise credit: %s' % bet_raise)
+                probability += bet_raise
+            elif action == FOLD_HAND:
+                print('FOLD take all of the fold credit: %s' % fold)
+                probability += fold
+            elif action == CHECK_HAND:
+                print('CHECK take all of the check/call credit: %s' % check_call)
+                probability += check_call
+
+                # If we can't fold... credit goes here.
+                if not(FOLD_HAND in all_actions_set):
+                    print('Since no FOLD, CHECK takes all fold credit: %s' % fold)
+                    probability += fold
+            else:
+                assert False, 'Unknown possible action %s' % actionName[action]
+                
+            action_probs.append(probability)
+                
+        # Probabilities should add up to 1.0...
+        action_distribution = action_probs
+
+        # Then sample a single action, from this distribution.
+        choice_action = np.random.choice(len(allowed_actions), 1, p = action_distribution)
+        #print('choice: %s' % allowed_actions[choice_action[0]])
+        return allowed_actions[choice_action[0]]
 
     # Nobody said that... some actions can't be more random than others!
     def choose_random_action(self, actions, round):
@@ -149,90 +272,6 @@ class TripleDrawAIPlayer():
                 return self.choose_random_action(actions, round)
             return random_choice[0]
         return None
-
-
-# At risk of over-engineering, use a super-class to encapsulate each type
-# of poker action. Specifically, betting, checking, raising.
-# NOTE: Usually, is prompted, decides on an action, and passes control.
-# (but not always, as there are forced bets, etc)
-# This system strong assumes, that actions take place in order, by a dealer. Poker is a turn-based game.
-class PokerAction:
-    # TODO: Copy of the game state (hands, etc)? Zip of the information going into this action?
-    def __init__(self, action_type, actor_name, pot_size, bet_size):
-        self.action_type = action_type
-        self.action_name = actionName[action_type]
-
-        # For now... just a hack to distinguish between B = button and F = blind player, first to act
-        self.actor_name = actor_name
-        self.pot_size = pot_size # before the action
-        self.bet_size = bet_size # if applicable
-        
-    # Consise summary, of the action taken.
-    def __str__(self):
-        raise NotImplementedError()
-
-# Simple encoding, for each possible action
-class PostBigBlind(PokerAction):
-    def __init__(self, actor_name, pot_size):
-        PokerAction.__init__(self, action_type = POST_BIG_BLIND, actor_name = actor_name, pot_size = pot_size, bet_size = BIG_BLIND_SIZE)
-
-class PostSmallBlind(PokerAction):
-    def __init__(self, actor_name, pot_size):
-        PokerAction.__init__(self, action_type = POST_BIG_BLIND, actor_name = actor_name, pot_size = pot_size, bet_size = SMALL_BLIND_SIZE)
-
-class CheckStreet(PokerAction):
-    def __init__(self, actor_name, pot_size):
-        PokerAction.__init__(self, action_type = CHECK_HAND, actor_name = actor_name, pot_size = pot_size, bet_size = 0)
-
-class FoldStreet(PokerAction):
-    def __init__(self, actor_name, pot_size):
-        PokerAction.__init__(self, action_type = FOLD_HAND, actor_name = actor_name, pot_size = pot_size, bet_size = 0)
-
-# Cost of the other actions... to be computed, from $ spent by player on this street, already.
-# NOTE: Think of it like internet, with chips left in front of players... until betting round is finished.
-class CallSmallStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
-        total_bet_size = biggest_bet_this_street;
-        this_bet = total_bet_size - player_bet_this_street;
-        assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = CALL_SMALL_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
-
-class CallBigStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
-        total_bet_size = biggest_bet_this_street;
-        this_bet = total_bet_size - player_bet_this_street;
-        assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = CALL_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
-
-class BetSmallStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
-        total_bet_size = biggest_bet_this_street + SMALL_BET_SIZE;
-        this_bet = total_bet_size - player_bet_this_street;
-        assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = BET_SMALL_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
-
-class BetBigStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
-        total_bet_size = biggest_bet_this_street + BIG_BET_SIZE;
-        this_bet = total_bet_size - player_bet_this_street;
-        assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = BET_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
-
-class RaiseSmallStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
-        total_bet_size = biggest_bet_this_street + SMALL_BET_SIZE;
-        this_bet = total_bet_size - player_bet_this_street;
-        assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = RAISE_SMALL_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
-
-class RaiseBigStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
-        total_bet_size = biggest_bet_this_street + BIG_BET_SIZE;
-        this_bet = total_bet_size - player_bet_this_street;
-        assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = RAISE_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
-
-# TODO: Implement 3-betting and 4-betting...
 
 
 # Should inherit from more general dealer class... when we need one.
@@ -461,7 +500,12 @@ class TripleDrawDealer():
                                                                                              self.player_button.bet_this_hand))
 
         print(self.hand_history)
-                                                                                             
+
+        # Now, query the CNN, to find out current value of each hand.
+        # NOTE: We re-run the computation a minute later for "best draw..." but that's fine. Redundancy is ok.
+        print('--> compute player heuristics')
+        self.player_blind.update_hand_value(num_draws=3)                                                           
+        self.player_button.update_hand_value(num_draws=3)
         
         # Play out a full round of betting.
         # Will go back & forth between players betting, until
@@ -485,6 +529,14 @@ class TripleDrawDealer():
             self.player_blind.draw(deck=self.deck, num_draws=3)
             self.player_button.draw(deck=self.deck, num_draws=3)
 
+        # TODO: Switch to pre-draw & evaluate heuristics in a function?
+        draw_hand_blind = PokerHand()
+        draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
+        self.player_blind.draw_hand = draw_hand_blind
+        draw_hand_button = PokerHand()
+        draw_hand_button.deal(self.player_button.draw_hand.final_hand)
+        self.player_button.draw_hand = draw_hand_button
+
         # Next round. We bet again, then draw again
         self.live = True 
         self.action_on = self.player_blind
@@ -493,6 +545,12 @@ class TripleDrawDealer():
         # TODO: function, to prepare betting round, reset intermediate values.
         self.player_blind.bet_this_street = 0.0
         self.player_button.bet_this_street = 0.0
+
+        # Now, query the CNN, to find out current value of each hand.
+        # NOTE: We re-run the computation a minute later for "best draw..." but that's fine. Redundancy is ok.
+        print('--> compute player heuristics')
+        self.player_blind.update_hand_value(num_draws=2)                                                           
+        self.player_button.update_hand_value(num_draws=2)
 
         self.play_betting_round(round = DRAW_1_BET_ROUND)
         
@@ -504,14 +562,6 @@ class TripleDrawDealer():
         else:
             return
 
-        # TODO: Switch to pre-draw & evaluate heuristics in a function?
-        draw_hand_blind = PokerHand()
-        draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
-        self.player_blind.draw_hand = draw_hand_blind
-        draw_hand_button = PokerHand()
-        draw_hand_button.deal(self.player_button.draw_hand.final_hand)
-        self.player_button.draw_hand = draw_hand_button
-
         # Make draws for each player, in turn
         if (self.live):
             # Similar to "player.move()" in the single-draw video poker context
@@ -519,6 +569,14 @@ class TripleDrawDealer():
             # TODO: We should also integrate context, like hand history, pot size, opponent's actions.
             self.player_blind.draw(deck=self.deck, num_draws=2)
             self.player_button.draw(deck=self.deck, num_draws=2)
+
+        # TODO: Switch to pre-draw & evaluate heuristics in a function?
+        draw_hand_blind = PokerHand()
+        draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
+        self.player_blind.draw_hand = draw_hand_blind
+        draw_hand_button = PokerHand()
+        draw_hand_button.deal(self.player_button.draw_hand.final_hand)
+        self.player_button.draw_hand = draw_hand_button
 
         # Next round. We bet again, then draw again
         self.live = True 
@@ -528,6 +586,12 @@ class TripleDrawDealer():
         # TODO: function, to prepare betting round, reset intermediate values.
         self.player_blind.bet_this_street = 0.0
         self.player_button.bet_this_street = 0.0
+
+        # Now, query the CNN, to find out current value of each hand.
+        # NOTE: We re-run the computation a minute later for "best draw..." but that's fine. Redundancy is ok.
+        print('--> compute player heuristics')
+        self.player_blind.update_hand_value(num_draws=1)                                                           
+        self.player_button.update_hand_value(num_draws=1)
 
         self.play_betting_round(round = DRAW_2_BET_ROUND)
         
@@ -539,14 +603,6 @@ class TripleDrawDealer():
         else:
             return
 
-        # TODO: Switch to pre-draw & evaluate heuristics in a function?
-        draw_hand_blind = PokerHand()
-        draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
-        self.player_blind.draw_hand = draw_hand_blind
-        draw_hand_button = PokerHand()
-        draw_hand_button.deal(self.player_button.draw_hand.final_hand)
-        self.player_button.draw_hand = draw_hand_button
-
         # Make draws for each player, in turn
         if (self.live):
             # Similar to "player.move()" in the single-draw video poker context
@@ -554,6 +610,17 @@ class TripleDrawDealer():
             # TODO: We should also integrate context, like hand history, pot size, opponent's actions.
             self.player_blind.draw(deck=self.deck, num_draws=1)
             self.player_button.draw(deck=self.deck, num_draws=1)
+
+        # NOTE: Do *not* copy hands for final round of betting. It screws up "showdown" evaluation and debug. Evaluate on "final_hand" instead.
+        """
+        # TODO: Switch to pre-draw & evaluate heuristics in a function?
+        draw_hand_blind = PokerHand()
+        draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
+        self.player_blind.draw_hand = draw_hand_blind
+        draw_hand_button = PokerHand()
+        draw_hand_button.deal(self.player_button.draw_hand.final_hand)
+        self.player_button.draw_hand = draw_hand_button
+        """
 
         # Next round. We bet again, then draw again
         self.live = True 
@@ -563,6 +630,12 @@ class TripleDrawDealer():
         # TODO: function, to prepare betting round, reset intermediate values.
         self.player_blind.bet_this_street = 0.0
         self.player_button.bet_this_street = 0.0
+
+        # Now, query the CNN, to find out current value of each hand.
+        # NOTE: We re-run the computation a minute later for "best draw..." but that's fine. Redundancy is ok.
+        print('--> compute player heuristics')
+        self.player_blind.update_hand_value(num_draws=0)                                                           
+        self.player_button.update_hand_value(num_draws=0)
 
         self.play_betting_round(round = DRAW_3_BET_ROUND)
         
@@ -635,6 +708,8 @@ def play(sample_size, output_file_name, model_filename=None):
 
         print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
         lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file)
+
+        # TODO: "test cases" should also be a function, like "evaluate_single_hand"
 
         # Test the model, by giving it dummy inputs
         # Test cases -- it keeps the two aces. But can it recognize a straight? A flush? Trips? Draw?? Two pair??

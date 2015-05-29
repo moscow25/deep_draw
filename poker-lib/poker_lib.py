@@ -131,6 +131,12 @@ actionName = {POST_BIG_BLIND: 'pos_BB', POST_SMALL_BLIND: 'pos_SB',
               BET_4_SMALL_STREET: '4bet_s', BET_4_BIG_STREET: '4bet_b',
               CHECK_HAND: 'check', FOLD_HAND: 'FOLD' }
 
+# Set of all bet types... that constitute a bet.
+ALL_BETS_SET = set([BET_SMALL_STREET, BET_BIG_STREET, 
+                    RAISE_SMALL_BLIND, RAISE_SMALL_STREET, RAISE_BIG_STREET,
+                    BET_3_SMALL_STREET, BET_3_BIG_STREET, 
+                    BET_4_SMALL_STREET, BET_4_BIG_STREET])
+
 # We also hard-code the limits.
 # 50-100 blinds, then 100 and 200 bet sizes on small and big streets
 SMALL_BET_SIZE = 100
