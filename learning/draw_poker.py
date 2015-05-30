@@ -120,7 +120,7 @@ PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to
 # hold value == [0.0, 1.0] value of keep-all-five hand.
 # Anything >= 0.5 is a really good pat hand
 # Anything <= 0.075 is a pair, straight or flush...
-SAMPLE_BY_HOLD_VALUE = True 
+SAMPLE_BY_HOLD_VALUE = True # Default == true, for all 32-length draws. As it focuses on cases that matter.
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
@@ -299,9 +299,10 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     csv_key_map = None
 
     # Can't grow numpy arrays. So instead, be lazy and grow array to be turned into numpy arrays.
-    X_train_not_np = []
-    y_train_not_np = []
+    X_train_not_np = [] # all input data (multi-dimension nparrays)
+    y_train_not_np = [] # "best category" for each item
     z_train_not_np = [] # 32-length vectors for all weights
+    m_train_not_np = [] # 32-length "mask" for which weights matter. 1 = yes 0 = N/A or ??
     hands = 0
     last_hands_print = -1
     lines = 0
@@ -364,6 +365,11 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                         #    print(line)
                         #    print('Skipping item with %s hold value!\n' % hold_value)
                         continue
+
+                # We can also add output "mask" for which of the "output_array" values matter.
+                # As default, for testing, etc, try applying mask for "output_class" == 1
+                output_mask = np.zeros((len(output_array)))
+                output_mask[output_class] = 1.0       
                 
                 if (hands % 5000) == 0 and hands != last_hands_print:
                     print('\nLoaded %d hands...\n' % hands)
@@ -371,6 +377,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     #print(hand_input)
                     print(hand_input.shape)
                     print(output_class)
+                    print(output_mask)
                     print('hold value %s' % hold_value)
                     print(output_array)
                     last_hands_print = hands
@@ -381,6 +388,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 X_train_not_np.append(hand_input)
                 y_train_not_np.append(output_class)
                 z_train_not_np.append(output_array)
+                m_train_not_np.append(output_mask)
 
                 hands += 1
 
@@ -395,6 +403,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     X_train = np.array(X_train_not_np)
     y_train = np.array(y_train_not_np)
     z_train = np.array(z_train_not_np) # 32-length vectors
+    m_train = np.array(m_train_not_np) # 32-length masks
 
     print('Read %d data points. Shape below:' % len(X_train_not_np))
     #print(X_train)
@@ -404,8 +413,9 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     print('X_train object is type %s of shape %s' % (type(X_train), X_train.shape))
     print('y_train object is type %s of shape %s' % (type(y_train), y_train.shape))
     print('z_train object is type %s of shape %s' % (type(z_train), z_train.shape))
+    print('m_train object is type %s of shape %s' % (type(m_train), m_train.shape))
 
-    return (X_train, y_train, z_train)
+    return (X_train, y_train, z_train, m_train)
 
 def load_data():
     """Get data with labels, split into training, validation and test set."""

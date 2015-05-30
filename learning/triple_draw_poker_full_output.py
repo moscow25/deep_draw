@@ -43,6 +43,11 @@ ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
 INCLUDE_NUM_DRAWS = True # 3 "cards" to encode number of draws left. ex. 2 draws: [0], [1], [1]
 INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a single matrix [Good for detecting str8, pair, etc]
 
+# Train on masked objective? 
+# NOTE: load_data needs to be already producing such masks.
+# NOTE: Default mask isn't all 1's... it's best_output == 1, others == 0
+TRAIN_MASKED_OBJECTIVE = False # True 
+
 # TODO: Include "empty" bits... so we can get a model started... which can be used as basis for next data?
 
 def load_data():
@@ -50,8 +55,8 @@ def load_data():
     # 'deuce' has its own adjustments...
     data = _load_poker_csv(filename=DATA_FILENAME, max_input = MAX_INPUT_SIZE, keep_all_data=True, adjust_floats='deuce', include_num_draws = INCLUDE_NUM_DRAWS, include_full_hand = INCLUDE_FULL_HAND)
 
-    # X = input, y = best cateogy, z = all categories.
-    X_all, y_all, z_all = data
+    # X = input, y = best cateogy, z = all categories, m = mask on all categories (if applicable)
+    X_all, y_all, z_all, m_all = data
 
     # Split into train (remainder), valid (1000), test (1000)
     X_split = np.split(X_all, [VALIDATION_SIZE, VALIDATION_SIZE + TEST_SIZE])
@@ -83,6 +88,16 @@ def load_data():
     print('z_test %s %s' % (type(z_test), z_test.shape))
     print('z_train %s %s' % (type(z_train), z_train.shape))
 
+    # And for M
+    m_split = np.split(m_all, [VALIDATION_SIZE, VALIDATION_SIZE + TEST_SIZE])
+    m_valid = m_split[0]
+    m_test = m_split[1]
+    m_train = m_split[2]
+
+    print('m_valid %s %s' % (type(m_valid), m_valid.shape))
+    print('m_test %s %s' % (type(m_test), m_test.shape))
+    print('m_train %s %s' % (type(m_train), m_train.shape))
+
     #sys.exit(0)
 
     # We ignore validation & test for now.
@@ -93,14 +108,17 @@ def load_data():
         X_train=theano.shared(lasagne.utils.floatX(X_train)),
         y_train=T.cast(theano.shared(y_train), 'int32'),
         z_train=theano.shared(lasagne.utils.floatX(z_train)),
+        m_train=theano.shared(lasagne.utils.floatX(m_train)),
 
         X_valid=theano.shared(lasagne.utils.floatX(X_valid)),
         y_valid=T.cast(theano.shared(y_valid), 'int32'),
         z_valid=theano.shared(lasagne.utils.floatX(z_valid)),
+        m_valid=theano.shared(lasagne.utils.floatX(m_valid)),
 
         X_test=theano.shared(lasagne.utils.floatX(X_test)),
         y_test=T.cast(theano.shared(y_test), 'int32'),
         z_test=theano.shared(lasagne.utils.floatX(z_test)),
+        m_test=theano.shared(lasagne.utils.floatX(m_test)),
 
         num_examples_train=X_train.shape[0],
         num_examples_valid=X_valid.shape[0],
@@ -263,28 +281,45 @@ def create_iter_functions_full_output(dataset, output_layer,
     print('input dataset %s' % dataset)
 
     batch_index = T.iscalar('batch_index')
-    X_batch = X_tensor_type('x')
-    y_batch = T.ivector('y') # We don't replace Y. Just compute loss from
-    z_batch = T.matrix('z') # 2D vector
+    X_batch = X_tensor_type('x') # inputs to the network
+    y_batch = T.ivector('y') # "best class" for the network
+    z_batch = T.matrix('z') # all values for the network
+    m_batch = T.matrix('m') # mask for all values, if some are relevant, others are N/A or ?
 
     batch_slice = slice(batch_index * batch_size,
                         (batch_index + 1) * batch_size)
 
+    # Use categorical_crossentropy objective, if we want to just predict best class, and not class values.
     #objective = lasagne.objectives.Objective(output_layer,
     #    loss_function=lasagne.objectives.categorical_crossentropy)
     #loss_train = objective.get_loss(X_batch, target=y_batch)
     #loss_eval = objective.get_loss(X_batch, target=y_batch,
     #                               deterministic=True)
 
-    # compute loss on mean squared error
-    objective = lasagne.objectives.Objective(output_layer,
-                                             #loss_function=linear_error) # just not as good...
-                                             loss_function=lasagne.objectives.mse)
+    if not TRAIN_MASKED_OBJECTIVE:
+        # compute loss on mean squared error
+        objective = lasagne.objectives.Objective(output_layer,
+                                                 #loss_function=linear_error) # just not as good...
+                                                 loss_function=lasagne.objectives.mse)
 
-    # error is comparing output to z-vector.
-    loss_train = objective.get_loss(X_batch, target=z_batch)
-    loss_eval = objective.get_loss(X_batch, target=z_batch,
-                                   deterministic=True)
+        # error is comparing output to z-vector.
+        loss_train = objective.get_loss(X_batch, target=z_batch)
+        loss_eval = objective.get_loss(X_batch, target=z_batch,
+                                       deterministic=True)
+    else:
+        print('--> We are told to use \'masked\' loss function. So training & validation loss will be computed on inputs with mask == 1 only')
+
+        # Alternatively, train only on some values! We do this by supplying a mask.
+        # This means that some values matter, others do not. For example... 
+        # A. Train on "best value" for 32-draws only (or random value, etc)
+        # B. If we get records of actual hands played, train only on moves actually made (but output_layer produces value for all moves)
+        objective = lasagne.objectives.MaskedObjective(output_layer,
+                                                       loss_function=lasagne.objectives.mse)
+
+        # error is computed same as un-masked objective... but we also supply a mask for each output. 1 = output matters 0 = N/A or ?
+        loss_train = objective.get_loss(X_batch, target=z_batch, mask=m_batch)
+        loss_eval = objective.get_loss(X_batch, target=z_batch, mask=m_batch,
+                                       deterministic=True)
     
     # Prediction actually stays the same! Since we still want biggest value in the array... and compare to Y
     pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
@@ -308,6 +343,7 @@ def create_iter_functions_full_output(dataset, output_layer,
             # Not computing 'accuracy' on training... [though we should]
             #y_batch: dataset['y_train'][batch_slice],
             z_batch: dataset['z_train'][batch_slice],
+            m_batch: dataset['m_train'][batch_slice],
         },
     )
 
@@ -323,6 +359,7 @@ def create_iter_functions_full_output(dataset, output_layer,
             # Not computing 'accuracy' on training... [though we should]
             #y_batch: dataset['y_train'][batch_slice],
             z_batch: dataset['z_train'][batch_slice],
+            m_batch: dataset['m_train'][batch_slice],
         },
     )
 
@@ -332,6 +369,7 @@ def create_iter_functions_full_output(dataset, output_layer,
             X_batch: dataset['X_valid'][batch_slice],
             y_batch: dataset['y_valid'][batch_slice],
             z_batch: dataset['z_valid'][batch_slice],
+            m_batch: dataset['m_valid'][batch_slice],
         },
     )
 
@@ -341,6 +379,7 @@ def create_iter_functions_full_output(dataset, output_layer,
             X_batch: dataset['X_test'][batch_slice],
             y_batch: dataset['y_test'][batch_slice],
             z_batch: dataset['z_test'][batch_slice],
+            m_batch: dataset['m_test'][batch_slice],
         },
     )
 
