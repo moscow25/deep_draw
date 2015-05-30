@@ -58,7 +58,7 @@ def baseline_heuristic_value(round, bets_this_round = 0):
     elif round == DRAW_3_BET_ROUND:
         # Not a typo. Value doesn't change with final round... (in this hack, anyway)
         # NOTE: Where value really changes... is facing a bet. Or two. Or three.
-        baseline = RANDOM_HAND_HEURISTIC_BASELINE + 0.125
+        baseline = RANDOM_HAND_HEURISTIC_BASELINE + 0.150
         
     # Increase the baseline... especially as we get into 3-bet and 4-bet territory.
     if bets_this_round >= 1:
@@ -220,7 +220,7 @@ class TripleDrawAIPlayer():
             print('decreaseing fold by %.2f since much action this street.' % fold_decrease)
             fold -= fold_decrease
 
-            print('incrase call by similar amount %.2f' % 2 * fold_decrease)
+            print('incrase call by similar amount %.2f' % (2 * fold_decrease))
             check_call += 2 * fold_decrease
 
         # We should often consider some chance at a really aggressive action, even in bad spots.
