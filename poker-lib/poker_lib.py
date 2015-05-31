@@ -136,6 +136,8 @@ ALL_BETS_SET = set([BET_SMALL_STREET, BET_BIG_STREET,
                     RAISE_SMALL_BLIND, RAISE_SMALL_STREET, RAISE_BIG_STREET,
                     BET_3_SMALL_STREET, BET_3_BIG_STREET, 
                     BET_4_SMALL_STREET, BET_4_BIG_STREET])
+ALL_CALLS_SET = set([CALL_SMALL_BLIND, CALL_SMALL_STREET, CALL_BIG_STREET])
+ALL_BLINDS_SET = set([POST_BIG_BLIND, POST_SMALL_BLIND])
 
 # We also hard-code the limits.
 # 50-100 blinds, then 100 and 200 bet sizes on small and big streets
@@ -152,6 +154,13 @@ PRE_DRAW_BET_ROUND = 1
 DRAW_1_BET_ROUND = 2
 DRAW_2_BET_ROUND = 3
 DRAW_3_BET_ROUND = 4
+
+# Map enum for betting round... into "draws left" for familiar CNN input same as for xNumDraws
+drawsLeft = {PRE_DRAW_BET_ROUND: 3, DRAW_1_BET_ROUND: 2, DRAW_2_BET_ROUND: 1, DRAW_3_BET_ROUND:0}
+
+# Enum, for position
+POSITION_BLIND = 0
+POSITION_BUTTON = 1
 
 #///////////////////////////////////////////////////////
 #    /*
