@@ -36,9 +36,9 @@ models and final hand evaluations, to accomodate any other draw game.
 """
 
 # Build up a CSV, of all information we might want for CNN training
-TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'value_heuristic',
-                            'position', 'best_draw', 'action', 
-                            'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand',
+TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
+                            'value_heuristic', 'position',  'num_cards_kept', 'num_opponent_kept',
+                            'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand',
                             'actions_this_round', 'actions_full_hand', 
                             'total_bet', 'result', 'margin_bet', 'margin_result']
 
@@ -82,9 +82,10 @@ class TripleDrawAIPlayer():
         # Current 0-1000 value, based on cards held, and approximation of value from draw model.
         # For example, if no more draws... heuristic is actual hand.
         self.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
+        self.num_cards_kept = 0 # how many cards did we keep... with out last draw?
 
         # TODO: Use this to track number of cards discarded, etc. Obviously, don't look at opponent's cards.
-        self.opponent_hand = None
+        #self.opponent_hand = None
 
     # Takes action on the hand. But first... get Theano output...
     def draw_move(self, deck, num_draws = 1):
@@ -112,6 +113,11 @@ class TripleDrawAIPlayer():
         deck.take_discards(discards)
         new_cards = deck.deal(len(discards))
         self.draw_hand.deal(new_cards, final_hand=True)
+
+        # Record current setting of these values...
+        # NOTE: heuristic value... is before we got our cards.
+        self.num_cards_kept = len(all_draw_patterns[best_draw])
+        self.heuristic_value = expected_payout
         
         return expected_payout
 
@@ -359,17 +365,22 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
         # TODO: Include draw events.
         if csv_writer:
             csv_writer.writerow(event_line)
+    # TODO: Flush buffer here?
 
 
 # Play a bunch of hands.
 # For now... just rush toward full games, and skip details, or fill in with hacks.
-def play(sample_size, output_file_name, model_filename=None):
+def play(sample_size, output_file_name=None, model_filename=None):
     # Compute hand values, or compare hands.
     cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
 
     # TODO: Initialize CSV writer
     csv_header_map = CreateMapFromCSVKey(TRIPLE_DRAW_EVENT_HEADER)
     csv_writer=None
+    if output_file_name:
+        output_file = open(output_file_name, 'w')
+        csv_writer = csv.writer(output_file)
+        csv_writer.writerow(TRIPLE_DRAW_EVENT_HEADER)
 
     # If model file provided, unpack model, and create intelligent agent.
     output_layer = None
@@ -443,8 +454,8 @@ def play(sample_size, output_file_name, model_filename=None):
     sys.stdout.flush()
 
 if __name__ == '__main__':
-    samples = 100
-    output_file_name = '%d_samples_model_choices.csv' % samples
+    samples = 200 # number of hands to run
+    output_file_name = 'triple_draw_events_%d.csv' % samples
 
     # Input model filename if given
     # TODO: set via command line flagz
@@ -452,8 +463,8 @@ if __name__ == '__main__':
     if len(sys.argv) >= 2:
         model_filename = sys.argv[1]
 
-        # Uniquely ID details
-        output_file_name = '%d_samples_model_choices_%s.csv' % (samples, model_filename)
+    if len(sys.argv) >= 3:
+        output_file_name = sys.argv[2]
 
     # TODO: Take num samples from command line.
     play(sample_size=samples, output_file_name=output_file_name, model_filename=model_filename)

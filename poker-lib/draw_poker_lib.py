@@ -74,16 +74,22 @@ class PokerAction:
         self.bet_size = bet_size # --> bet being made with *this action*
         self.pot_odds = (pot_size / bet_size if bet_size else 0.0)
         self.value = RANDOM_HAND_HEURISTIC_BASELINE # baseline of baselines
+        self.hand = None
+        self.best_draw = None
+        self.hand_after = None
 
     # Context needed, to record actions properly to CVS...
     def add_context(self, hand, draws_left, position, 
                     actions_this_round, actions_full_hand, 
-                    value = RANDOM_HAND_HEURISTIC_BASELINE, bet_this_hand = 0):
+                    value = RANDOM_HAND_HEURISTIC_BASELINE, bet_this_hand = 0,
+                    num_cards_kept = 0, num_opponent_kept = 0):
         self.hand = list(hand) # makes copy of 5-card array
         self.draws_left = draws_left
         self.value = value # heuristic estimation
         self.bet_this_hand = bet_this_hand # how much did we already commit into this hand, previously [useful for calculating value]
         self.position = position # position = enum
+        self.num_cards_kept = num_cards_kept
+        self.num_opponent_kept = num_opponent_kept
         
         # Array of PokerAction items -> '011' = check, bet, raise
         # NOTE: Blinds are skipped (for space), since always there. FOLD ends the action.
@@ -141,13 +147,23 @@ class PokerAction:
     # Return array of outputs, corresponding to CSV header map order. Empty fields are ''
     def csv_output(self, header_map):
         output_map = {}
-        if hasattr(self, 'hand'):
+        if hasattr(self, 'hand') and self.hand:
             output_map['hand'] = hand_string(self.hand)
+
+        # Draw hand information, if present
+        if self.best_draw:
+            output_map['best_draw'] = hand_string(self.best_draw)
+        if self.hand_after:
+            output_map['hand_after'] = hand_string(self.hand_after)
+
         if hasattr(self, 'draws_left'):
             output_map['draws_left'] = self.draws_left
         output_map['value_heuristic'] = self.value
         if hasattr(self, 'position'):
             output_map['position'] = self.position
+        if hasattr(self, 'num_cards_kept'):
+            output_map['num_cards_kept'] = self.num_cards_kept
+            output_map['num_opponent_kept'] = self.num_opponent_kept
         output_map['action'] = self.name
         output_map['pot_size'] = self.pot_size
         output_map['bet_size'] = self.bet_size
@@ -166,9 +182,17 @@ class PokerAction:
             output_map['margin_bet'] = self.margin_bet
             output_map['margin_result'] = self.margin_result
         
-        # ['hand', 'draws_left', 'value_heuristic', 'position', 'best_draw', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result']
+        # ['hand', 'draws_left', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result']
         output_row = VectorFromKeysAndSparseMap(keys=header_map, sparse_data_map=output_map, default_value = '')
         return output_row
+
+# Encode a draw event. Doesn't 100% fit in... but confusing not to record the draws, along with the bets.
+class DrawAction(PokerAction):
+    def __init__(self, actor_name, pot_size, hand_before, best_draw, hand_after):
+        PokerAction.__init__(self, action_type = DRAW_ACTION, actor_name = actor_name, pot_size = pot_size, bet_size = 0)
+        self.hand = list(hand_before)
+        self.best_draw = list(best_draw)
+        self.hand_after = list(hand_after)
 
 # Simple encoding, for each possible action
 class PostBigBlind(PokerAction):
@@ -442,7 +466,9 @@ class TripleDrawDealer():
                                actions_this_round = self.hand_history_this_round,
                                actions_full_hand = self.hand_history,
                                value = self.action_on.heuristic_value,
-                               bet_this_hand = self.action_on.bet_this_hand)
+                               bet_this_hand = self.action_on.bet_this_hand,
+                               num_cards_kept = self.action_on.num_cards_kept, 
+                               num_opponent_kept = self.action_off.num_cards_kept)
 
             self.process_action(action, pass_control = True)
             if keep_betting:
@@ -461,6 +487,8 @@ class TripleDrawDealer():
         self.player_blind.live = True
         self.player_blind.bet_this_hand = 0.0
         self.player_blind.bet_this_street = 0.0
+        self.player_blind.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
+        self.player_blind.num_cards_kept = 0
 
         draw_hand_button = PokerHand()
         deal_cards = self.deck.deal(5)
@@ -469,6 +497,9 @@ class TripleDrawDealer():
         self.player_button.live = True
         self.player_button.bet_this_hand = 0.0
         self.player_button.bet_this_street = 0.0
+        self.player_button.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
+        self.player_button.num_cards_kept = 0
+
         self.hand_history_this_round = []
 
         print('starting new hand. Blind %s and button %s' % (hand_string(self.player_blind.draw_hand.dealt_cards),
@@ -513,10 +544,33 @@ class TripleDrawDealer():
         # Make draws for each player, in turn
         if (self.live):
             # Similar to "player.move()" in the single-draw video poker context
-            # NOTE: Player already knows his own hand.
-            # TODO: We should also integrate context, like hand history, pot size, opponent's actions.
             self.player_blind.draw(deck=self.deck, num_draws=3)
             self.player_button.draw(deck=self.deck, num_draws=3)
+
+            draw_action = DrawAction(actor_name = self.player_blind.name, pot_size = self.pot_size, 
+                                     hand_before = self.player_blind.draw_hand.dealt_cards, 
+                                     best_draw = self.player_blind.draw_hand.held_cards, 
+                                     hand_after = self.player_blind.draw_hand.final_hand)
+            draw_action.add_context(hand=self.player_blind.draw_hand.dealt_cards,
+                                    draws_left=3, 
+                                    position = POSITION_BLIND, 
+                                    actions_this_round = [],
+                                    actions_full_hand = self.hand_history,
+                                    value = self.player_blind.heuristic_value,
+                                    bet_this_hand = self.player_blind.bet_this_hand)
+            self.hand_history.append(draw_action)
+            draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
+                                     hand_before = self.player_button.draw_hand.dealt_cards, 
+                                     best_draw = self.player_button.draw_hand.held_cards, 
+                                     hand_after = self.player_button.draw_hand.final_hand)
+            draw_action.add_context(hand=self.player_button.draw_hand.dealt_cards,
+                                    draws_left=3, 
+                                    position = POSITION_BUTTON, 
+                                    actions_this_round = [],
+                                    actions_full_hand = self.hand_history,
+                                    value = self.player_button.heuristic_value,
+                                    bet_this_hand = self.player_button.bet_this_hand)
+            self.hand_history.append(draw_action)
 
         # TODO: Switch to pre-draw & evaluate heuristics in a function?
         draw_hand_blind = PokerHand()
@@ -560,6 +614,31 @@ class TripleDrawDealer():
             self.player_blind.draw(deck=self.deck, num_draws=2)
             self.player_button.draw(deck=self.deck, num_draws=2)
 
+            draw_action = DrawAction(actor_name = self.player_blind.name, pot_size = self.pot_size, 
+                                     hand_before = self.player_blind.draw_hand.dealt_cards, 
+                                     best_draw = self.player_blind.draw_hand.held_cards, 
+                                     hand_after = self.player_blind.draw_hand.final_hand)
+            draw_action.add_context(hand=self.player_blind.draw_hand.dealt_cards,
+                                    draws_left=2, 
+                                    position = POSITION_BLIND, 
+                                    actions_this_round = [],
+                                    actions_full_hand = self.hand_history,
+                                    value = self.player_blind.heuristic_value,
+                                    bet_this_hand = self.player_blind.bet_this_hand)
+            self.hand_history.append(draw_action)
+            draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
+                                     hand_before = self.player_button.draw_hand.dealt_cards, 
+                                     best_draw = self.player_button.draw_hand.held_cards, 
+                                     hand_after = self.player_button.draw_hand.final_hand)
+            draw_action.add_context(hand=self.player_button.draw_hand.dealt_cards,
+                                    draws_left=2, 
+                                    position = POSITION_BUTTON, 
+                                    actions_this_round = [],
+                                    actions_full_hand = self.hand_history,
+                                    value = self.player_button.heuristic_value,
+                                    bet_this_hand = self.player_button.bet_this_hand)
+            self.hand_history.append(draw_action)
+
         # TODO: Switch to pre-draw & evaluate heuristics in a function?
         draw_hand_blind = PokerHand()
         draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
@@ -601,6 +680,31 @@ class TripleDrawDealer():
             # TODO: We should also integrate context, like hand history, pot size, opponent's actions.
             self.player_blind.draw(deck=self.deck, num_draws=1)
             self.player_button.draw(deck=self.deck, num_draws=1)
+            
+            draw_action = DrawAction(actor_name = self.player_blind.name, pot_size = self.pot_size, 
+                                     hand_before = self.player_blind.draw_hand.dealt_cards, 
+                                     best_draw = self.player_blind.draw_hand.held_cards, 
+                                     hand_after = self.player_blind.draw_hand.final_hand)
+            draw_action.add_context(hand=self.player_blind.draw_hand.dealt_cards,
+                                    draws_left=1, 
+                                    position = POSITION_BLIND, 
+                                    actions_this_round = [],
+                                    actions_full_hand = self.hand_history,
+                                    value = self.player_blind.heuristic_value,
+                                    bet_this_hand = self.player_blind.bet_this_hand)
+            self.hand_history.append(draw_action)
+            draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
+                                     hand_before = self.player_button.draw_hand.dealt_cards, 
+                                     best_draw = self.player_button.draw_hand.held_cards, 
+                                     hand_after = self.player_button.draw_hand.final_hand)
+            draw_action.add_context(hand=self.player_button.draw_hand.dealt_cards,
+                                    draws_left=1, 
+                                    position = POSITION_BUTTON, 
+                                    actions_this_round = [],
+                                    actions_full_hand = self.hand_history,
+                                    value = self.player_button.heuristic_value,
+                                    bet_this_hand = self.player_button.bet_this_hand)
+            self.hand_history.append(draw_action)
 
         # NOTE: Do *not* copy hands for final round of betting. It screws up "showdown" evaluation and debug. Evaluate on "final_hand" instead.
         """

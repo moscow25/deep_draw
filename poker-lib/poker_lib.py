@@ -113,6 +113,7 @@ BET_4_SMALL_STREET = 313 ## Not used.
 BET_4_BIG_STREET = 314 ## Not used.
 CHECK_HAND = 350
 FOLD_HAND = 399
+DRAW_ACTION = 366
 
 actionsArray = [POST_BIG_BLIND, POST_SMALL_BLIND, 
                 CALL_SMALL_BLIND, CALL_SMALL_STREET, CALL_BIG_STREET,
@@ -120,7 +121,7 @@ actionsArray = [POST_BIG_BLIND, POST_SMALL_BLIND,
                 RAISE_SMALL_BLIND, RAISE_SMALL_STREET, RAISE_BIG_STREET,
                 BET_3_SMALL_STREET, BET_3_BIG_STREET, 
                 BET_4_SMALL_STREET, BET_4_BIG_STREET,
-                CHECK_HAND, FOLD_HAND ]
+                CHECK_HAND, FOLD_HAND, DRAW_ACTION ]
 
 # Could use better names...
 actionName = {POST_BIG_BLIND: 'pos_BB', POST_SMALL_BLIND: 'pos_SB', 
@@ -129,7 +130,7 @@ actionName = {POST_BIG_BLIND: 'pos_BB', POST_SMALL_BLIND: 'pos_SB',
               RAISE_SMALL_BLIND: 'raise_SB', RAISE_SMALL_STREET: 'raise_small', RAISE_BIG_STREET: 'raise_big',
               BET_3_SMALL_STREET: '3bet_s', BET_3_BIG_STREET: '3bet_b', 
               BET_4_SMALL_STREET: '4bet_s', BET_4_BIG_STREET: '4bet_b',
-              CHECK_HAND: 'check', FOLD_HAND: 'FOLD' }
+              CHECK_HAND: 'check', FOLD_HAND: 'FOLD', DRAW_ACTION: 'draw' }
 
 # Set of all bet types... that constitute a bet.
 ALL_BETS_SET = set([BET_SMALL_STREET, BET_BIG_STREET, 
