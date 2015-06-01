@@ -132,13 +132,42 @@ actionName = {POST_BIG_BLIND: 'pos_BB', POST_SMALL_BLIND: 'pos_SB',
               BET_4_SMALL_STREET: '4bet_s', BET_4_BIG_STREET: '4bet_b',
               CHECK_HAND: 'check', FOLD_HAND: 'FOLD', DRAW_ACTION: 'draw' }
 
+# Reverse dictionary
+actionNameToAction = {v: k for k, v in actionName.items()}
+
 # Set of all bet types... that constitute a bet.
 ALL_BETS_SET = set([BET_SMALL_STREET, BET_BIG_STREET, 
                     RAISE_SMALL_BLIND, RAISE_SMALL_STREET, RAISE_BIG_STREET,
                     BET_3_SMALL_STREET, BET_3_BIG_STREET, 
                     BET_4_SMALL_STREET, BET_4_BIG_STREET])
+ALL_RAISES_SET = set([RAISE_SMALL_BLIND, RAISE_SMALL_STREET, RAISE_BIG_STREET,
+                    BET_3_SMALL_STREET, BET_3_BIG_STREET, 
+                    BET_4_SMALL_STREET, BET_4_BIG_STREET])
 ALL_CALLS_SET = set([CALL_SMALL_BLIND, CALL_SMALL_STREET, CALL_BIG_STREET])
 ALL_BLINDS_SET = set([POST_BIG_BLIND, POST_SMALL_BLIND])
+
+# Now... map (some) of these actions, to 32-length arrays.
+# Treat all bets and calls as the same, regardless of big or small bet. Ignore blind posts, etc.
+BET_CATEGORY = 0
+RAISE_CATEGORY = 1
+CHECK_CATEGORY = 2
+CALL_CATEGORY = 3
+FOLD_CATEGORY = 4
+eventCategoryName = {BET_CATEGORY: 'bet', RAISE_CATEGORY: 'raise', CHECK_CATEGORY: 'check',
+                     CALL_CATEGORY: 'call', FOLD_CATEGORY: 'fold'}
+def category_from_event_action(action):
+    if action in ALL_RAISES_SET:
+        return RAISE_CATEGORY
+    elif action in ALL_BETS_SET:
+        return BET_CATEGORY
+    elif action in ALL_CALLS_SET:
+        return CALL_CATEGORY
+    elif action == CHECK_HAND:
+        return CHECK_CATEGORY
+    elif action == FOLD_HAND:
+        return FOLD_CATEGORY
+    else:
+        return None
 
 # We also hard-code the limits.
 # 50-100 blinds, then 100 and 200 bet sizes on small and big streets
