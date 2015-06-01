@@ -27,7 +27,7 @@ DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values for 
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 150000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
