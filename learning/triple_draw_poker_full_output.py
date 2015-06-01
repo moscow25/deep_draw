@@ -27,7 +27,7 @@ DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values for 
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 50000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 150000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
@@ -115,20 +115,20 @@ def load_data():
     #X_test, y_test = data[2]
 
     return dict(
-        X_train=theano.shared(lasagne.utils.floatX(X_train)),
-        y_train=T.cast(theano.shared(y_train), 'int32'),
-        z_train=theano.shared(lasagne.utils.floatX(z_train)),
-        m_train=theano.shared(lasagne.utils.floatX(m_train)),
+        X_train=theano.shared(lasagne.utils.floatX(X_train), borrow=True),
+        y_train=T.cast(theano.shared(y_train, borrow=True), 'int32'),
+        z_train=theano.shared(lasagne.utils.floatX(z_train), borrow=True),
+        m_train=theano.shared(lasagne.utils.floatX(m_train), borrow=True),
 
-        X_valid=theano.shared(lasagne.utils.floatX(X_valid)),
-        y_valid=T.cast(theano.shared(y_valid), 'int32'),
-        z_valid=theano.shared(lasagne.utils.floatX(z_valid)),
-        m_valid=theano.shared(lasagne.utils.floatX(m_valid)),
+        X_valid=theano.shared(lasagne.utils.floatX(X_valid), borrow=True),
+        y_valid=T.cast(theano.shared(y_valid, borrow=True), 'int32'),
+        z_valid=theano.shared(lasagne.utils.floatX(z_valid), borrow=True),
+        m_valid=theano.shared(lasagne.utils.floatX(m_valid), borrow=True),
 
-        X_test=theano.shared(lasagne.utils.floatX(X_test)),
-        y_test=T.cast(theano.shared(y_test), 'int32'),
-        z_test=theano.shared(lasagne.utils.floatX(z_test)),
-        m_test=theano.shared(lasagne.utils.floatX(m_test)),
+        X_test=theano.shared(lasagne.utils.floatX(X_test), borrow=True),
+        y_test=T.cast(theano.shared(y_test, borrow=True), 'int32'),
+        z_test=theano.shared(lasagne.utils.floatX(z_test), borrow=True),
+        m_test=theano.shared(lasagne.utils.floatX(m_test), borrow=True),
 
         num_examples_train=X_train.shape[0],
         num_examples_valid=X_valid.shape[0],
