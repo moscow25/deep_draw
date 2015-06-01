@@ -21,8 +21,8 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values for 'deuce' (draws)
-# '../data/40k_triple_draw_events.csv' # 40k 'event's from a few thousand full hands.
+DATA_FILENAME = '../data/60k_triple_draw_events.csv' # 60k 'event's from a few thousand full hands.
+# '../data/500k_hands_sample_details_all.csv' # all 32 values for 'deuce' (draws)
 # '../data/500k_hands_sample_details_all.csv' # all 32 values.
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
@@ -49,13 +49,18 @@ INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a sin
 # NOTE: load_data needs to be already producing such masks.
 # NOTE: Default mask isn't all 1's... it's best_output == 1, others == 0
 # WARINING: Theano will complain if we pass a mask and don't use it!
-TRAIN_MASKED_OBJECTIVE = False # True # False # True 
+TRAIN_MASKED_OBJECTIVE = True # False # True # False # True 
+
+# Do we use linear loss? Why? If cases uncertain or small sample, might be better to approximate the average...
+LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True
 
 # If we are trainging on poker events (bets, raises and folds) instead of draw value,
 # input and output shape will be the same. But the way it's uses is totally different. 
 # NOTE: We keep shape the same... so we can use the really good "draw value" model as initialization.
-TRAINING_FORMAT = 'deuce' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'deuce_events' # 'deuce' # 'video'
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
+
+
 
 # TODO: Include "empty" bits... so we can get a model started... which can be used as basis for next data?
 
@@ -327,9 +332,14 @@ def create_iter_functions_full_output(dataset, output_layer,
         # This means that some values matter, others do not. For example... 
         # A. Train on "best value" for 32-draws only (or random value, etc)
         # B. If we get records of actual hands played, train only on moves actually made (but output_layer produces value for all moves)
-        objective_mask = lasagne.objectives.MaskedObjective(output_layer,
-                                                            # loss_function=lasagne.objectives.mse)
-                                                            loss_function=linear_error) # might make more sense... if we are looking at averages
+        if LINEAR_LOSS_FOR_MASKED_OBJECTIVE:
+            # Use this, if cases highly random, and better to optimize for the average...
+            masked_loss_function = linear_error
+        else:
+            # Use this, if results correct, or mostly correct, and we need this well reflected.
+            masked_loss_function = lasagne.objectives.mse
+
+        objective_mask = lasagne.objectives.MaskedObjective(output_layer, masked_loss_function)
                                                   
         # error is computed same as un-masked objective... but we also supply a mask for each output. 1 = output matters 0 = N/A or ?
         loss_train_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch)
