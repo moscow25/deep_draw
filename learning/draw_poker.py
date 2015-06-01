@@ -123,6 +123,9 @@ CONTEXT_LENGTH = 2 + 5 + 5 + 5 # Fast way to see how many zero's to add, if need
 # Anything <= 0.075 is a pair, straight or flush...
 SAMPLE_BY_HOLD_VALUE = True # Default == true, for all 32-length draws. As it focuses on cases that matter.
 
+# If we load the input arrays without refactoring... might save memory.
+TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
+
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
 def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
@@ -159,19 +162,19 @@ def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
         if include_num_draws:
             # NOTE: If doing permuations... full hand matrix will not match!
             if include_full_hand:
-                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), full_hand_to_matrix, num_draws_input[0], num_draws_input[1], num_draws_input[2]], np.int32)
+                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), full_hand_to_matrix, num_draws_input[0], num_draws_input[1], num_draws_input[2]], TRAINING_INPUT_TYPE)
             else:
-                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), num_draws_input[0], num_draws_input[1], num_draws_input[2]], np.int32)
+                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), num_draws_input[0], num_draws_input[1], num_draws_input[2]], TRAINING_INPUT_TYPE)
         else:
             # NOTE: If doing permuations... full hand matrix will not match!
             if include_full_hand:
-                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), full_hand_to_matrix], np.int32)
+                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), full_hand_to_matrix], TRAINING_INPUT_TYPE)
             else:
-                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], np.int32)
+                cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], TRAINING_INPUT_TYPE)
 
         # If 'context' is required... output 17 bits of zeros.
         if include_hand_context:
-            empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE))
+            empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
             cards_input_with_context = np.concatenate((cards_input, empty_bits_array), axis = 0)
             cards_inputs_all.append(cards_input_with_context)
         else:
@@ -393,7 +396,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     hand_context_input = np.array([position_input, pot_size_input, 
                                    bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
                                    cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
-                                   opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4]], np.int32)
+                                   opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4]], TRAINING_INPUT_TYPE)
 
     full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
 
@@ -885,7 +888,7 @@ def main(num_epochs=NUM_EPOCHS):
     # Fill in test cases to get to batch size?
     #for i in range(BATCH_SIZE - len(test_cases)):
     #    test_cases.append(test_cases[1])
-    test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
+    test_batch = np.array([cards_input_from_string(case) for case in test_cases], TRAINING_INPUT_TYPE)
     predict_model(output_layer=output_layer, test_batch=test_batch)
 
     print('again, the test cases: \n%s' % test_cases)
