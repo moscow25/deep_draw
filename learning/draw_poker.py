@@ -115,6 +115,7 @@ DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 
 # Pull levers, to zero-out some inputs... while keeping same shape.
 NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
 PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
+CONTEXT_LENGTH = 2 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
 
 # Bias training data? It's not just for single draw video poker..
 # hold value == [0.0, 1.0] value of keep-all-five hand.
@@ -125,7 +126,7 @@ SAMPLE_BY_HOLD_VALUE = True # Default == true, for all 32-length draws. As it fo
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
 def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
-                             include_num_draws=False, num_draws=None, include_full_hand = False):
+                             include_num_draws=False, num_draws=None, include_full_hand = False, include_hand_context = False):
     hand_array = hand_string_to_array(hand_string)
 
     # Now turn the array of Card abbreviations into numpy array of of input
@@ -167,15 +168,22 @@ def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
                 cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit), full_hand_to_matrix], np.int32)
             else:
                 cards_input = np.array([card_to_matrix(cards_array[0], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[1], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[2], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[3], pad_to_fit=pad_to_fit), card_to_matrix(cards_array[4], pad_to_fit=pad_to_fit)], np.int32)
-        cards_inputs_all.append(cards_input)
+
+        # If 'context' is required... output 17 bits of zeros.
+        if include_hand_context:
+            empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE))
+            cards_input_with_context = np.concatenate((cards_input, empty_bits_array), axis = 0)
+            cards_inputs_all.append(cards_input_with_context)
+        else:
+            cards_inputs_all.append(cards_input)
 
     return cards_inputs_all
 
 # Special case, to output first one!
-def cards_input_from_string(hand_string, pad_to_fit = PAD_INPUT, include_num_draws=False, num_draws=None, include_full_hand = False):
+def cards_input_from_string(hand_string, pad_to_fit = PAD_INPUT, include_num_draws=False, num_draws=None, include_full_hand = False, include_hand_context = False):
     return cards_inputs_from_string(hand_string, pad_to_fit, max_inputs=1,
                                     include_num_draws = include_num_draws, num_draws=num_draws,
-                                    include_full_hand = include_full_hand)[0]
+                                    include_full_hand = include_full_hand, include_hand_context = include_hand_context)[0]
 
 # For encoding number of draws left (0-3), encode 3 "cards", of all 0's, or all 1's
 # 3 draws: [1], [1], [1]
@@ -200,6 +208,50 @@ def num_draws_input_from_string(num_draws_string, pad_to_fit = PAD_INPUT, num_dr
 
     return [card_3, card_2, card_1]
 
+# More generalized form of the above. Encode 1/5 as 00001
+def integer_to_card_array(number, max_integer, pad_to_fit = PAD_INPUT):
+    output_array = [card_to_matrix_fill(0, pad_to_fit = pad_to_fit) for i in range(max_integer)]
+    for index in range(len(output_array)):
+        if number >= (max_integer - i):
+            output_array[index] = card_to_matrix_fill(1, pad_to_fit = pad_to_fit)
+    return output_array
+
+
+# Encode a string like '011' to 5-length array of "cards"
+def bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
+    output_array = [card_to_matrix_fill(0, pad_to_fit = pad_to_fit) for i in range(5)]
+    index = 0
+    for c in bets_string:
+        if index >= len(output_array):
+            break
+        else:
+            if c == '0':
+                continue
+            elif c == '1':
+                output_array[index] = card_to_matrix_fill(1, pad_to_fit = pad_to_fit)
+            else:
+                assert (c == '1' or c == '0'), 'unknown char |%s| in bets string!' % c
+    return output_array
+
+
+# Encode pot (0 to 3000 or so) into array... by faking a hand.
+# Every $50 of pot is another card... so 50 -> [2c], 200 -> [2c, 2d, 2h, 2s]
+def pot_to_array(pot_size, pad_to_fit = PAD_INPUT):
+    pot_to_cards = []
+    for rank in ranksArray:
+        for suit in suitsArray:
+            card = Card(suit=suit, value=rank)
+            if pot_size >= 50:
+                pot_to_cards.append(card)
+                pot_size -= 50
+            else:
+                break
+        if pot_size < 50:
+            break
+    pot_size_card = hand_to_matrix(pot_to_cards, pad_to_fit=pad_to_fit)
+    return pot_size_card
+
+
 # a hack, since we aren't able to implement liner loss in Theano...
 # To remove, or reduce problems with really big values... map values above 2.0 points to sqrt(remainder)
 # 25.00 to 6.80
@@ -219,6 +271,11 @@ def adjust_float_value(hand_val, mode = 'video'):
     elif mode and mode == 'deuce':
         # For Deuce... we get values on 0-1000 scale. Adjust these to [0.0, 1.0] scale. Easier to train.
         assert hand_val >= 0 and hand_val <= 1000, '\'deuce\' value out of range %s' % hand_val
+        return hand_val * 0.001
+    elif mode and mode == 'deuce_events':
+        # For events, we are looking at marginal value of events, in 100-200 limit game.
+        # Thus, inputs range from +3000 (win big pot) to -2000 (lose a big one, and pay many future bets)
+        # map these values to +3.0 and -2.0
         return hand_val * 0.001
     else:
         # Unknown mode. 
@@ -249,14 +306,14 @@ def sample_rate_for_hold_value(hold_value):
 # Turn each hand into an input (cards array) + output (32-line value)
 # if output_best_class==TRUE, instead outputs index 0-32 of the best value (for softmax category output)
 # Why? A. Easier to train B. Can re-use MNIST setup.
-def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_draws = False, include_full_hand = False):
+def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_draws = False, include_full_hand = False, include_hand_context = False):
     # array of equivalent inputs (if we choose to create more data by permuting suits)
     # NOTE: Usually... we don't do that.
     # NOTE: We can also, optionally, expand input to include other data, like number of draws made.
     # It might be more proper to append this... but logically, easier to place in the original np.array
     cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
                                             include_num_draws=include_num_draws, num_draws=data_array[csv_key_map['draws_left']], 
-                                            include_full_hand = include_full_hand)
+                                            include_full_hand = include_full_hand, include_hand_context = include_hand_context)
 
     #print(cards_inputs[0])
     #print((cards_inputs[0]).shape)
@@ -287,13 +344,93 @@ def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_
 
         output_values = [0]*32 # Hack to just return empty array.
                
-
     # Output all three things. Cards input, best category (0-32) and 32-row vector, of the weights
     return (cards_inputs, output_category, output_values) 
+
+# Same output format as poker line... but encodes a poker event (bet/check/fold)
+# returns (hand_input, output_class, output_array):
+# hand_input --> X by 19 x 19 padded cards and bits
+# output_class --> index of event actually taken
+# output_array --> 32-length output... but only the 'output_class' index matters. The rest are zero
+# Thus, we can train on the same model as 3-round draw decisions... resulting good initialization.
+def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event', pad_to_fit = PAD_INPUT, include_hand_context = False): 
+    #print(data_array)
+    # X x 19 x 19 input, including our hand, & num draws. 
+    # TODO: Either add other inputs internally... or generate separately & combine nparray elements.
+    cards_input = cards_input_from_string(data_array[csv_key_map['hand']], 
+                                          include_num_draws=True, num_draws=data_array[csv_key_map['draws_left']], 
+                                          include_full_hand = True)
+    
+    # Along with xCards and xNumDraws, also encode...
+    # xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept
+    position = int(data_array[csv_key_map['position']]) # binary
+    #print('position %s' % position)
+    position_input = card_to_matrix_fill(position, pad_to_fit = pad_to_fit)
+    #print(position_input)
+
+    pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
+    #print('pot size %s' % pot_size)
+    pot_size_input = pot_to_array(pot_size, pad_to_fit = pad_to_fit) # saved to single "card"
+    #print(pot_size_input)
+
+    bets_string = data_array[csv_key_map['actions_this_round']] # items like '0111' (5 max)
+    #print('bets_string |%s|' % bets_string)
+    bets_string_input = bets_string_to_array(bets_string, pad_to_fit = pad_to_fit) # length 5
+    #print(bets_string_input)
+
+    cards_kept = int(data_array[csv_key_map['num_cards_kept']]) # 0-5
+    #print('cards_kept %s' % cards_kept)
+    cards_kept_input = integer_to_card_array(cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
+    #print(cards_kept_input)
+
+    opponent_cards_kept = int(data_array[csv_key_map['num_opponent_kept']]) # 0-5
+    #print('opponent_cards_kept %s' % opponent_cards_kept)
+    opponent_cards_kept_input = integer_to_card_array(opponent_cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
+    #print(opponent_cards_kept_input)
+
+    # Put it all together...
+    # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
+    hand_context_input = np.array([position_input, pot_size_input, 
+                                   bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
+                                   cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
+                                   opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4]], np.int32)
+
+    full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
+
+    #print(full_input)
+    #print('fully concatenated input %s, shape %s' % (type(full_input), full_input.shape))
+
+    # Look up the action taken with this event. If it's unknown or not appropriate, skip.
+    action_name = data_array[csv_key_map['action']]
+    #print('action taken = |%s|' % action_name)
+    action_taken = actionNameToAction[action_name]
+    #print(action_taken)
+
+    # We are only interesting in bets, raises, calls, checks and folds. All other actions can be ignored...
+    if not ((action_taken in ALL_BETS_SET) or (action_taken in ALL_CALLS_SET) or (action_taken == CHECK_HAND) or (action_taken == FOLD_HAND)):
+        #print('action not useful for poker event training %s' % action_taken)
+        raise AssertionError()
+    #else
+        #print('acceptable & useful action %s' % action_taken)
+        
+
+    # Which place in the 32-vector array does this action map to?
+    output_category = category_from_event_action(action_taken)
+
+    # Our results... is an empty 32-vector, with only action's value set
+    action_marginal_value = adjust_float_value(float(data_array[csv_key_map['margin_result']]), mode=adjust_floats)
+    output_array = np.zeros(32)
+    output_array[output_category] = action_marginal_value
+
+    # Do we return just the hand, or also 17 "bits" of context?
+    if include_hand_context:
+        return (full_input, output_category, output_array)
+    else:
+        return (cards_input, output_category, output_array)
     
 # Read CSV lines, create giant numpy arrays of the input & output values.
-def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True, keep_all_data=False, adjust_floats='video', include_num_draws = False, include_full_hand = False, sample_by_hold_value = SAMPLE_BY_HOLD_VALUE):
-    csv_reader = csv.reader(open(filename, 'rU'))
+def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True, keep_all_data=False, format='video', include_num_draws = False, include_full_hand = False, sample_by_hold_value = SAMPLE_BY_HOLD_VALUE, include_hand_context = False):
+    csv_reader = csv.reader(open(filename, 'rb')) # 'rU')) "line contains NULL byte"
 
     csv_key = None
     csv_key_map = None
@@ -330,12 +467,24 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
         else:
             # Skip any mail-formed lines.
             try:
-                # NOTE: hand_inputs represents array of *equivalent* inputs
-                hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = adjust_floats, include_num_draws=include_num_draws, include_full_hand = include_full_hand)
+                # hand_inputs represents array of *equivalent* inputs (in case we want to permute inputs, to get more data)
+                if format == 'video' or format == 'deuce':
+                    hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = format, include_num_draws=include_num_draws, include_full_hand = include_full_hand, include_hand_context = include_hand_context)
+                elif format == 'deuce_events':
+                    # For less confusion, if input data is "events" ie bets, checks, etc... 
+                    # Data gets zipped into the same training format, trained with same shape, but just initialize it differently
+                    # (re-use sub functions for encoding a hand, etc, whereever possible)
+                    hand_input, output_class, output_array = read_poker_event_line(line, csv_key_map, adjust_floats = format, include_hand_context = include_hand_context)
+
+                    # Get rid of input shuffling. At least for now
+                    hand_inputs_all = [hand_input]
+                else:
+                    print('unknown input format: %s' % format)
+                    sys.exit(-3)
             
                 # except (IndexError): # Fewer errors, for debugging
             except (IndexError, ValueError, KeyError, AssertionError): # Any reading error
-                print('\nskipping malformed input line:\n|%s|\n' % line)
+                #print('\nskipping malformed input line:\n|%s|\n' % line)
                 continue
 
 
@@ -358,7 +507,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
 
                 # Alternatively, sample by the *value* of class[31] (keep all)
                 # Example: down-sample all, except dealt pairs, or dealt flushes, etc
-                if sample_by_hold_value:
+                if sample_by_hold_value and format == 'deuce':
                     sample_rate = sample_rate_for_hold_value(hold_value)
                     if random.random() > sample_rate:
                         #if (hands % 5000) == 0 and hands != last_hands_print:
@@ -369,7 +518,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 # We can also add output "mask" for which of the "output_array" values matter.
                 # As default, for testing, etc, try applying mask for "output_class" == 1
                 output_mask = np.zeros((len(output_array)))
-                output_mask[output_class] = 1.0       
+                output_mask[output_class] = 1.0 
                 
                 if (hands % 5000) == 0 and hands != last_hands_print:
                     print('\nLoaded %d hands...\n' % hands)
@@ -378,7 +527,8 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print(hand_input.shape)
                     print(output_class)
                     print(output_mask)
-                    print('hold value %s' % hold_value)
+                    if format != 'deuce_events':
+                        print('hold value %s' % hold_value)
                     print(output_array)
                     last_hands_print = hands
 

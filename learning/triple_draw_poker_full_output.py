@@ -21,13 +21,15 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values.
+DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values for 'deuce' (draws)
+# '../data/40k_triple_draw_events.csv' # 40k 'event's from a few thousand full hands.
+# '../data/500k_hands_sample_details_all.csv' # all 32 values.
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 250000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 50000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
-TEST_SIZE = 5000
+TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
@@ -46,14 +48,22 @@ INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a sin
 # Train on masked objective? 
 # NOTE: load_data needs to be already producing such masks.
 # NOTE: Default mask isn't all 1's... it's best_output == 1, others == 0
-TRAIN_MASKED_OBJECTIVE = False # True 
+# WARINING: Theano will complain if we pass a mask and don't use it!
+TRAIN_MASKED_OBJECTIVE = False # True # False # True 
+
+# If we are trainging on poker events (bets, raises and folds) instead of draw value,
+# input and output shape will be the same. But the way it's uses is totally different. 
+# NOTE: We keep shape the same... so we can use the really good "draw value" model as initialization.
+TRAINING_FORMAT = 'deuce' # 'deuce_events' # 'deuce' # 'video'
+INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 
 # TODO: Include "empty" bits... so we can get a model started... which can be used as basis for next data?
 
 def load_data():
+    print('About to load up to %d items of data, for training format %s' % (MAX_INPUT_SIZE, TRAINING_FORMAT))
     # Do *not* bias the data, or smooth out big weight values, as we would for video poker.
     # 'deuce' has its own adjustments...
-    data = _load_poker_csv(filename=DATA_FILENAME, max_input = MAX_INPUT_SIZE, keep_all_data=True, adjust_floats='deuce', include_num_draws = INCLUDE_NUM_DRAWS, include_full_hand = INCLUDE_FULL_HAND)
+    data = _load_poker_csv(filename=DATA_FILENAME, max_input = MAX_INPUT_SIZE, keep_all_data=True, format=TRAINING_FORMAT, include_num_draws = INCLUDE_NUM_DRAWS, include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT)
 
     # X = input, y = best cateogy, z = all categories, m = mask on all categories (if applicable)
     X_all, y_all, z_all, m_all = data
@@ -146,6 +156,10 @@ def build_model(input_width, input_height, output_dim,
     if INCLUDE_NUM_DRAWS:
         num_input_cards += 3
 
+    # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept] -- or just 0's...
+    if INCLUDE_HAND_CONTEXT:
+        num_input_cards += 17
+
     # Shape is [cards + bits] x height x width
     l_in = lasagne.layers.InputLayer(
         shape=(batch_size, num_input_cards, input_height, input_width),
@@ -162,7 +176,7 @@ def build_model(input_width, input_height, output_dim,
         W=lasagne.init.GlorotUniform(),
         )
 
-    print('convolution layer l_conv1. Shape %s' % str(l_conv1.get_output_shape()))
+    print('convolution layer l_conv1. Shape %s' % str(l_conv1.output_shape))
 
     # No hard rule that we need to pool after every 3x3!
     # l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
@@ -174,13 +188,13 @@ def build_model(input_width, input_height, output_dim,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
-    print('convolution layer l_conv1_1. Shape %s' % str(l_conv1_1.get_output_shape()))
+    print('convolution layer l_conv1_1. Shape %s' % str(l_conv1_1.output_shape))
 
     l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, pool_size=(2, 2))
     # Try *not pooling* in the suit layer...
     #l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 1))
 
-    print('maxPool layer l_pool1. Shape %s' % str(l_pool1.get_output_shape()))
+    print('maxPool layer l_pool1. Shape %s' % str(l_pool1.output_shape))
 
     # try 3rd conv layer
     #l_conv1_2 = lasagne.layers.Conv2DLayer(
@@ -201,7 +215,7 @@ def build_model(input_width, input_height, output_dim,
         W=lasagne.init.GlorotUniform(),
         )
 
-    print('convolution layer l_conv2. Shape %s' % str(l_conv2.get_output_shape()))
+    print('convolution layer l_conv2. Shape %s' % str(l_conv2.output_shape))
 
     # Add 4th convolution layer...
     # l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
@@ -214,14 +228,14 @@ def build_model(input_width, input_height, output_dim,
         W=lasagne.init.GlorotUniform(),
         )
 
-    print('convolution layer l_conv2_2. Shape %s' % str(l_conv2_2.get_output_shape()))
+    print('convolution layer l_conv2_2. Shape %s' % str(l_conv2_2.output_shape))
 
     # Question? No need for Max-pool for already narrow network... NO
     # Try *not pooling* in the suit layer...
     l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, pool_size=(2, 2))
     #l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 1))
 
-    print('maxPool layer l_pool2. Shape %s' % str(l_pool2.get_output_shape()))
+    print('maxPool layer l_pool2. Shape %s' % str(l_pool2.output_shape))
 
     # Add 3rd convolution layer!
     #l_conv3 = lasagne.layers.Conv2DLayer(
@@ -240,11 +254,11 @@ def build_model(input_width, input_height, output_dim,
         W=lasagne.init.GlorotUniform(),
         )
 
-    print('hidden layer l_hidden1. Shape %s' % str(l_hidden1.get_output_shape()))
+    print('hidden layer l_hidden1. Shape %s' % str(l_hidden1.output_shape))
 
     l_hidden1_dropout = lasagne.layers.DropoutLayer(l_hidden1, p=0.5)
 
-    print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.get_output_shape()))
+    print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.output_shape))
 
     #l_hidden2 = lasagne.layers.DenseLayer(
     #     l_hidden1_dropout,
@@ -260,7 +274,7 @@ def build_model(input_width, input_height, output_dim,
         W=lasagne.init.GlorotUniform(),
         )
 
-    print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.get_output_shape())))
+    print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.output_shape)))
 
     return l_out
 
@@ -284,7 +298,8 @@ def create_iter_functions_full_output(dataset, output_layer,
     X_batch = X_tensor_type('x') # inputs to the network
     y_batch = T.ivector('y') # "best class" for the network
     z_batch = T.matrix('z') # all values for the network
-    m_batch = T.matrix('m') # mask for all values, if some are relevant, others are N/A or ?
+    if TRAIN_MASKED_OBJECTIVE:
+        m_batch = T.matrix('m') # mask for all values, if some are relevant, others are N/A or ?
 
     batch_slice = slice(batch_index * batch_size,
                         (batch_index + 1) * batch_size)
@@ -296,30 +311,40 @@ def create_iter_functions_full_output(dataset, output_layer,
     #loss_eval = objective.get_loss(X_batch, target=y_batch,
     #                               deterministic=True)
 
+
     if not TRAIN_MASKED_OBJECTIVE:
         # compute loss on mean squared error
-        objective = lasagne.objectives.Objective(output_layer,
-                                                 #loss_function=linear_error) # just not as good...
-                                                 loss_function=lasagne.objectives.mse)
+        objective_no_mask = lasagne.objectives.Objective(output_layer,
+                                                         #loss_function=linear_error) # just not as good...
+                                                         loss_function=lasagne.objectives.mse)
 
         # error is comparing output to z-vector.
-        loss_train = objective.get_loss(X_batch, target=z_batch)
-        loss_eval = objective.get_loss(X_batch, target=z_batch,
-                                       deterministic=True)
+        loss_train_no_mask = objective_no_mask.get_loss(X_batch, target=z_batch)
+        loss_eval_no_mask = objective_no_mask.get_loss(X_batch, target=z_batch,
+                                                       deterministic=True)
     else:
-        print('--> We are told to use \'masked\' loss function. So training & validation loss will be computed on inputs with mask == 1 only')
-
         # Alternatively, train only on some values! We do this by supplying a mask.
         # This means that some values matter, others do not. For example... 
         # A. Train on "best value" for 32-draws only (or random value, etc)
         # B. If we get records of actual hands played, train only on moves actually made (but output_layer produces value for all moves)
-        objective = lasagne.objectives.MaskedObjective(output_layer,
-                                                       loss_function=lasagne.objectives.mse)
-
+        objective_mask = lasagne.objectives.MaskedObjective(output_layer,
+                                                            # loss_function=lasagne.objectives.mse)
+                                                            loss_function=linear_error) # might make more sense... if we are looking at averages
+                                                  
         # error is computed same as un-masked objective... but we also supply a mask for each output. 1 = output matters 0 = N/A or ?
-        loss_train = objective.get_loss(X_batch, target=z_batch, mask=m_batch)
-        loss_eval = objective.get_loss(X_batch, target=z_batch, mask=m_batch,
-                                       deterministic=True)
+        loss_train_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch)
+        loss_eval_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch,
+                                                 deterministic=True)
+
+    if TRAIN_MASKED_OBJECTIVE:
+        print('--> We are told to use \'masked\' loss function. So training & validation loss will be computed on inputs with mask == 1 only')
+        objective = objective_mask
+        loss_train = loss_train_mask
+        loss_eval = loss_eval_mask
+    else:
+        objective = objective_no_mask
+        loss_train = loss_train_no_mask
+        loss_eval = loss_eval_no_mask
     
     # Prediction actually stays the same! Since we still want biggest value in the array... and compare to Y
     pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
@@ -334,18 +359,30 @@ def create_iter_functions_full_output(dataset, output_layer,
     print('Using AdaDelta adaptive learning after %d epochs, with epsilon %s, learning rate %.2f!' % (EPOCH_SWITCH_ADAPT, str(ADA_DELTA_EPSILON), ADA_LEARNING_RATE))
     updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=ADA_LEARNING_RATE, epsilon=ADA_DELTA_EPSILON) #learning_rate=learning_rate)
 
-    # Function to train with nesterov momentum...
-    iter_train_nesterov = theano.function(
-        [batch_index], loss_train,
-        updates=updates_nesterov,
-        givens={
+    # Be careful not to include in givens, what won't be used. Theano will complain!
+    if TRAIN_MASKED_OBJECTIVE:
+        givens_train = {
             X_batch: dataset['X_train'][batch_slice],
             # Not computing 'accuracy' on training... [though we should]
             #y_batch: dataset['y_train'][batch_slice],
             z_batch: dataset['z_train'][batch_slice],
             m_batch: dataset['m_train'][batch_slice],
-        },
-    )
+            }
+    else:
+         givens_train = {
+            X_batch: dataset['X_train'][batch_slice],
+            # Not computing 'accuracy' on training... [though we should]
+            #y_batch: dataset['y_train'][batch_slice],
+            z_batch: dataset['z_train'][batch_slice],
+            #m_batch: dataset['m_train'][batch_slice],
+            }
+
+    # Function to train with nesterov momentum...
+    iter_train_nesterov = theano.function(
+        [batch_index], loss_train,
+        updates=updates_nesterov,
+        givens=givens_train,
+        )
 
     # Still the default training function
     iter_train = iter_train_nesterov
@@ -354,33 +391,47 @@ def create_iter_functions_full_output(dataset, output_layer,
     iter_train_ada_delta= theano.function(
         [batch_index], loss_train,
         updates=updates_ada_delta,
-        givens={
-            X_batch: dataset['X_train'][batch_slice],
-            # Not computing 'accuracy' on training... [though we should]
-            #y_batch: dataset['y_train'][batch_slice],
-            z_batch: dataset['z_train'][batch_slice],
-            m_batch: dataset['m_train'][batch_slice],
-        },
-    )
+        givens=givens_train,
+        )
 
-    iter_valid = theano.function(
-        [batch_index], [loss_eval, accuracy],
-        givens={
+    # Be careful not to include in givens, what won't be used. Theano will complain!
+    if TRAIN_MASKED_OBJECTIVE:
+        givens_valid = {
             X_batch: dataset['X_valid'][batch_slice],
             y_batch: dataset['y_valid'][batch_slice],
             z_batch: dataset['z_valid'][batch_slice],
             m_batch: dataset['m_valid'][batch_slice],
-        },
+        }
+    else:
+        givens_valid = {
+            X_batch: dataset['X_valid'][batch_slice],
+            y_batch: dataset['y_valid'][batch_slice],
+            z_batch: dataset['z_valid'][batch_slice],
+            #m_batch: dataset['m_valid'][batch_slice],
+        }
+    iter_valid = theano.function(
+        [batch_index], [loss_eval, accuracy],
+        givens=givens_valid,
     )
 
-    iter_test = theano.function(
-        [batch_index], [loss_eval, accuracy],
-        givens={
+    # Be careful not to include in givens, what won't be used. Theano will complain!
+    if TRAIN_MASKED_OBJECTIVE:
+        givens_test = {
             X_batch: dataset['X_test'][batch_slice],
             y_batch: dataset['y_test'][batch_slice],
             z_batch: dataset['z_test'][batch_slice],
             m_batch: dataset['m_test'][batch_slice],
-        },
+        }
+    else:
+        givens_test = {
+            X_batch: dataset['X_test'][batch_slice],
+            y_batch: dataset['y_test'][batch_slice],
+            z_batch: dataset['z_test'][batch_slice],
+            #m_batch: dataset['m_test'][batch_slice],
+        }
+    iter_test = theano.function(
+        [batch_index], [loss_eval, accuracy],
+        givens=givens_test,
     )
 
     return dict(
@@ -394,11 +445,16 @@ def create_iter_functions_full_output(dataset, output_layer,
 # Now how do I return theano function to predict, from my given thing? Should be simple.
 # TODO: output second-best choice
 # TODO: show choices, alongside inputs
-def predict_model(output_layer, test_batch):
+def predict_model(output_layer, test_batch, format = 'deuce'):
     print('Computing predictions on test_batch: %s %s' % (type(test_batch), test_batch.shape))
     #pred = T.argmax(output_layer.get_output(test_batch, deterministic=True), axis=1)
     pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+
+    # TODO: For 'deuce_events' format, zero out predictions past our last one.
     print('Prediciton: %s' % pred)
+
+    # TODO: For "deuce_events" format... show best action inside of events actions only.
+
     #print(tp.pprint(pred))
     softmax_values = pred.eval()
     print(softmax_values)
@@ -532,9 +588,9 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
     # Test cases -- for Deuce. Can it keep good hands, break pairs, etc? 
     # NOTE: These cases, and entire training... do *not* include number of draw rounds left. Add that!
-    test_cases = [['As,Ad,4d,3s,2c', 1], ['2h,3s,4d,6c,5s', 1],
-                  ['3h,3s,3d,5c,6d', 3],  ['As,Ks,Qs,Js,Ts', 2],
-                  ['3h,4s,3d,5c,6d', 2], ['3s,2h,4d,8c,5s', 3],
+    test_cases = [['3h,3s,3d,5c,6d', 3], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 0],
+                  ['3h,3s,3d,5c,6d', 0], ['2h,3s,4d,6c,5s', 2], ['3s,2h,4d,8c,5s', 3],
+                  ['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,4s,3d,5c,6d', 2],
                   ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1], 
                   ['7c,8c,Tc,Js,Qh', 3], ['2c,8s,5h,8d,2s', 2],
                   ['[8s,9c,8c,Kd,7h]', 2], ['[Qh,3h,6c,5s,4s]', 1], ['[Jh,Td,9s,Ks,5s]', 1],
@@ -549,8 +605,14 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
         test_cases.append(test_cases[1])
     # Test_batch... 5 cards, no 3-card "round" encoding.
     # test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
-    test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND) for case in test_cases], np.int32)
-    predict_model(output_layer=output_layer, test_batch=test_batch)
+    if TRAINING_FORMAT == 'video' or TRAINING_FORMAT == 'deuce':
+        test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
+    
+    elif TRAINING_FORMAT == 'deuce_events':
+        # TODO:  Add context, if made available...
+        test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
+        
+    predict_model(output_layer=output_layer, test_batch=test_batch, format = TRAINING_FORMAT)
 
     print('again, the test cases: \n%s' % test_cases)    
 
@@ -562,6 +624,8 @@ if __name__ == '__main__':
     extra_flags = ''
     if INCLUDE_FULL_HAND:
         extra_flags += '_full_hand'
+    if INCLUDE_HAND_CONTEXT:
+        extra_flags += '_hand_context'
 
-    output_layer_filename = 'triple_draw_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_%s_border_%d_num_draws%s_model.pickle' % (LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS, BORDER_SHAPE, INCLUDE_NUM_DRAWS, extra_flags)
+    output_layer_filename = '%striple_draw_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_%s_border_%d_num_draws%s_model.pickle' % (TRAINING_FORMAT, LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS, BORDER_SHAPE, INCLUDE_NUM_DRAWS, extra_flags)
     main(out_file=output_layer_filename)
