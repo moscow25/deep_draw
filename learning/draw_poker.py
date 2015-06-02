@@ -17,33 +17,7 @@ Rather than trying to predict the best move of a hand, say [Kh,4s,5s,Qd,5c], we 
 All 32 sim results for hand [Kh,4s,5s,Qd,5c]:
 	[]:	1000 sample:	0.34 average	9.00 maximum
 	[Kh]:	10000 sample:	0.47 average	25.00 maximum
-	[4s]:	1000 sample:	0.28 average	9.00 maximum
-	[5s]:	1000 sample:	0.22 average	9.00 maximum
-	[Qd]:	10000 sample:	0.47 average	25.00 maximum
-	[5c]:	1000 sample:	0.24 average	9.00 maximum
-	[Kh,4s]:	1000 sample:	0.34 average	3.00 maximum
-	[Kh,5s]:	1000 sample:	0.30 average	3.00 maximum
-	[Kh,Qd]:	1000 sample:	0.52 average	4.00 maximum
-	[Kh,5c]:	1000 sample:	0.28 average	3.00 maximum
-	[4s,5s]:	1000 sample:	0.27 average	6.00 maximum
-	[4s,Qd]:	1000 sample:	0.33 average	9.00 maximum
-	[4s,5c]:	1000 sample:	0.21 average	9.00 maximum
-	[5s,Qd]:	1000 sample:	0.32 average	9.00 maximum
-	[5s,5c]:	1000 sample:	0.76 average	25.00 maximum
-	[Qd,5c]:	1000 sample:	0.28 average	3.00 maximum
-	[Kh,4s,5s]:	1000 sample:	0.19 average	3.00 maximum
-	[Kh,4s,Qd]:	1000 sample:	0.32 average	3.00 maximum
-	[Kh,4s,5c]:	1000 sample:	0.18 average	3.00 maximum
-	[Kh,5s,Qd]:	1000 sample:	0.30 average	3.00 maximum
-	[Kh,5s,5c]:	1000 sample:	0.58 average	9.00 maximum
-	[Kh,Qd,5c]:	1000 sample:	0.29 average	3.00 maximum
-	[4s,5s,Qd]:	1000 sample:	0.18 average	3.00 maximum
-	[4s,5s,5c]:	1000 sample:	0.65 average	9.00 maximum
-	[4s,Qd,5c]:	1000 sample:	0.19 average	3.00 maximum
-	[5s,Qd,5c]:	1000 sample:	0.75 average	25.00 maximum
-	[Kh,4s,5s,Qd]:	1000 sample:	0.14 average	1.00 maximum
-	[Kh,4s,5s,5c]:	1000 sample:	0.39 average	3.00 maximum
-	[Kh,4s,Qd,5c]:	1000 sample:	0.11 average	1.00 maximum
+        ...
 	[Kh,5s,Qd,5c]:	1000 sample:	0.38 average	3.00 maximum
 	[4s,5s,Qd,5c]:	1000 sample:	0.41 average	3.00 maximum
 	[Kh,4s,5s,Qd,5c]:	1000 sample:	0.00 average	0.00 maximum
@@ -116,6 +90,7 @@ DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 
 NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
 PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
 CONTEXT_LENGTH = 2 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
+CONTEXT_ALL_ZERO = True # False # True # Set true, to map "xPos, xPot, ..." to x0 of same length. Useful for getting baseline for hands, values first
 
 # Bias training data? It's not just for single draw video poker..
 # hold value == [0.0, 1.0] value of keep-all-five hand.
@@ -403,7 +378,12 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
                                    cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
                                    opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4]], TRAINING_INPUT_TYPE)
 
-    full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
+    # Include this context output... or all xO, depending on what's asked
+    if not CONTEXT_ALL_ZERO:
+        full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
+    else:
+        empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
+        full_input = np.concatenate((cards_input, empty_bits_array), axis = 0)
 
     #print(full_input)
     #print('fully concatenated input %s, shape %s' % (type(full_input), full_input.shape))
