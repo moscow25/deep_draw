@@ -399,6 +399,10 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     output_array = np.zeros(32)
     output_array[output_category] = action_marginal_value
 
+    # Also, we need to code FOLD --> 0.0. Why? This helps with calibration. 
+    fold_marginal_value = adjust_float_value(0.0, mode=adjust_floats)
+    output_array[FOLD_CATEGORY] = fold_marginal_value
+
     # Do we return just the hand, or also 17 "bits" of context?
     if include_hand_context:
         return (full_input, output_category, output_array)
@@ -496,6 +500,9 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 # As default, for testing, etc, try applying mask for "output_class" == 1
                 output_mask = np.zeros((len(output_array)))
                 output_mask[output_class] = 1.0 
+                # For events, we also encode that fold == 0 value. Let's hope this helps sparse training.
+                if format == 'deuce_events':
+                    output_mask[FOLD_CATEGORY] = 1.0
                 
                 if (hands % 5000) == 0 and hands != last_hands_print:
                     print('\nLoaded %d hands...\n' % hands)
