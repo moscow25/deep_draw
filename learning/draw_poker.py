@@ -126,6 +126,9 @@ SAMPLE_BY_HOLD_VALUE = True # Default == true, for all 32-length draws. As it fo
 # If we load the input arrays without refactoring... might save memory.
 TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
 
+# Value of a "zero event." Why baseline? Model doesn't really handle negative numbers!
+EVENTS_VALUE_BASELINE = 2.000
+
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
 def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
@@ -279,7 +282,9 @@ def adjust_float_value(hand_val, mode = 'video'):
         # For events, we are looking at marginal value of events, in 100-200 limit game.
         # Thus, inputs range from +3000 (win big pot) to -2000 (lose a big one, and pay many future bets)
         # map these values to +3.0 and -2.0
-        return hand_val * 0.001
+
+        # Add a (significant) positive baseline to values. Why? A. stands out from noise data B. model not really built to predict negatives.
+        return hand_val * 0.001 + EVENTS_VALUE_BASELINE # hack, to test if can learn negative values?
     else:
         # Unknown mode. 
         print('Warning! Unknown mode %s for value %s' % (mode, hand_val))

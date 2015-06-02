@@ -52,7 +52,7 @@ INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a sin
 TRAIN_MASKED_OBJECTIVE = True # False # True # False # True 
 
 # Do we use linear loss? Why? If cases uncertain or small sample, might be better to approximate the average...
-LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True
+LINEAR_LOSS_FOR_MASKED_OBJECTIVE = True # False # True
 
 # If we are trainging on poker events (bets, raises and folds) instead of draw value,
 # input and output shape will be the same. But the way it's uses is totally different. 
@@ -458,10 +458,15 @@ def create_iter_functions_full_output(dataset, output_layer,
 def predict_model(output_layer, test_batch, format = 'deuce'):
     print('Computing predictions on test_batch: %s %s' % (type(test_batch), test_batch.shape))
     #pred = T.argmax(output_layer.get_output(test_batch, deterministic=True), axis=1)
-    pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+    pred_all = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+    if format != 'deuce_events':
+        pred = pred_all
+    else:
+        # Slice it, so only relevant rows are looked at
+        pred = pred_all[:17,:5] # hack: show first 17 examples only
 
     # TODO: For 'deuce_events' format, zero out predictions past our last one.
-    print('Prediciton: %s' % pred)
+    print('Prediciton: %s' % pred) 
 
     # TODO: For "deuce_events" format... show best action inside of events actions only.
 
@@ -478,7 +483,10 @@ def predict_model(output_layer, test_batch, format = 'deuce'):
     print(softmax_choices)
 
     # now debug the softmax choices...
-    softmax_debug = [DRAW_VALUE_KEYS[i] for i in softmax_choices]
+    if format != 'deuce_events':
+        softmax_debug = [DRAW_VALUE_KEYS[i] for i in softmax_choices]
+    else:
+        softmax_debug = [eventCategoryName[i] for i in softmax_choices]
     print(softmax_debug)
 
 
