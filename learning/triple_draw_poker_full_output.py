@@ -30,7 +30,7 @@ DATA_FILENAME = '../data/60k_triple_draw_events.csv' # 60k 'event's from a few t
 MAX_INPUT_SIZE = 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 500 # 20 # 20 # 100
+NUM_EPOCHS = 20 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -52,7 +52,7 @@ INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a sin
 TRAIN_MASKED_OBJECTIVE = True # False # True # False # True 
 
 # Do we use linear loss? Why? If cases uncertain or small sample, might be better to approximate the average...
-LINEAR_LOSS_FOR_MASKED_OBJECTIVE = True # False # True
+LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True # False # True
 
 # If we are trainging on poker events (bets, raises and folds) instead of draw value,
 # input and output shape will be the same. But the way it's uses is totally different. 

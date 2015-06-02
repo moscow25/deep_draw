@@ -1,0 +1,316 @@
+/usr/local/lib/python2.7/dist-packages/pkg_resources.py:1032: UserWarning: /home/ubuntu/.python-eggs is writable by group/others and vulnerable to attack when used with get_resource_filename. Consider a more secure location (set with .set_extraction_path or the PYTHON_EGG_CACHE environment variable).
+  warnings.warn(msg, UserWarning)
+Using gpu device 0: GRID K520
+[set([]), set([0]), set([1]), set([2]), set([3]), set([4]), set([0, 1]), set([0, 2]), set([0, 3]), set([0, 4]), set([1, 2]), set([1, 3]), set([1, 4]), set([2, 3]), set([2, 4]), set([3, 4]), set([0, 1, 2]), set([0, 1, 3]), set([0, 1, 4]), set([0, 2, 3]), set([0, 2, 4]), set([0, 3, 4]), set([1, 2, 3]), set([1, 2, 4]), set([1, 3, 4]), set([2, 3, 4]), set([0, 1, 2, 3]), set([0, 1, 2, 4]), set([0, 1, 3, 4]), set([0, 2, 3, 4]), set([1, 2, 3, 4]), set([0, 1, 2, 3, 4])]
+[{32768: 32768, 16384: 16384, 4096: 4096, 8192: 8192}, {32768: 32768, 16384: 16384, 4096: 8192, 8192: 4096}, {32768: 32768, 16384: 8192, 4096: 4096, 8192: 16384}, {32768: 32768, 16384: 8192, 4096: 16384, 8192: 4096}, {32768: 32768, 16384: 4096, 4096: 8192, 8192: 16384}, {32768: 32768, 16384: 4096, 4096: 16384, 8192: 8192}, {32768: 16384, 16384: 32768, 4096: 4096, 8192: 8192}, {32768: 16384, 16384: 32768, 4096: 8192, 8192: 4096}, {32768: 16384, 16384: 8192, 4096: 4096, 8192: 32768}, {32768: 16384, 16384: 8192, 4096: 32768, 8192: 4096}, {32768: 16384, 16384: 4096, 4096: 8192, 8192: 32768}, {32768: 16384, 16384: 4096, 4096: 32768, 8192: 8192}, {32768: 8192, 16384: 32768, 4096: 4096, 8192: 16384}, {32768: 8192, 16384: 32768, 4096: 16384, 8192: 4096}, {32768: 8192, 16384: 16384, 4096: 4096, 8192: 32768}, {32768: 8192, 16384: 16384, 4096: 32768, 8192: 4096}, {32768: 8192, 16384: 4096, 4096: 16384, 8192: 32768}, {32768: 8192, 16384: 4096, 4096: 32768, 8192: 16384}, {32768: 4096, 16384: 32768, 4096: 8192, 8192: 16384}, {32768: 4096, 16384: 32768, 4096: 16384, 8192: 8192}, {32768: 4096, 16384: 16384, 4096: 8192, 8192: 32768}, {32768: 4096, 16384: 16384, 4096: 32768, 8192: 8192}, {32768: 4096, 16384: 8192, 4096: 16384, 8192: 32768}, {32768: 4096, 16384: 8192, 4096: 32768, 8192: 16384}]
+['0: set([])', '1: set([0])', '2: set([1])', '3: set([2])', '4: set([3])', '5: set([4])', '6: set([0, 1])', '7: set([0, 2])', '8: set([0, 3])', '9: set([0, 4])', '10: set([1, 2])', '11: set([1, 3])', '12: set([1, 4])', '13: set([2, 3])', '14: set([2, 4])', '15: set([3, 4])', '16: set([0, 1, 2])', '17: set([0, 1, 3])', '18: set([0, 1, 4])', '19: set([0, 2, 3])', '20: set([0, 2, 4])', '21: set([0, 3, 4])', '22: set([1, 2, 3])', '23: set([1, 2, 4])', '24: set([1, 3, 4])', '25: set([2, 3, 4])', '26: set([0, 1, 2, 3])', '27: set([0, 1, 2, 4])', '28: set([0, 1, 3, 4])', '29: set([0, 2, 3, 4])', '30: set([1, 2, 3, 4])', '31: set([0, 1, 2, 3, 4])']
+Loading data...
+About to load up to 120000 items of data, for training format deuce_events
+CSV key['hand', 'draws_left', 'best_draw', 'hand_after', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result']
+
+Loaded 0 hands...
+
+['[4s,6s,9h,3h,Ah]', '0', '', '', '0.0887593', '0', '4', '4', 'check', '400.0', '0', '0.0', '200.0', '', '100000', '200.0', '0.0', '0.0', '0.0']
+(26, 17, 17)
+2
+[ 0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.  0.  2.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+
+Loaded 5000 hands...
+
+['[4h,9d,5c,3s,7h]', '1', '', '', '0.624156', '1', '4', '5', 'raise_big', '1000.0', '400.0', '2.5', '400.0', '1', '110101', '2000.0', '0.0', '1600.0', '-1600.0']
+(26, 17, 17)
+1
+[ 0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   0.4  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 10000 lines
+
+Loaded 10000 hands...
+
+['[9s,4h,5c,Tc,Ac]', '2', '', '', '0.295433', '0', '2', '3', 'check', '400.0', '0', '0.0', '200.0', '', '10', '400.0', '700.0', '200.0', '500.0']
+(26, 17, 17)
+2
+[ 0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   0.   2.5  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 20000 lines
+
+Loaded 15000 hands...
+
+['[Ac,Ts,2s,Tc,3h]', '3', '', '', '0.385166', '0', '0', '0', 'raise_small', '300.0', '200.0', '1.5', '100.0', '1', '1', '300.0', '0.0', '200.0', '-200.0']
+(26, 17, 17)
+1
+[ 0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   1.8  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 30000 lines
+
+Loaded 20000 hands...
+
+['[9h,3d,7h,2s,Ah]', '1', '', '', '0.237212', '1', '4', '4', 'check', '1000.0', '0', '0.0', '500.0', '0', '1101100', '700.0', '1200.0', '200.0', '1000.0']
+(26, 17, 17)
+2
+[ 0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.  0.  3.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+Read 40000 lines
+
+Loaded 25000 hands...
+
+['[9d,2s,2h,5d,Tc]', '3', '', '', '0.400292', '0', '0', '0', 'check', '200.0', '0', '0.0', '100.0', '0', '0', '200.0', '0.0', '100.0', '-100.0']
+(26, 17, 17)
+2
+[ 0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   0.   1.9  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 50000 lines
+
+Loaded 30000 hands...
+
+['[8s,4s,2d,4c,As]', '1', '', '', '0.174745', '0', '3', '4', 'call_big', '600.0', '200.0', '3.0', '200.0', '01', '100001', '600.0', '0.0', '400.0', '-400.0']
+(26, 17, 17)
+3
+[ 0.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   0.   0.   1.6  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+count ground truth for 32 categories:
+['[]_value', 6381, '18.8%']
+['[0]_value', 9139, '26.9%']
+['[1]_value', 6481, '19.1%']
+['[2]_value', 8090, '23.9%']
+['[3]_value', 3827, '11.3%']
+['[4]_value', 0, '0.0%']
+['[0,1]_value', 0, '0.0%']
+['[0,2]_value', 0, '0.0%']
+['[0,3]_value', 0, '0.0%']
+['[0,4]_value', 0, '0.0%']
+['[1,2]_value', 0, '0.0%']
+['[1,3]_value', 0, '0.0%']
+['[1,4]_value', 0, '0.0%']
+['[2,3]_value', 0, '0.0%']
+['[2,4]_value', 0, '0.0%']
+['[3,4]_value', 0, '0.0%']
+['[0,1,2]_value', 0, '0.0%']
+['[0,1,3]_value', 0, '0.0%']
+['[0,1,4]_value', 0, '0.0%']
+['[0,2,3]_value', 0, '0.0%']
+['[0,2,4]_value', 0, '0.0%']
+['[0,3,4]_value', 0, '0.0%']
+['[1,2,3]_value', 0, '0.0%']
+['[1,2,4]_value', 0, '0.0%']
+['[1,3,4]_value', 0, '0.0%']
+['[2,3,4]_value', 0, '0.0%']
+['[0,1,2,3]_value', 0, '0.0%']
+['[0,1,2,4]_value', 0, '0.0%']
+['[0,1,3,4]_value', 0, '0.0%']
+['[0,2,3,4]_value', 0, '0.0%']
+['[1,2,3,4]_value', 0, '0.0%']
+['[0,1,2,3,4]_value', 0, '0.0%']
+
+Read 33918 data points. Shape below:
+num_examples (train) 33918
+input_dimensions 26
+X_train object is type <type 'numpy.ndarray'> of shape (33918, 26, 17, 17)
+y_train object is type <type 'numpy.ndarray'> of shape (33918,)
+z_train object is type <type 'numpy.ndarray'> of shape (33918, 32)
+m_train object is type <type 'numpy.ndarray'> of shape (33918, 32)
+X_valid <type 'numpy.ndarray'> (5000, 26, 17, 17)
+X_test <type 'numpy.ndarray'> (0, 26, 17, 17)
+X_train <type 'numpy.ndarray'> (28918, 26, 17, 17)
+y_valid <type 'numpy.ndarray'> (5000,)
+y_test <type 'numpy.ndarray'> (0,)
+y_train <type 'numpy.ndarray'> (28918,)
+z_valid <type 'numpy.ndarray'> (5000, 32)
+z_test <type 'numpy.ndarray'> (0, 32)
+z_train <type 'numpy.ndarray'> (28918, 32)
+m_valid <type 'numpy.ndarray'> (5000, 32)
+m_test <type 'numpy.ndarray'> (0, 32)
+m_train <type 'numpy.ndarray'> (28918, 32)
+Building model and compiling functions...
+/usr/local/lib/python2.7/dist-packages/Lasagne-0.1.dev-py2.7.egg/lasagne/init.py:86: UserWarning: The uniform initializer no longer uses Glorot et al.'s approach to determine the bounds, but defaults to the range (-0.01, 0.01) instead. Please use the new GlorotUniform initializer to get the old behavior. GlorotUniform is now the default for all layers.
+  warnings.warn("The uniform initializer no longer uses Glorot et al.'s "
+/usr/local/lib/python2.7/dist-packages/Lasagne-0.1.dev-py2.7.egg/lasagne/layers/helper.py:69: UserWarning: get_all_layers() has been changed to return layers in topological order. The former implementation is still available as get_all_layers_old(), but will be removed before the first release of Lasagne. To ignore this warning, use `warnings.filterwarnings('ignore', '.*topo.*')`.
+  warnings.warn("get_all_layers() has been changed to return layers in "
+triple_draw_poker_full_output.py:360: UserWarning: layer.get_output(...) is deprecated and will be removed for the first release of Lasagne. Please use lasagne.layers.get_output(layer, ...) instead.
+  pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
+building model, layer by layer...
+input layer shape 100 x 26 x 17 x 17
+convolution layer l_conv1. Shape (100, 24, 15, 15)
+convolution layer l_conv1_1. Shape (100, 24, 13, 13)
+maxPool layer l_pool1. Shape (100, 24, 7, 7)
+convolution layer l_conv2. Shape (100, 48, 5, 5)
+convolution layer l_conv2_2. Shape (100, 48, 3, 3)
+maxPool layer l_pool2. Shape (100, 48, 2, 2)
+hidden layer l_hidden1. Shape (100, 1024)
+dropout layer l_hidden1_dropout. Shape (100, 1024)
+final layer l_out, into 32 dimension. Shape (100, 32)
+Existing model in file deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle. Attempt to load it!
+Loaded values 12
+Successfully initialized model with previous saved params!
+creating iter funtions
+input dataset {'X_test': <CudaNdarrayType(float32, 4D)>, 'num_examples_valid': 5000, 'X_valid': <CudaNdarrayType(float32, 4D)>, 'y_valid': Elemwise{Cast{int32}}.0, 'input_height': 17, 'input_width': 17, 'y_train': Elemwise{Cast{int32}}.0, 'm_valid': <CudaNdarrayType(float32, matrix)>, 'y_test': Elemwise{Cast{int32}}.0, 'num_examples_train': 28918, 'X_train': <CudaNdarrayType(float32, 4D)>, 'output_dim': 32, 'num_examples_test': 0, 'z_valid': <CudaNdarrayType(float32, matrix)>, 'm_test': <CudaNdarrayType(float32, matrix)>, 'z_train': <CudaNdarrayType(float32, matrix)>, 'm_train': <CudaNdarrayType(float32, matrix)>, 'z_test': <CudaNdarrayType(float32, matrix)>}
+--> We are told to use 'masked' loss function. So training & validation loss will be computed on inputs with mask == 1 only
+Using updates.nesterov_momentum with learning rate 0.10, momentum 0.90
+Using AdaDelta adaptive learning after 20 epochs, with epsilon 0.0001, learning rate 1.00!
+Starting training...
+default train for epoch 1
+Epoch 1 of 20 took 17.424s
+  training loss:		0.01929159
+  validation loss:		0.01456757
+  validation accuracy:		18.86 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 2
+Epoch 2 of 20 took 17.341s
+  training loss:		0.01461788
+  validation loss:		0.01455354
+  validation accuracy:		19.14 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 3
+Epoch 3 of 20 took 17.452s
+  training loss:		0.01420329
+  validation loss:		0.01433018
+  validation accuracy:		19.60 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 4
+Epoch 4 of 20 took 17.370s
+  training loss:		0.01408119
+  validation loss:		0.01412471
+  validation accuracy:		19.46 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 5
+Epoch 5 of 20 took 17.419s
+  training loss:		0.01384775
+  validation loss:		0.01395918
+  validation accuracy:		19.44 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 6
+Epoch 6 of 20 took 18.748s
+  training loss:		0.01363006
+  validation loss:		0.01382073
+  validation accuracy:		17.40 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 7
+Epoch 7 of 20 took 17.585s
+  training loss:		0.01344697
+  validation loss:		0.01377005
+  validation accuracy:		17.00 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 8
+Epoch 8 of 20 took 17.370s
+  training loss:		0.01321796
+  validation loss:		0.01372304
+  validation accuracy:		16.70 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 9
+Epoch 9 of 20 took 17.344s
+  training loss:		0.01309308
+  validation loss:		0.01371267
+  validation accuracy:		16.98 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 10
+Epoch 10 of 20 took 17.364s
+  training loss:		0.01292411
+  validation loss:		0.01364626
+  validation accuracy:		16.42 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 11
+Epoch 11 of 20 took 17.331s
+  training loss:		0.01278745
+  validation loss:		0.01365506
+  validation accuracy:		17.38 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 12
+Epoch 12 of 20 took 17.335s
+  training loss:		0.01271658
+  validation loss:		0.01374269
+  validation accuracy:		16.92 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 13
+Epoch 13 of 20 took 17.316s
+  training loss:		0.01260321
+  validation loss:		0.01355217
+  validation accuracy:		16.54 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 14
+Epoch 14 of 20 took 18.688s
+  training loss:		0.01246251
+  validation loss:		0.01363099
+  validation accuracy:		16.24 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 15
+Epoch 15 of 20 took 17.547s
+  training loss:		0.01232019
+  validation loss:		0.01359964
+  validation accuracy:		15.64 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 16
+Epoch 16 of 20 took 17.449s
+  training loss:		0.01221023
+  validation loss:		0.01360613
+  validation accuracy:		15.08 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 17
+Epoch 17 of 20 took 17.461s
+  training loss:		0.01205940
+  validation loss:		0.01356563
+  validation accuracy:		15.56 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 18
+Epoch 18 of 20 took 17.360s
+  training loss:		0.01195437
+  validation loss:		0.01348348
+  validation accuracy:		15.10 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 19
+Epoch 19 of 20 took 17.385s
+  training loss:		0.01181389
+  validation loss:		0.01356322
+  validation accuracy:		14.84 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 20
+triple_draw_poker_full_output.py:461: UserWarning: layer.get_output(...) is deprecated and will be removed for the first release of Lasagne. Please use lasagne.layers.get_output(layer, ...) instead.
+  pred_all = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+Epoch 20 of 20 took 17.362s
+  training loss:		0.01162988
+  validation loss:		0.01359649
+  validation accuracy:		14.88 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+looking at some test cases: [['3h,3s,3d,5c,6d', 3], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 0], ['3h,3s,3d,5c,6d', 0], ['2h,3s,4d,6c,5s', 2], ['3s,2h,4d,8c,5s', 3], ['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,4s,3d,5c,6d', 2], ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1], ['7c,8c,Tc,Js,Qh', 3], ['2c,8s,5h,8d,2s', 2], ['[8s,9c,8c,Kd,7h]', 2], ['[Qh,3h,6c,5s,4s]', 1], ['[Jh,Td,9s,Ks,5s]', 1], ['[6c,4d,Ts,Jc,6s]', 3], ['[4h,8h,2c,7d,3h]', 2], ['[2c,Ac,Tc,6d,3d]', 1], ['[Ad,3c,Tc,4d,5d]', 1], ['3d,Jc,7d,Ac,6s', 2], ['7h,Kc,5s,2d,Tc', 3], ['5c,6h,Jc,7h,2d', 1], ['Ts,As,3s,2d,4h', 3]]
+Computing predictions on test_batch: <type 'numpy.ndarray'> (100, 26, 17, 17)
+Prediciton: Subtensor{:int64:, :int64:}.0
+[[ 2.18172407  2.05430102  2.11370373  2.09362841  1.96718895]
+ [ 3.00544214  3.49412274  2.59368229  3.39060855  1.95256233]
+ [ 3.2583065   3.62421203  2.8175993   3.68941569  1.93339503]
+ [ 2.43980551  2.33915925  2.13358259  2.21142197  1.95553243]
+ [ 2.7947855   3.15244961  2.59806252  3.17167211  2.0290699 ]
+ [ 2.49377441  2.62056804  2.39445043  2.68483043  1.96623051]
+ [ 2.1925137   2.06806135  2.09932852  2.03573012  1.99246323]
+ [ 2.12166309  1.90231156  1.97197592  1.90549052  2.01396251]
+ [ 2.20665383  2.09369445  2.13959503  2.1186378   1.90570033]
+ [ 2.09370542  1.96674967  2.00382638  1.98602748  1.93371093]
+ [ 2.11336327  2.01234651  2.04391074  2.02672815  1.949947  ]
+ [ 2.42973757  2.03733587  2.32673979  2.16722918  2.02543449]
+ [ 2.13106537  1.98346829  2.07202458  1.97913432  1.98830187]
+ [ 2.25092697  2.15681434  2.1620481   2.18769073  1.99157286]
+ [ 2.19293833  2.04101491  2.0445931   2.03674388  2.05020452]
+ [ 2.1818614   1.99314642  2.07688475  2.00958514  1.87829149]
+ [ 2.2156496   1.86094737  2.03997326  1.87201595  2.01477671]]
+Maximums argmax
+[0 1 3 0 3 3 0 0 0 0 0 0 0 0 0 0 0]
+['bet', 'raise', 'call', 'bet', 'call', 'call', 'bet', 'bet', 'bet', 'bet', 'bet', 'bet', 'bet', 'bet', 'bet', 'bet', 'bet']
+again, the test cases: 
+[['3h,3s,3d,5c,6d', 3], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 0], ['3h,3s,3d,5c,6d', 0], ['2h,3s,4d,6c,5s', 2], ['3s,2h,4d,8c,5s', 3], ['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,4s,3d,5c,6d', 2], ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1], ['7c,8c,Tc,Js,Qh', 3], ['2c,8s,5h,8d,2s', 2], ['[8s,9c,8c,Kd,7h]', 2], ['[Qh,3h,6c,5s,4s]', 1], ['[Jh,Td,9s,Ks,5s]', 1], ['[6c,4d,Ts,Jc,6s]', 3], ['[4h,8h,2c,7d,3h]', 2], ['[2c,Ac,Tc,6d,3d]', 1], ['[Ad,3c,Tc,4d,5d]', 1], ['3d,Jc,7d,Ac,6s', 2], ['7h,Kc,5s,2d,Tc', 3], ['5c,6h,Jc,7h,2d', 1], ['Ts,As,3s,2d,4h', 3], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1]]
