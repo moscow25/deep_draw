@@ -30,7 +30,7 @@ DATA_FILENAME = '../data/60k_triple_draw_events.csv' # 60k 'event's from a few t
 MAX_INPUT_SIZE = 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 20 # 500 # 20 # 20 # 100
+NUM_EPOCHS = 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -59,6 +59,10 @@ LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True # False # True
 # NOTE: We keep shape the same... so we can use the really good "draw value" model as initialization.
 TRAINING_FORMAT = 'deuce_events' # 'deuce' # 'video'
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
+
+# Disable adapative training on "events". Cool-looking results, but really just over-training. 
+if TRAINING_FORMAT == 'deuce_events':
+    EPOCH_SWITCH_ADAPT = 1000
 
 
 
