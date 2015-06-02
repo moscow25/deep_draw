@@ -59,12 +59,7 @@ LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True # False # True
 # NOTE: We keep shape the same... so we can use the really good "draw value" model as initialization.
 TRAINING_FORMAT = 'deuce_events' # 'deuce' # 'video'
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
-
-# Disable adapative training on "events". Cool-looking results, but really just over-training. 
-if TRAINING_FORMAT == 'deuce_events':
-    EPOCH_SWITCH_ADAPT = 1000
-
-
+DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch to adaptive training?
 
 # TODO: Include "empty" bits... so we can get a model started... which can be used as basis for next data?
 
@@ -586,7 +581,11 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     print("Starting training...")
     now = time.time()
     try:
-        for epoch in train(iter_funcs, dataset, epoch_switch_adapt=EPOCH_SWITCH_ADAPT):
+        # When do we switch to adaptive training? Problems with adapative training and events, so disable that.
+        switch_adaptive_after = EPOCH_SWITCH_ADAPT
+        if TRAINING_FORMAT == 'deuce_events' and DISABLE_EVENTS_EPOCH_SWITCH:
+            switch_adaptive_after = 10000 # never
+        for epoch in train(iter_funcs, dataset, epoch_switch_adapt=switch_adaptive_after):
             sys.stdout.flush() # Helps keep track of output live in re-directed out
             print("Epoch {} of {} took {:.3f}s".format(
                 epoch['number'], num_epochs, time.time() - now))
