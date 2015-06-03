@@ -1,0 +1,578 @@
+/usr/local/lib/python2.7/dist-packages/pkg_resources.py:1032: UserWarning: /home/ubuntu/.python-eggs is writable by group/others and vulnerable to attack when used with get_resource_filename. Consider a more secure location (set with .set_extraction_path or the PYTHON_EGG_CACHE environment variable).
+  warnings.warn(msg, UserWarning)
+Using gpu device 0: GRID K520
+[set([]), set([0]), set([1]), set([2]), set([3]), set([4]), set([0, 1]), set([0, 2]), set([0, 3]), set([0, 4]), set([1, 2]), set([1, 3]), set([1, 4]), set([2, 3]), set([2, 4]), set([3, 4]), set([0, 1, 2]), set([0, 1, 3]), set([0, 1, 4]), set([0, 2, 3]), set([0, 2, 4]), set([0, 3, 4]), set([1, 2, 3]), set([1, 2, 4]), set([1, 3, 4]), set([2, 3, 4]), set([0, 1, 2, 3]), set([0, 1, 2, 4]), set([0, 1, 3, 4]), set([0, 2, 3, 4]), set([1, 2, 3, 4]), set([0, 1, 2, 3, 4])]
+[{32768: 32768, 16384: 16384, 4096: 4096, 8192: 8192}, {32768: 32768, 16384: 16384, 4096: 8192, 8192: 4096}, {32768: 32768, 16384: 8192, 4096: 4096, 8192: 16384}, {32768: 32768, 16384: 8192, 4096: 16384, 8192: 4096}, {32768: 32768, 16384: 4096, 4096: 8192, 8192: 16384}, {32768: 32768, 16384: 4096, 4096: 16384, 8192: 8192}, {32768: 16384, 16384: 32768, 4096: 4096, 8192: 8192}, {32768: 16384, 16384: 32768, 4096: 8192, 8192: 4096}, {32768: 16384, 16384: 8192, 4096: 4096, 8192: 32768}, {32768: 16384, 16384: 8192, 4096: 32768, 8192: 4096}, {32768: 16384, 16384: 4096, 4096: 8192, 8192: 32768}, {32768: 16384, 16384: 4096, 4096: 32768, 8192: 8192}, {32768: 8192, 16384: 32768, 4096: 4096, 8192: 16384}, {32768: 8192, 16384: 32768, 4096: 16384, 8192: 4096}, {32768: 8192, 16384: 16384, 4096: 4096, 8192: 32768}, {32768: 8192, 16384: 16384, 4096: 32768, 8192: 4096}, {32768: 8192, 16384: 4096, 4096: 16384, 8192: 32768}, {32768: 8192, 16384: 4096, 4096: 32768, 8192: 16384}, {32768: 4096, 16384: 32768, 4096: 8192, 8192: 16384}, {32768: 4096, 16384: 32768, 4096: 16384, 8192: 8192}, {32768: 4096, 16384: 16384, 4096: 8192, 8192: 32768}, {32768: 4096, 16384: 16384, 4096: 32768, 8192: 8192}, {32768: 4096, 16384: 8192, 4096: 16384, 8192: 32768}, {32768: 4096, 16384: 8192, 4096: 32768, 8192: 16384}]
+['0: set([])', '1: set([0])', '2: set([1])', '3: set([2])', '4: set([3])', '5: set([4])', '6: set([0, 1])', '7: set([0, 2])', '8: set([0, 3])', '9: set([0, 4])', '10: set([1, 2])', '11: set([1, 3])', '12: set([1, 4])', '13: set([2, 3])', '14: set([2, 4])', '15: set([3, 4])', '16: set([0, 1, 2])', '17: set([0, 1, 3])', '18: set([0, 1, 4])', '19: set([0, 2, 3])', '20: set([0, 2, 4])', '21: set([0, 3, 4])', '22: set([1, 2, 3])', '23: set([1, 2, 4])', '24: set([1, 3, 4])', '25: set([2, 3, 4])', '26: set([0, 1, 2, 3])', '27: set([0, 1, 2, 4])', '28: set([0, 1, 3, 4])', '29: set([0, 2, 3, 4])', '30: set([1, 2, 3, 4])', '31: set([0, 1, 2, 3, 4])']
+Loading data...
+About to load up to 120000 items of data, for training format deuce_events
+CSV key['hand', 'draws_left', 'best_draw', 'hand_after', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result']
+
+Loaded 0 hands...
+
+['[5c,6d,7c,3h,8c]', '3', '', '', '0.671357', '1', '0', '0', 'raise_small', '150.0', '150.0', '1.0', '50.0', '', '', '200.0', '300.0', '150.0', '150.0']
+(26, 17, 17)
+1
+[ 0.  1.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.    2.15  0.    0.    2.    0.    0.    0.    0.    0.    0.    0.    0.
+  0.    0.    0.    0.    0.    0.    0.    0.    0.    0.    0.    0.    0.
+  0.    0.    0.    0.    0.    0.  ]
+
+Loaded 5000 hands...
+
+['[7s,7c,Qc,Jd,Jc]', '3', '', '', '0.326107', '1', '0', '0', 'call_small', '500.0', '100.0', '5.0', '200.0', '11', '11', '700.0', '0.0', '500.0', '-500.0']
+(26, 17, 17)
+3
+[ 0.  0.  0.  1.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   0.   0.   1.5  2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 10000 lines
+
+Loaded 10000 hands...
+
+['[Qs,6d,Kh,5c,8s]', '3', '', '', '0.408846', '1', '0', '0', 'raise_small', '150.0', '150.0', '1.0', '50.0', '', '', '200.0', '300.0', '150.0', '150.0']
+(26, 17, 17)
+1
+[ 0.  1.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.    2.15  0.    0.    2.    0.    0.    0.    0.    0.    0.    0.    0.
+  0.    0.    0.    0.    0.    0.    0.    0.    0.    0.    0.    0.    0.
+  0.    0.    0.    0.    0.    0.  ]
+Read 20000 lines
+
+Loaded 15000 hands...
+
+['[4s,5c,3c,6c,Kd]', '1', '', '', '0.23877', '1', '2', '4', 'bet_big', '400.0', '200.0', '2.0', '200.0', '0', '10000', '400.0', '600.0', '200.0', '400.0']
+(26, 17, 17)
+0
+[ 1.  0.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 2.4  0.   0.   0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 30000 lines
+
+Loaded 20000 hands...
+
+['[8s,8h,3h,Jc,5c]', '3', '', '', '0.462018', '0', '0', '0', 'raise_small', '300.0', '200.0', '1.5', '100.0', '1', '1', '400.0', '0.0', '300.0', '-300.0']
+(26, 17, 17)
+1
+[ 0.  1.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   1.7  0.   0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 40000 lines
+
+Loaded 25000 hands...
+
+['[8h,3d,9h,5h,8c]', '0', '', '', '0.0787308', '0', '4', '4', 'check', '1200.0', '0', '0.0', '600.0', '', '11001010', '600.0', '0.0', '0.0', '0.0']
+(26, 17, 17)
+2
+[ 0.  0.  1.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.  0.  2.  0.  2.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+Read 50000 lines
+
+Loaded 30000 hands...
+
+['[Kh,Ac,2s,2h,8h]', '3', '', '', '0.386436', '0', '0', '0', 'raise_small', '300.0', '200.0', '1.5', '100.0', '1', '1', '500.0', '0.0', '400.0', '-400.0']
+(26, 17, 17)
+1
+[ 0.  1.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   1.6  0.   0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 60000 lines
+
+Loaded 35000 hands...
+
+['[8d,6s,4h,7d,6d]', '2', '', '', '0.370502', '0', '4', '4', 'raise_small', '700.0', '200.0', '3.5', '300.0', '01', '11001', '500.0', '900.0', '200.0', '700.0']
+(26, 17, 17)
+1
+[ 0.  1.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   2.7  0.   0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 70000 lines
+
+Loaded 40000 hands...
+
+['[2s,5c,6s,Qs,Td]', '1', '', '', '0.18466', '0', '3', '5', 'FOLD', '800.0', '0', '0.0', '300.0', '01', '1001001', '300.0', '0.0', '0.0', '0.0']
+(26, 17, 17)
+4
+[ 0.  0.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.  0.  0.  0.  2.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+
+Loaded 45000 hands...
+
+['[2c,3d,4d,7h,Kd]', '1', '', '', '0.311836', '1', '4', '4', 'check', '800.0', '0', '0.0', '400.0', '0', '1001100', '400.0', '800.0', '0.0', '800.0']
+(26, 17, 17)
+2
+[ 0.  0.  1.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   0.   2.8  0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 80000 lines
+
+Loaded 50000 hands...
+
+['[Js,4s,2h,5c,Kc]', '3', '', '', '0.490568', '0', '0', '0', 'raise_small', '200.0', '100.0', '2.0', '100.0', '0', '0', '400.0', '0.0', '300.0', '-300.0']
+(26, 17, 17)
+1
+[ 0.  1.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   1.7  0.   0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 90000 lines
+
+Loaded 55000 hands...
+
+['[7h,3h,9c,9d,Js]', '1', '', '', '0.158549', '0', '3', '2', 'call_big', '600.0', '200.0', '3.0', '200.0', '01', '100001', '400.0', '800.0', '200.0', '600.0']
+(26, 17, 17)
+3
+[ 0.  0.  0.  1.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   0.   0.   2.6  2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 100000 lines
+
+Loaded 60000 hands...
+
+['[4s,5d,8c,4c,Td]', '2', '', '', '0.307963', '1', '2', '3', 'call_small', '700.0', '100.0', '7.0', '300.0', '011', '10011', '600.0', '1000.0', '300.0', '700.0']
+(26, 17, 17)
+3
+[ 0.  0.  0.  1.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   0.   0.   2.7  2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 110000 lines
+
+Loaded 65000 hands...
+
+['[9d,5s,7c,6c,7h]', '0', '', '', '0.075367', '1', '4', '4', 'FOLD', '600.0', '0', '0.0', '200.0', '1', '00010001', '200.0', '0.0', '0.0', '0.0']
+(26, 17, 17)
+4
+[ 0.  0.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.  0.  0.  0.  2.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+Read 120000 lines
+
+Loaded 70000 hands...
+
+['[9h,Jd,5c,9c,Kc]', '3', '', '', '0.329181', '0', '0', '0', 'check', '200.0', '0', '0.0', '100.0', '0', '0', '200.0', '0.0', '100.0', '-100.0']
+(26, 17, 17)
+2
+[ 0.  0.  1.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   0.   1.9  0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 130000 lines
+
+Loaded 75000 hands...
+
+['[6s,5s,8d,7c,3d]', '2', '', '', '0.77913', '0', '4', '3', 'bet_small', '400.0', '100.0', '4.0', '200.0', '', '10', '300.0', '500.0', '100.0', '400.0']
+(26, 17, 17)
+0
+[ 1.  0.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 2.4  0.   0.   0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 140000 lines
+
+Loaded 80000 hands...
+
+['[7s,5d,6c,4s,Kd]', '1', '', '', '0.238588', '1', '4', '4', 'FOLD', '800.0', '0', '0.0', '300.0', '1', '110001', '300.0', '0.0', '0.0', '0.0']
+(26, 17, 17)
+4
+[ 0.  0.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.  0.  0.  0.  2.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+Read 150000 lines
+
+Loaded 85000 hands...
+
+['[6h,7c,4h,Ks,Td]', '2', '', '', '0.308287', '1', '2', '4', 'check', '600.0', '0', '0.0', '300.0', '0', '1100', '300.0', '0.0', '0.0', '0.0']
+(26, 17, 17)
+2
+[ 0.  0.  1.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.  0.  2.  0.  2.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+
+Loaded 90000 hands...
+
+['[9h,8d,4s,5d,9c]', '2', '', '', '0.334524', '0', '3', '2', 'FOLD', '500.0', '0', '0.0', '200.0', '01', '01001', '200.0', '0.0', '0.0', '0.0']
+(26, 17, 17)
+4
+[ 0.  0.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.  0.  0.  0.  2.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+Read 160000 lines
+
+Loaded 95000 hands...
+
+['[3h,4h,9s,8c,8d]', '2', '', '', '0.327985', '0', '3', '2', 'bet_small', '400.0', '100.0', '4.0', '200.0', '', '010', '600.0', '1200.0', '400.0', '800.0']
+(26, 17, 17)
+0
+[ 1.  0.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 2.8  0.   0.   0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 170000 lines
+
+Loaded 100000 hands...
+
+['[5c,2h,6s,7s,3s]', '2', '', '', '0.973806', '1', '4', '3', 'raise_small', '700.0', '200.0', '3.5', '300.0', '1', '1101', '1300.0', '2400.0', '1000.0', '1400.0']
+(26, 17, 17)
+1
+[ 0.  1.  0.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.   3.4  0.   0.   2.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0. ]
+Read 180000 lines
+
+Loaded 105000 hands...
+
+['[8h,7h,2d,9c,3h]', '1', '', '', '0.48939', '0', '3', '3', 'check', '600.0', '0', '0.0', '300.0', '', '11000', '900.0', '1600.0', '600.0', '1000.0']
+(26, 17, 17)
+2
+[ 0.  0.  1.  0.  1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+[ 0.  0.  3.  0.  2.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.
+  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+Read 190000 lines
+count ground truth for 32 categories:
+['[]_value', 20346, '18.8%']
+['[0]_value', 29039, '26.9%']
+['[1]_value', 20748, '19.2%']
+['[2]_value', 25783, '23.9%']
+['[3]_value', 12137, '11.2%']
+['[4]_value', 0, '0.0%']
+['[0,1]_value', 0, '0.0%']
+['[0,2]_value', 0, '0.0%']
+['[0,3]_value', 0, '0.0%']
+['[0,4]_value', 0, '0.0%']
+['[1,2]_value', 0, '0.0%']
+['[1,3]_value', 0, '0.0%']
+['[1,4]_value', 0, '0.0%']
+['[2,3]_value', 0, '0.0%']
+['[2,4]_value', 0, '0.0%']
+['[3,4]_value', 0, '0.0%']
+['[0,1,2]_value', 0, '0.0%']
+['[0,1,3]_value', 0, '0.0%']
+['[0,1,4]_value', 0, '0.0%']
+['[0,2,3]_value', 0, '0.0%']
+['[0,2,4]_value', 0, '0.0%']
+['[0,3,4]_value', 0, '0.0%']
+['[1,2,3]_value', 0, '0.0%']
+['[1,2,4]_value', 0, '0.0%']
+['[1,3,4]_value', 0, '0.0%']
+['[2,3,4]_value', 0, '0.0%']
+['[0,1,2,3]_value', 0, '0.0%']
+['[0,1,2,4]_value', 0, '0.0%']
+['[0,1,3,4]_value', 0, '0.0%']
+['[0,2,3,4]_value', 0, '0.0%']
+['[1,2,3,4]_value', 0, '0.0%']
+['[0,1,2,3,4]_value', 0, '0.0%']
+
+Read 108053 data points. Shape below:
+num_examples (train) 108053
+input_dimensions 26
+X_train object is type <type 'numpy.ndarray'> of shape (108053, 26, 17, 17)
+y_train object is type <type 'numpy.ndarray'> of shape (108053,)
+z_train object is type <type 'numpy.ndarray'> of shape (108053, 32)
+m_train object is type <type 'numpy.ndarray'> of shape (108053, 32)
+X_valid <type 'numpy.ndarray'> (5000, 26, 17, 17)
+X_test <type 'numpy.ndarray'> (0, 26, 17, 17)
+X_train <type 'numpy.ndarray'> (103053, 26, 17, 17)
+y_valid <type 'numpy.ndarray'> (5000,)
+y_test <type 'numpy.ndarray'> (0,)
+y_train <type 'numpy.ndarray'> (103053,)
+z_valid <type 'numpy.ndarray'> (5000, 32)
+z_test <type 'numpy.ndarray'> (0, 32)
+z_train <type 'numpy.ndarray'> (103053, 32)
+m_valid <type 'numpy.ndarray'> (5000, 32)
+m_test <type 'numpy.ndarray'> (0, 32)
+m_train <type 'numpy.ndarray'> (103053, 32)
+Building model and compiling functions...
+/usr/local/lib/python2.7/dist-packages/Lasagne-0.1.dev-py2.7.egg/lasagne/init.py:86: UserWarning: The uniform initializer no longer uses Glorot et al.'s approach to determine the bounds, but defaults to the range (-0.01, 0.01) instead. Please use the new GlorotUniform initializer to get the old behavior. GlorotUniform is now the default for all layers.
+  warnings.warn("The uniform initializer no longer uses Glorot et al.'s "
+/usr/local/lib/python2.7/dist-packages/Lasagne-0.1.dev-py2.7.egg/lasagne/layers/helper.py:69: UserWarning: get_all_layers() has been changed to return layers in topological order. The former implementation is still available as get_all_layers_old(), but will be removed before the first release of Lasagne. To ignore this warning, use `warnings.filterwarnings('ignore', '.*topo.*')`.
+  warnings.warn("get_all_layers() has been changed to return layers in "
+triple_draw_poker_full_output.py:359: UserWarning: layer.get_output(...) is deprecated and will be removed for the first release of Lasagne. Please use lasagne.layers.get_output(layer, ...) instead.
+  pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
+building model, layer by layer...
+input layer shape 100 x 26 x 17 x 17
+convolution layer l_conv1. Shape (100, 24, 15, 15)
+convolution layer l_conv1_1. Shape (100, 24, 13, 13)
+maxPool layer l_pool1. Shape (100, 24, 7, 7)
+convolution layer l_conv2. Shape (100, 48, 5, 5)
+convolution layer l_conv2_2. Shape (100, 48, 3, 3)
+maxPool layer l_pool2. Shape (100, 48, 2, 2)
+hidden layer l_hidden1. Shape (100, 1024)
+dropout layer l_hidden1_dropout. Shape (100, 1024)
+final layer l_out, into 32 dimension. Shape (100, 32)
+Existing model in file deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle. Attempt to load it!
+Loaded values 12
+Successfully initialized model with previous saved params!
+creating iter funtions
+input dataset {'X_test': <CudaNdarrayType(float32, 4D)>, 'num_examples_valid': 5000, 'X_valid': <CudaNdarrayType(float32, 4D)>, 'y_valid': Elemwise{Cast{int32}}.0, 'input_height': 17, 'input_width': 17, 'y_train': Elemwise{Cast{int32}}.0, 'm_valid': <CudaNdarrayType(float32, matrix)>, 'y_test': Elemwise{Cast{int32}}.0, 'num_examples_train': 103053, 'X_train': <CudaNdarrayType(float32, 4D)>, 'output_dim': 32, 'num_examples_test': 0, 'z_valid': <CudaNdarrayType(float32, matrix)>, 'm_test': <CudaNdarrayType(float32, matrix)>, 'z_train': <CudaNdarrayType(float32, matrix)>, 'm_train': <CudaNdarrayType(float32, matrix)>, 'z_test': <CudaNdarrayType(float32, matrix)>}
+--> We are told to use 'masked' loss function. So training & validation loss will be computed on inputs with mask == 1 only
+Using updates.nesterov_momentum with learning rate 0.01, momentum 0.90
+Using AdaDelta adaptive learning after 20 epochs, with epsilon 0.0001, learning rate 1.00!
+Starting training...
+default train for epoch 1
+Epoch 1 of 100 took 59.451s
+  training loss:		0.01328874
+  validation loss:		0.01269533
+  validation accuracy:		17.92 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 2
+Epoch 2 of 100 took 59.322s
+  training loss:		0.01274769
+  validation loss:		0.01242232
+  validation accuracy:		17.86 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 3
+Epoch 3 of 100 took 59.341s
+  training loss:		0.01255880
+  validation loss:		0.01229416
+  validation accuracy:		18.00 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 4
+Epoch 4 of 100 took 59.394s
+  training loss:		0.01245415
+  validation loss:		0.01227483
+  validation accuracy:		18.14 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 5
+Epoch 5 of 100 took 59.416s
+  training loss:		0.01235469
+  validation loss:		0.01224217
+  validation accuracy:		18.04 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 6
+Epoch 6 of 100 took 59.404s
+  training loss:		0.01230583
+  validation loss:		0.01223516
+  validation accuracy:		17.70 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 7
+Epoch 7 of 100 took 59.467s
+  training loss:		0.01224053
+  validation loss:		0.01221715
+  validation accuracy:		17.84 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 8
+Epoch 8 of 100 took 59.381s
+  training loss:		0.01219317
+  validation loss:		0.01219870
+  validation accuracy:		18.02 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 9
+Epoch 9 of 100 took 59.402s
+  training loss:		0.01211745
+  validation loss:		0.01217414
+  validation accuracy:		18.14 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 10
+Epoch 10 of 100 took 59.368s
+  training loss:		0.01207843
+  validation loss:		0.01217506
+  validation accuracy:		18.04 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 11
+Epoch 11 of 100 took 59.479s
+  training loss:		0.01203622
+  validation loss:		0.01220277
+  validation accuracy:		18.18 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 12
+Epoch 12 of 100 took 59.436s
+  training loss:		0.01197924
+  validation loss:		0.01216033
+  validation accuracy:		18.14 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 13
+Epoch 13 of 100 took 59.366s
+  training loss:		0.01195275
+  validation loss:		0.01216205
+  validation accuracy:		18.26 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 14
+Epoch 14 of 100 took 59.476s
+  training loss:		0.01191384
+  validation loss:		0.01211295
+  validation accuracy:		18.24 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 15
+Epoch 15 of 100 took 59.355s
+  training loss:		0.01185489
+  validation loss:		0.01212743
+  validation accuracy:		18.26 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 16
+Epoch 16 of 100 took 59.524s
+  training loss:		0.01186191
+  validation loss:		0.01211391
+  validation accuracy:		18.26 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 17
+Epoch 17 of 100 took 59.390s
+  training loss:		0.01180935
+  validation loss:		0.01212662
+  validation accuracy:		18.20 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 18
+Epoch 18 of 100 took 59.552s
+  training loss:		0.01180108
+  validation loss:		0.01214921
+  validation accuracy:		18.34 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 19
+Epoch 19 of 100 took 59.371s
+  training loss:		0.01175820
+  validation loss:		0.01217753
+  validation accuracy:		18.08 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 20
+Epoch 20 of 100 took 59.345s
+  training loss:		0.01172179
+  validation loss:		0.01217414
+  validation accuracy:		18.22 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 21
+Epoch 21 of 100 took 59.499s
+  training loss:		0.01169558
+  validation loss:		0.01218008
+  validation accuracy:		18.24 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 22
+Epoch 22 of 100 took 59.368s
+  training loss:		0.01167148
+  validation loss:		0.01219424
+  validation accuracy:		18.18 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 23
+Epoch 23 of 100 took 59.398s
+  training loss:		0.01164917
+  validation loss:		0.01215139
+  validation accuracy:		18.36 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 24
+Epoch 24 of 100 took 59.451s
+  training loss:		0.01162409
+  validation loss:		0.01217360
+  validation accuracy:		18.34 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 25
+Epoch 25 of 100 took 59.360s
+  training loss:		0.01159936
+  validation loss:		0.01220213
+  validation accuracy:		18.28 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 26
+Epoch 26 of 100 took 59.513s
+  training loss:		0.01157733
+  validation loss:		0.01215016
+  validation accuracy:		18.50 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 27
+Epoch 27 of 100 took 59.469s
+  training loss:		0.01153478
+  validation loss:		0.01219542
+  validation accuracy:		18.26 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 28
+Epoch 28 of 100 took 59.424s
+  training loss:		0.01152820
+  validation loss:		0.01227507
+  validation accuracy:		18.16 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 29
+Epoch 29 of 100 took 59.343s
+  training loss:		0.01148748
+  validation loss:		0.01231128
+  validation accuracy:		18.22 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 30
+Epoch 30 of 100 took 59.322s
+  training loss:		0.01144672
+  validation loss:		0.01221333
+  validation accuracy:		18.86 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 31
+Epoch 31 of 100 took 59.403s
+  training loss:		0.01144361
+  validation loss:		0.01225014
+  validation accuracy:		18.64 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 32
+Epoch 32 of 100 took 59.494s
+  training loss:		0.01142647
+  validation loss:		0.01224271
+  validation accuracy:		18.80 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 33
+Epoch 33 of 100 took 59.453s
+  training loss:		0.01140636
+  validation loss:		0.01220403
+  validation accuracy:		18.86 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 34
+Epoch 34 of 100 took 59.508s
+  training loss:		0.01137291
+  validation loss:		0.01224091
+  validation accuracy:		18.86 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 35
+Epoch 35 of 100 took 59.365s
+  training loss:		0.01135326
+  validation loss:		0.01227289
+  validation accuracy:		18.86 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 36
+Epoch 36 of 100 took 59.418s
+  training loss:		0.01131497
+  validation loss:		0.01223401
+  validation accuracy:		18.90 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 37
+Epoch 37 of 100 took 59.502s
+  training loss:		0.01130634
+  validation loss:		0.01227677
+  validation accuracy:		18.88 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 38
+Epoch 38 of 100 took 59.396s
+  training loss:		0.01128627
+  validation loss:		0.01221787
+  validation accuracy:		19.02 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 39
+Epoch 39 of 100 took 59.404s
+  training loss:		0.01126535
+  validation loss:		0.01225236
+  validation accuracy:		18.80 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 40
