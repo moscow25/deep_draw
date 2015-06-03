@@ -576,3 +576,141 @@ Epoch 39 of 100 took 59.404s
   validation accuracy:		18.80 %%
 pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
 default train for epoch 40
+Epoch 40 of 100 took 59.411s
+  training loss:		0.01123262
+  validation loss:		0.01227539
+  validation accuracy:		19.04 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 41
+Epoch 41 of 100 took 59.470s
+  training loss:		0.01119962
+  validation loss:		0.01225948
+  validation accuracy:		18.92 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 42
+Epoch 42 of 100 took 59.501s
+  training loss:		0.01116702
+  validation loss:		0.01226464
+  validation accuracy:		18.90 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 43
+Epoch 43 of 100 took 59.382s
+  training loss:		0.01113302
+  validation loss:		0.01225502
+  validation accuracy:		18.98 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 44
+Epoch 44 of 100 took 59.431s
+  training loss:		0.01113223
+  validation loss:		0.01224621
+  validation accuracy:		18.96 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 45
+Epoch 45 of 100 took 59.391s
+  training loss:		0.01111880
+  validation loss:		0.01227878
+  validation accuracy:		18.86 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 46
+Epoch 46 of 100 took 59.436s
+  training loss:		0.01108902
+  validation loss:		0.01228000
+  validation accuracy:		18.86 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 47
+Epoch 47 of 100 took 59.452s
+  training loss:		0.01106411
+  validation loss:		0.01224350
+  validation accuracy:		18.88 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 48
+Epoch 48 of 100 took 59.441s
+  training loss:		0.01104383
+  validation loss:		0.01230004
+  validation accuracy:		18.82 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 49
+Epoch 49 of 100 took 59.503s
+  training loss:		0.01102210
+  validation loss:		0.01233179
+  validation accuracy:		18.82 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 50
+Epoch 50 of 100 took 59.392s
+  training loss:		0.01099241
+  validation loss:		0.01229484
+  validation accuracy:		18.62 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 51
+Epoch 51 of 100 took 59.415s
+  training loss:		0.01097625
+  validation loss:		0.01235156
+  validation accuracy:		18.60 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 52
+Epoch 52 of 100 took 59.510s
+  training loss:		0.01095015
+  validation loss:		0.01231965
+  validation accuracy:		18.66 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 53
+Epoch 53 of 100 took 59.460s
+  training loss:		0.01092260
+  validation loss:		0.01239134
+  validation accuracy:		18.56 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 54
+Epoch 54 of 100 took 59.343s
+  training loss:		0.01087963
+  validation loss:		0.01235650
+  validation accuracy:		18.54 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 55
+Epoch 55 of 100 took 59.422s
+  training loss:		0.01085091
+  validation loss:		0.01237412
+  validation accuracy:		18.36 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 56
+Epoch 56 of 100 took 59.418s
+  training loss:		0.01083339
+  validation loss:		0.01232794
+  validation accuracy:		18.54 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 57
+Epoch 57 of 100 took 59.371s
+  training loss:		0.01081743
+  validation loss:		0.01243638
+  validation accuracy:		18.66 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 58
+Epoch 58 of 100 took 59.575s
+  training loss:		0.01079706
+  validation loss:		0.01241088
+  validation accuracy:		18.50 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 59
+Epoch 59 of 100 took 59.345s
+  training loss:		0.01078117
+  validation loss:		0.01249446
+  validation accuracy:		18.38 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 60
+Epoch 60 of 100 took 59.426s
+  training loss:		0.01074508
+  validation loss:		0.01249719
+  validation accuracy:		18.46 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 61
+Epoch 61 of 100 took 59.393s
+  training loss:		0.01071988
+  validation loss:		0.01248996
+  validation accuracy:		18.50 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 62
+Epoch 62 of 100 took 59.399s
+  training loss:		0.01070342
+  validation loss:		0.01254455
+  validation accuracy:		18.52 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.01_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 63
