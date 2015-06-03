@@ -17,9 +17,11 @@ from poker_util import *
 from draw_poker_lib import * 
 
 from draw_poker import cards_input_from_string
+from draw_poker import hand_input_from_context
 from triple_draw_poker_full_output import build_model
 from triple_draw_poker_full_output import predict_model # outputs result for [BATCH x data]
 from triple_draw_poker_full_output import evaluate_single_hand # single hand... returns 32-point vector
+from triple_draw_poker_full_output import evaluate_single_event # just give it the 26x17x17 bits... and get a vector back
 # from triple_draw_poker_full_output import evaluate_batch_hands # much faster to evaluate a batch of hands
 
 """
@@ -37,7 +39,7 @@ models and final hand evaluations, to accomodate any other draw game.
 
 # Build up a CSV, of all information we might want for CNN training
 TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
-                            'value_heuristic', 'position',  'num_cards_kept', 'num_opponent_kept',
+                            'bet_model', 'value_heuristic', 'position',  'num_cards_kept', 'num_opponent_kept',
                             'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand',
                             'actions_this_round', 'actions_full_hand', 
                             'total_bet', 'result', 'margin_bet', 'margin_result']
@@ -45,6 +47,8 @@ TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
 BATCH_SIZE = 100 # Across all cases
 
 RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %% of the time.
+
+INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponent), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -78,11 +82,14 @@ class TripleDrawAIPlayer():
         # TODO: Name, and track, multiple models. 
         # This is the draw model. Also, outputs the heuristic (value) of a hand, given # of draws left.
         self.output_layer = None 
+        self.bets_output_layer = None
+        self.use_learning_action_model = False # should we use the trained model, to make betting decisions?
 
         # Current 0-1000 value, based on cards held, and approximation of value from draw model.
         # For example, if no more draws... heuristic is actual hand.
         self.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
         self.num_cards_kept = 0 # how many cards did we keep... with out last draw?
+        self.cards = [] # Display purposes only... easy way to see current hand as last evaluated
 
         # TODO: Use this to track number of cards discarded, etc. Obviously, don't look at opponent's cards.
         #self.opponent_hand = None
@@ -127,8 +134,10 @@ class TripleDrawAIPlayer():
         # For no more draws... use "final hand." Otherwise we run into issues with showdown, etc
         if (num_draws >= 1):
             hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
+            self.cards = self.draw_hand.dealt_cards
         else:
             hand_string_dealt = hand_string(self.draw_hand.final_hand)
+            self.cards = self.draw_hand.final_hand
 
         print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
 
@@ -169,9 +178,67 @@ class TripleDrawAIPlayer():
         self.draw_hand.deal(new_cards, final_hand=True)
 
     # This should choose an action policy... based on things we know, randomness, CNN output, RL, etc
-    def choose_action(self, actions, round, bets_this_round = 0, has_button = True):
+    def choose_action(self, actions, round, bets_this_round = 0, 
+                      has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0):
         # print('Choosing among actions %s for round %s' % (actions, round))
         # self.choose_random_action(actions, round)
+        if self.bets_output_layer and self.use_learning_action_model:
+            #print('We has a *bets* output model. Use it!')
+            num_draws_left = 3
+            if round == PRE_DRAW_BET_ROUND:
+                num_draws_left = 3
+            elif round == DRAW_1_BET_ROUND:
+                num_draws_left = 2
+            elif round == DRAW_2_BET_ROUND:
+                num_draws_left = 1
+            elif round == DRAW_3_BET_ROUND:
+                 num_draws_left = 0
+
+            if (num_draws_left >= 1):
+                hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
+            else:
+                hand_string_dealt = hand_string(self.draw_hand.final_hand)
+
+            # Input related to the hand
+            cards_input = cards_input_from_string(hand_string_dealt, include_num_draws=True, 
+                                                  num_draws=num_draws_left, include_full_hand = True, 
+                                                  include_hand_context = False)
+
+            # TODO: This should be a util function.
+            bets_string = ''
+            for action in actions_this_round:
+                if action.type in ALL_BETS_SET:
+                    bets_string += '1'
+                elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
+                    bets_string += '0'
+                else:
+                    # Don't encode non-bets
+                    continue
+            
+            # Now hand context
+            print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept]))
+            hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
+                                                         cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
+            full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
+
+            bets_vector = evaluate_single_event(self.bets_output_layer, full_input)
+            print([val - 2.0 for val in bets_vector[:5]])
+            value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
+            value_predictions.sort(reverse=True)
+            print(value_predictions)
+
+            # Purely for debug
+            self.create_heuristic_action_distribution(round, bets_this_round = bets_this_round, has_button = has_button)
+
+            best_action = value_predictions[0][1]
+            print(best_action)
+            print(actionName[best_action])
+            
+            # Internal variable, for easy switch between learning model, and heuristic model below.
+            if self.use_learning_action_model:
+                return best_action
+        else:
+            print('No *bets* output model specified (or not used) for player %s' % self.name)
         return self.choose_heuristic_action(allowed_actions = list(actions), 
                                             round = round, 
                                             bets_this_round = bets_this_round, 
@@ -198,7 +265,7 @@ class TripleDrawAIPlayer():
         hand_value = self.heuristic_value
         baseline_value = baseline_heuristic_value(round, bets_this_round)
 
-        print('Player %s (has_button %d) our hand value %.2f, compared to current baseline %.2f' % (self.name, has_button, hand_value, baseline_value))
+        print('Player %s (has_button %d) our hand value %.2f, compared to current baseline %.2f %s' % (self.name, has_button, hand_value, baseline_value, hand_string(self.cards)))
         
         if hand_value > baseline_value:
             # Dramatically increase our bet/raise frequency, if hand is better than baseline.
@@ -367,10 +434,14 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
             csv_writer.writerow(event_line)
     # TODO: Flush buffer here?
 
+    # If we are tracking results... return results (wins/losses for player by order
+    bb_result = dealer.hand_history[0].margin_result
+    sb_result = dealer.hand_history[1].margin_result
+    return (bb_result, sb_result)
 
 # Play a bunch of hands.
 # For now... just rush toward full games, and skip details, or fill in with hacks.
-def play(sample_size, output_file_name=None, model_filename=None):
+def play(sample_size, output_file_name=None, draw_model_filename=None, bets_model_filename=None):
     # Compute hand values, or compare hands.
     cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
 
@@ -382,45 +453,62 @@ def play(sample_size, output_file_name=None, model_filename=None):
         csv_writer = csv.writer(output_file)
         csv_writer.writerow(TRIPLE_DRAW_EVENT_HEADER)
 
+
+    # Test the model, by giving it dummy inputs
+    # Test cases -- it keeps the two aces. But can it recognize a straight? A flush? Trips? Draw?? Two pair??
+    test_cases = [['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,3s,3d,5c,6d', 3],
+                  ['3h,4s,3d,5c,6d', 2], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 3],
+                  ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1]] 
+
+    for i in range(BATCH_SIZE - len(test_cases)):
+        test_cases.append(test_cases[1])
+
+    # NOTE: Num_draws and full_hand must match trained model.
+    # TODO: Use shared environemnt variables...
+    test_batch = np.array([cards_input_from_string(hand_string=case[0], 
+                                                   include_num_draws=True, num_draws=case[1],
+                                                   include_full_hand = True, 
+                                                   include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
+
     # If model file provided, unpack model, and create intelligent agent.
     output_layer = None
-    if model_filename and os.path.isfile(model_filename):
-        print('\nExisting model in file %s. Attempt to load it!\n' % model_filename)
-        all_param_values_from_file = np.load(model_filename)
+    if draw_model_filename and os.path.isfile(draw_model_filename):
+        print('\nExisting model in file %s. Attempt to load it!\n' % draw_model_filename)
+        all_param_values_from_file = np.load(draw_model_filename)
         
         # Size must match exactly!
         output_layer = build_model(
-            17, # 15, #input_height=dataset['input_height'],
-            17, # 15, #input_width=dataset['input_width'],
-            32, #output_dim=dataset['output_dim'],
+            HAND_TO_MATRIX_PAD_SIZE, 
+            HAND_TO_MATRIX_PAD_SIZE,
+            32,
         )
-
         print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
         lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file)
-
-        # TODO: "test cases" should also be a function, like "evaluate_single_hand"
-
-        # Test the model, by giving it dummy inputs
-        # Test cases -- it keeps the two aces. But can it recognize a straight? A flush? Trips? Draw?? Two pair??
-        test_cases = [['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,3s,3d,5c,6d', 3],
-                      ['3h,4s,3d,5c,6d', 2], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 3],
-                      ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1]] 
-
-        for i in range(BATCH_SIZE - len(test_cases)):
-            test_cases.append(test_cases[1])
-
-        # NOTE: Num_draws and full_hand must match trained model.
-        # TODO: Use shared environemnt variables...
-        test_batch = np.array([cards_input_from_string(hand_string=case[0], 
-                                                       include_num_draws=True, num_draws=case[1],
-                                                       include_full_hand = True) for case in test_cases], np.int32)
         predict_model(output_layer=output_layer, test_batch=test_batch)
-
         print('Cases again %s' % str(test_cases))
-
         print('Creating player, based on this pickled model...')
     else:
-        print('No model provided or loaded. Expect error if model required. %s', model_filename)
+        print('No model provided or loaded. Expect error if model required. %s', draw_model_filename)
+
+    # If supplied, also load the bets model. conv(xCards + xNumDraws + xContext) --> values for all betting actions
+    bets_output_layer = None
+    if bets_model_filename and os.path.isfile(bets_model_filename):
+        print('\nExisting *bets* model in file %s. Attempt to load it!\n' % bets_model_filename)
+        bets_all_param_values_from_file = np.load(bets_model_filename)
+
+        # Size must match exactly!
+        bets_output_layer = build_model(
+            HAND_TO_MATRIX_PAD_SIZE, 
+            HAND_TO_MATRIX_PAD_SIZE,
+            32,
+        )
+        print('filling model with shape %s, with %d params' % (str(bets_output_layer.get_output_shape()), len(bets_all_param_values_from_file)))
+        lasagne.layers.set_all_param_values(bets_output_layer, bets_all_param_values_from_file)
+        predict_model(output_layer=bets_output_layer, test_batch=test_batch)
+        print('Cases again %s' % str(test_cases))
+        print('Creating player, based on this pickled *bets* model...')
+    else:
+        print('No *bets* model provided or loaded. Expect error if model required. %s', bets_model_filename)
 
     # We initialize deck, and dealer, every round. But players kept constant, and reset for each trial.
     # NOTE: This can, and will change, if we do repetative simulation, etc.
@@ -429,19 +517,54 @@ def play(sample_size, output_file_name=None, model_filename=None):
     
     # Add model, to players.
     player_one.output_layer = output_layer
+    player_one.bets_output_layer = bets_output_layer
+    # enable, to make betting decisions with learned model (instead of heurstics)
+    player_one.use_learning_action_model = True
+
     player_two.output_layer = output_layer
+    player_two.bets_output_layer = bets_output_layer
+    # enable, to make betting decisions with learned model (instead of heurstics)
+    #player_two.use_learning_action_model = True
 
     # Run a bunch of individual hands.
     # Hack: Player one is always on the button...
-    round = 0
+    round = 1
+    # track results... by player, and by small blind/big blind.
+    player_one_results = []
+    player_two_results = []
+    sb_results = []
+    bb_results = []
     try:
         now = time.time()
         while round < sample_size:
-            # TODO: Implement human player, switch button.
-            game_round(round, cashier, player_button=player_one, player_blind=player_two, 
-                       csv_writer=csv_writer, csv_header_map=csv_header_map)
+            # TODO: Implement human player.
+            # Switches button, every other hand. Relevant, if one of the players uses a different moves model.
+            if round % 2:
+                (bb_result, sb_result) = game_round(round, cashier, player_button=player_one, player_blind=player_two, 
+                                                     csv_writer=csv_writer, csv_header_map=csv_header_map)
+                player_one_result = sb_result
+                player_two_result = bb_result
+            else:
+                (bb_result, sb_result) = game_round(round, cashier, player_button=player_two, player_blind=player_one, 
+                                                     csv_writer=csv_writer, csv_header_map=csv_header_map)
+                player_two_result = sb_result
+                player_one_result = bb_result
 
-            print ('hand %d took %.1f seconds...' % (round, time.time() - now))
+            player_one_results.append(player_one_result)
+            player_two_results.append(player_two_result)
+            sb_results.append(sb_result)
+            bb_results.append(bb_result)
+
+            print ('hand %d took %.1f seconds...\n' % (round, time.time() - now))
+
+            print('BB results mean %.2f stdev %.2f: %s (%s)' % (np.mean(bb_results), np.std(bb_results), bb_results[-10:], len(bb_results)))
+            print('SB results mean %.2f stdev %.2f: %s (%s)' % (np.mean(sb_results), np.std(sb_results), sb_results[-10:], len(sb_results)))
+            print('p1 results (%s) mean %.2f stdev %.2f: %s (%s)' % (('CNN' if player_one.use_learning_action_model else 'sim' ), 
+                                                     np.mean(player_one_results), np.std(player_one_results),
+                                                     player_one_results[-10:], len(player_one_results)))
+            print('p2 results (%s) mean %.2f stdev %.2f: %s (%s)' % (('CNN' if player_two.use_learning_action_model else 'sim' ), 
+                                                     np.mean(player_two_results), np.std(player_two_results),
+                                                     player_two_results[-10:], len(player_two_results)))
 
             round += 1
 
@@ -459,12 +582,17 @@ if __name__ == '__main__':
 
     # Input model filename if given
     # TODO: set via command line flagz
-    model_filename = None
+    draw_model_filename = None # how to draw, given cards, numDraws (also outputs hand value estimate)
+    bets_model_filename = None # what is the value of bet, raise, check, call, fold in this instance?
     if len(sys.argv) >= 2:
-        model_filename = sys.argv[1]
-
+        draw_model_filename = sys.argv[1]
+        
     if len(sys.argv) >= 3:
-        output_file_name = sys.argv[2]
+        bets_model_filename = sys.argv[2]
+
+    if len(sys.argv) >= 4:
+        output_file_name = sys.argv[3]
 
     # TODO: Take num samples from command line.
-    play(sample_size=samples, output_file_name=output_file_name, model_filename=model_filename)
+    play(sample_size=samples, output_file_name=output_file_name,
+         draw_model_filename=draw_model_filename, bets_model_filename=bets_model_filename)

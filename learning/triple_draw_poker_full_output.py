@@ -61,6 +61,9 @@ TRAINING_FORMAT = 'deuce_events' # 'deuce' # 'video'
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch to adaptive training?
 
+# Helps speed up inputs?
+TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
+
 # TODO: Include "empty" bits... so we can get a model started... which can be used as basis for next data?
 
 def load_data():
@@ -490,7 +493,7 @@ def predict_model(output_layer, test_batch, format = 'deuce'):
 
 
 # Get 0-BATCH_SIZE hands, evaluate, and return matrix of vectors
-def evaluate_batch_hands(output_layer, test_cases): 
+def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUDE_HAND_CONTEXT): 
     now = time.time()
     for i in range(BATCH_SIZE - len(test_cases)):
         test_cases.append(test_cases[0])
@@ -498,7 +501,8 @@ def evaluate_batch_hands(output_layer, test_cases):
     # case = [hand_string, int(num_draws)]
     test_batch = np.array([cards_input_from_string(hand_string=case[0],
                                                    include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], 
-                                                   include_full_hand = INCLUDE_FULL_HAND) for case in test_cases], np.int32)
+                                                   include_full_hand = INCLUDE_FULL_HAND,
+                                                   include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], TRAINING_INPUT_TYPE)
 
     print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
@@ -518,11 +522,28 @@ def evaluate_batch_hands(output_layer, test_cases):
 
 # Return 32-point vector.
 # Make a batch, to evaluate single hand. Expensive!!
-def evaluate_single_hand(output_layer, hand_string_dealt, num_draws = 1):
+def evaluate_single_hand(output_layer, hand_string_dealt, num_draws = 1, 
+                         include_hand_context = INCLUDE_HAND_CONTEXT):
     test_cases = [[hand_string_dealt, num_draws]]
-    softmax_values = evaluate_batch_hands(output_layer, test_cases)
+    softmax_values = evaluate_batch_hands(output_layer, test_cases, include_hand_context = include_hand_context)
     return softmax_values[0]
 
+# Just give us the bits... expect 26x17x17 matrix...
+def evaluate_single_event(output_layer, event_input):
+    now = time.time()
+    test_batch = np.array([event_input for i in range(BATCH_SIZE)], TRAINING_INPUT_TYPE)
+    print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
+    now = time.time()
+
+    pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+    print('%.2fs to get_output' % (time.time() - now))
+    now = time.time()
+
+    softmax_values = pred.eval()
+    print('%.2fs to eval() output' % (time.time() - now))
+    now = time.time()
+
+    return softmax_values[0]
 
 # Pickle the model. Can be un-pickled, if building same network.
 def save_model(out_file=None, output_layer=None):

@@ -82,7 +82,7 @@ class PokerAction:
     def add_context(self, hand, draws_left, position, 
                     actions_this_round, actions_full_hand, 
                     value = RANDOM_HAND_HEURISTIC_BASELINE, bet_this_hand = 0,
-                    num_cards_kept = 0, num_opponent_kept = 0):
+                    num_cards_kept = 0, num_opponent_kept = 0, bet_model = ''):
         self.hand = list(hand) # makes copy of 5-card array
         self.draws_left = draws_left
         self.value = value # heuristic estimation
@@ -90,6 +90,9 @@ class PokerAction:
         self.position = position # position = enum
         self.num_cards_kept = num_cards_kept
         self.num_opponent_kept = num_opponent_kept
+
+        # Tag the bet model, if appropriate
+        self.bet_model = bet_model
         
         # Array of PokerAction items -> '011' = check, bet, raise
         # NOTE: Blinds are skipped (for space), since always there. FOLD ends the action.
@@ -164,6 +167,8 @@ class PokerAction:
         if hasattr(self, 'num_cards_kept'):
             output_map['num_cards_kept'] = self.num_cards_kept
             output_map['num_opponent_kept'] = self.num_opponent_kept
+        if hasattr(self, 'bet_model'):
+            output_map['bet_model'] = self.bet_model
         output_map['action'] = self.name
         output_map['pot_size'] = self.pot_size
         output_map['bet_size'] = self.bet_size
@@ -182,7 +187,7 @@ class PokerAction:
             output_map['margin_bet'] = self.margin_bet
             output_map['margin_result'] = self.margin_result
         
-        # ['hand', 'draws_left', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result']
+        # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result']
         output_row = VectorFromKeysAndSparseMap(keys=header_map, sparse_data_map=output_map, default_value = '')
         return output_row
 
@@ -294,7 +299,8 @@ class TripleDrawDealer():
                            position = POSITION_BUTTON if self.action_on == self.player_button else POSITION_BLIND, 
                            actions_this_round = self.hand_history_this_round,
                            actions_full_hand = self.hand_history,
-                           bet_this_hand = self.action_on.bet_this_hand)
+                           bet_this_hand = self.action_on.bet_this_hand,
+                           bet_model = ('CNN' if self.action_on.use_learning_action_model else 'sim' ))
         self.process_action(action, pass_control = True)
         #self.pass_control()
 
@@ -307,7 +313,8 @@ class TripleDrawDealer():
                            position = POSITION_BUTTON if self.action_on == self.player_button else POSITION_BLIND, 
                            actions_this_round = self.hand_history_this_round,
                            actions_full_hand = self.hand_history,
-                           bet_this_hand = self.action_on.bet_this_hand)
+                           bet_this_hand = self.action_on.bet_this_hand,
+                           bet_model = ('CNN' if self.action_on.use_learning_action_model else 'sim' ))
         self.process_action(action, pass_control = False)
         # DO NOT pass_control()
 
@@ -411,11 +418,15 @@ class TripleDrawDealer():
         # If still here... ther are legal actions that a player may take!
         print('Allowed actions for player %s: %s' % (self.action_on.name, [actionName[action] for action in allowed_actions]))
 
-        # TODO: Here the agent... would choose a good action.
+        # Here the agent... would choose a good action.
         best_action = self.action_on.choose_action(actions=allowed_actions, 
                                                    round=round, 
                                                    bets_this_round = max(bet_on_action, bet_off_action) / bet_this_street,
-                                                   has_button = (self.action_on == self.player_button))
+                                                   has_button = (self.action_on == self.player_button),
+                                                   pot_size=self.pot_size, 
+                                                   actions_this_round=self.hand_history_this_round, 
+                                                   cards_kept=self.action_on.num_cards_kept, 
+                                                   opponent_cards_kept=self.action_off.num_cards_kept)
 
         # If action returned, complete the action... and keep going
         if (best_action):
@@ -468,7 +479,8 @@ class TripleDrawDealer():
                                value = self.action_on.heuristic_value,
                                bet_this_hand = self.action_on.bet_this_hand,
                                num_cards_kept = self.action_on.num_cards_kept, 
-                               num_opponent_kept = self.action_off.num_cards_kept)
+                               num_opponent_kept = self.action_off.num_cards_kept,
+                               bet_model = ('CNN' if self.action_on.use_learning_action_model else 'sim' ))
 
             self.process_action(action, pass_control = True)
             if keep_betting:

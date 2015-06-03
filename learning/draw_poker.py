@@ -214,6 +214,22 @@ def bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
                 assert (c == '1' or c == '0'), 'unknown char |%s| in bets string!' % c
     return output_array
 
+# [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
+def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0, opponent_cards_kept=0, pad_to_fit = PAD_INPUT):
+
+    position_input = card_to_matrix_fill(position, pad_to_fit = pad_to_fit)
+    pot_size_input = pot_to_array(pot_size, pad_to_fit = pad_to_fit) # saved to single "card"
+    bets_string_input = bets_string_to_array(bets_string, pad_to_fit = pad_to_fit) # length 5
+    cards_kept_input = integer_to_card_array(cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
+    opponent_cards_kept_input = integer_to_card_array(opponent_cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
+
+    # Put it all together...
+    # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
+    hand_context_input = np.array([position_input, pot_size_input, 
+                                   bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
+                                   cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
+                                   opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4]], TRAINING_INPUT_TYPE)
+    return hand_context_input
 
 # Encode pot (0 to 3000 or so) into array... by faking a hand.
 # Every $50 of pot is another card... so 50 -> [2c], 200 -> [2c, 2d, 2h, 2s]
@@ -349,26 +365,14 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         # Along with xCards and xNumDraws, also encode...
         # xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept
         position = int(data_array[csv_key_map['position']]) # binary
-        position_input = card_to_matrix_fill(position, pad_to_fit = pad_to_fit)
-
         pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
-        pot_size_input = pot_to_array(pot_size, pad_to_fit = pad_to_fit) # saved to single "card"
-
         bets_string = data_array[csv_key_map['actions_this_round']] # items like '0111' (5 max)
-        bets_string_input = bets_string_to_array(bets_string, pad_to_fit = pad_to_fit) # length 5
-
         cards_kept = int(data_array[csv_key_map['num_cards_kept']]) # 0-5
-        cards_kept_input = integer_to_card_array(cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
-
         opponent_cards_kept = int(data_array[csv_key_map['num_opponent_kept']]) # 0-5
-        opponent_cards_kept_input = integer_to_card_array(opponent_cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
 
-        # Put it all together...
-        # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
-        hand_context_input = np.array([position_input, pot_size_input, 
-                                       bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
-                                       cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
-                                       opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4]], TRAINING_INPUT_TYPE)
+        hand_context_input = hand_input_from_context(position=position, pot_size=pot_size, bets_string=bets_string,
+                                                     cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
+
         full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
     else:
         empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
