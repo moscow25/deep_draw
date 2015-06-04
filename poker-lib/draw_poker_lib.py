@@ -300,7 +300,7 @@ class TripleDrawDealer():
                            actions_this_round = self.hand_history_this_round,
                            actions_full_hand = self.hand_history,
                            bet_this_hand = self.action_on.bet_this_hand,
-                           bet_model = ('CNN' if self.action_on.use_learning_action_model else 'sim' ))
+                           bet_model = self.action_on.player_tag())
         self.process_action(action, pass_control = True)
         #self.pass_control()
 
@@ -314,7 +314,7 @@ class TripleDrawDealer():
                            actions_this_round = self.hand_history_this_round,
                            actions_full_hand = self.hand_history,
                            bet_this_hand = self.action_on.bet_this_hand,
-                           bet_model = ('CNN' if self.action_on.use_learning_action_model else 'sim' ))
+                           bet_model = self.action_on.player_tag())
         self.process_action(action, pass_control = False)
         # DO NOT pass_control()
 
@@ -430,8 +430,7 @@ class TripleDrawDealer():
 
         # If action returned, complete the action... and keep going
         if (best_action):
-            print(best_action)
-            print('best action chosen is %s' % actionName[best_action])
+            print('%d card draw. Best action chose ->  %s' % ((5 - self.action_on.num_cards_kept), actionName[best_action]))
             # We keep betting after this action... as long last action allows it.
             keep_betting = True
             # Create the action
@@ -480,7 +479,7 @@ class TripleDrawDealer():
                                bet_this_hand = self.action_on.bet_this_hand,
                                num_cards_kept = self.action_on.num_cards_kept, 
                                num_opponent_kept = self.action_off.num_cards_kept,
-                               bet_model = ('CNN' if self.action_on.use_learning_action_model else 'sim' ))
+                               bet_model = self.action_on.player_tag())
 
             self.process_action(action, pass_control = True)
             if keep_betting:

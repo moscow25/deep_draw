@@ -437,7 +437,7 @@ def deuce_heuristic_five_card(hand):
     deuce_rank = deuce_rank_five_card(hand)
     deuce_heuristic = deuce_lo_values[deuce_rank]
 
-    print('For hand %s, deuce rank of hand is %d, resultin in heuristic value of %d' % (hand_string(hand), deuce_rank, deuce_heuristic))
+    #print('For hand %s, deuce rank of hand is %d, resultin in heuristic value of %d' % (hand_string(hand), deuce_rank, deuce_heuristic))
     return deuce_heuristic
 
 DEUCE_FLUSH_RANK = 1313

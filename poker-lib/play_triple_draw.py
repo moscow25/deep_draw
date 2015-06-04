@@ -49,6 +49,7 @@ BATCH_SIZE = 100 # Across all cases
 RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %% of the time.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
+SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponent), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -84,6 +85,7 @@ class TripleDrawAIPlayer():
         self.output_layer = None 
         self.bets_output_layer = None
         self.use_learning_action_model = False # should we use the trained model, to make betting decisions?
+        self.is_human = False
 
         # Current 0-1000 value, based on cards held, and approximation of value from draw model.
         # For example, if no more draws... heuristic is actual hand.
@@ -92,29 +94,47 @@ class TripleDrawAIPlayer():
         self.cards = [] # Display purposes only... easy way to see current hand as last evaluated
 
         # TODO: Use this to track number of cards discarded, etc. Obviously, don't look at opponent's cards.
-        #self.opponent_hand = None
+        self.opponent = None
+
+    def player_tag(self):
+        if self.is_human:
+            return 'man'
+        elif self.use_learning_action_model and self.bets_output_layer:
+            return 'CNN'
+        else:
+            return 'sim'
 
     # Takes action on the hand. But first... get Theano output...
-    def draw_move(self, deck, num_draws = 1):
+    def draw_move(self, deck, num_draws = 1, debug = True):
+        # Reduce debug, if opponent is human, and could see.
+        if self.opponent and self.opponent.is_human:
+            debug = False
+
         hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
-        print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
+        if debug:
+            print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
 
         # Get 32-length vector for each possible draw, from the model.
         hand_draws_vector = evaluate_single_hand(self.output_layer, hand_string_dealt, num_draws = num_draws) #, test_batch=self.test_batch)
 
-        print('All 32 values: %s' % str(hand_draws_vector))
+        
+        if debug:
+            print('All 32 values: %s' % str(hand_draws_vector))
 
         best_draw = np.argmax(hand_draws_vector)
         
-        print('Best draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
+        if debug:
+            print('Best draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
         expected_payout = hand_draws_vector[best_draw] # keep this, and average it, as well
-        
         draw_string = ''
         for i in range(0,5):
             if not (i in all_draw_patterns[best_draw]):
                 draw_string += '%d' % i
 
-        print('Draw string from AI! |%s|' % draw_string)
+        if debug:
+            print('Draw string from AI! |%s|' % draw_string)
+        else:
+            print('\nDraw %d cards.\n' % len(draw_string))
 
         discards = self.draw_hand.draw(draw_string)
         deck.take_discards(discards)
@@ -130,7 +150,11 @@ class TripleDrawAIPlayer():
 
     # Apply the CNN... to get "value" of the current hand. best draw for hands with draws left; current hand for no more draws.
     # NOTE: Similar to draw_move() but we don't make any actual draws with the hand.
-    def update_hand_value(self, num_draws=0):
+    def update_hand_value(self, num_draws=0, debug = True):
+        # Reduce debug, if opponent is human (don't give away our hand)
+        if self.opponent and self.opponent.is_human:
+            debug = False
+
         # For no more draws... use "final hand." Otherwise we run into issues with showdown, etc
         if (num_draws >= 1):
             hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
@@ -139,20 +163,27 @@ class TripleDrawAIPlayer():
             hand_string_dealt = hand_string(self.draw_hand.final_hand)
             self.cards = self.draw_hand.final_hand
 
-        print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
+        if debug:
+            print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
+            
+        # Quickly exit, and save a lookup, for human player!
+        if self.is_human:
+            return
 
         # Get 32-length vector for each possible draw, from the model.
         hand_draws_vector = evaluate_single_hand(self.output_layer, hand_string_dealt, num_draws = max(num_draws, 1)) #, test_batch=self.test_batch)
 
         # Except for num_draws == 0, value is value of the best draw...
         if num_draws >= 1:
-            print('All 32 values: %s' % str(hand_draws_vector))
+            if debug:
+                print('All 32 values: %s' % str(hand_draws_vector))
             best_draw = np.argmax(hand_draws_vector)
         else:
             print('With no draws left, heurstic value is for pat hand.')
             best_draw = 31
         
-        print('Best draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
+        if debug:
+            print('Best draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
         expected_payout = hand_draws_vector[best_draw] # keep this, and average it, as well
         self.heuristic_value = expected_payout
 
@@ -179,7 +210,11 @@ class TripleDrawAIPlayer():
 
     # This should choose an action policy... based on things we know, randomness, CNN output, RL, etc
     def choose_action(self, actions, round, bets_this_round = 0, 
-                      has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0):
+                      has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0, debug = True):
+        # Reduce debug, if opponent is human, and could see.
+        if self.opponent and self.opponent.is_human:
+            debug = False
+
         # print('Choosing among actions %s for round %s' % (actions, round))
         # self.choose_random_action(actions, round)
         if self.bets_output_layer and self.use_learning_action_model:
@@ -216,23 +251,29 @@ class TripleDrawAIPlayer():
                     continue
             
             # Now hand context
-            print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept]))
+            if debug:
+                print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept]))
             hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
                                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
             full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
 
             bets_vector = evaluate_single_event(self.bets_output_layer, full_input)
-            print([val - 2.0 for val in bets_vector[:5]])
+
+            if debug:
+                print([val - 2.0 for val in bets_vector[:5]])
             value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
             value_predictions.sort(reverse=True)
-            print(value_predictions)
+            
+            if debug:
+                print(value_predictions)
 
             # Purely for debug
-            self.create_heuristic_action_distribution(round, bets_this_round = bets_this_round, has_button = has_button)
+            if debug:
+                self.create_heuristic_action_distribution(round, bets_this_round = bets_this_round, has_button = has_button)
 
             best_action = value_predictions[0][1]
-            print(best_action)
-            print(actionName[best_action])
+            #print(best_action)
+            print('\n%s\n' % actionName[best_action])
             
             # Internal variable, for easy switch between learning model, and heuristic model below.
             if self.use_learning_action_model:
@@ -282,7 +323,7 @@ class TripleDrawAIPlayer():
             #print('decreasing bet/raise by %.2f' % bet_decrease)
             bet_raise += bet_decrease
             
-            # Start to fold more, especially if we are 0.20 or more behind expect opponenet hand (2-card draw vs pat hand, etc)
+            # Start to fold more, especially if we are 0.20 or more behind expect opponent hand (2-card draw vs pat hand, etc)
             fold_increase = 0.5 / 0.10 * (hand_value - baseline_value)
             #print('increasing fold by %.2f' % fold_increase)
             fold -= fold_increase      
@@ -391,6 +432,118 @@ class TripleDrawAIPlayer():
             return random_choice[0]
         return None
 
+# Over-writes bet & draw selections decision, with human prompt
+class TripleDrawHumanPlayer(TripleDrawAIPlayer):
+    def choose_action(self, actions, round, bets_this_round = 0, 
+                      has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0):
+        print('Choosing among actions %s for round %s' % ([actionName[action] for action in actions], round))
+        if SHOW_HUMAN_DEBUG:
+            # First show the context for this hand.
+            num_draws_left = 3
+            if round == PRE_DRAW_BET_ROUND:
+                num_draws_left = 3
+            elif round == DRAW_1_BET_ROUND:
+                num_draws_left = 2
+            elif round == DRAW_2_BET_ROUND:
+                num_draws_left = 1
+            elif round == DRAW_3_BET_ROUND:
+                 num_draws_left = 0
+
+            if (num_draws_left >= 1):
+                hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
+            else:
+                hand_string_dealt = hand_string(self.draw_hand.final_hand)
+
+            # Input related to the hand
+            cards_input = cards_input_from_string(hand_string_dealt, include_num_draws=True, 
+                                                  num_draws=num_draws_left, include_full_hand = True, 
+                                                  include_hand_context = False)
+
+            # TODO: This should be a util function.
+            bets_string = ''
+            for action in actions_this_round:
+                if action.type in ALL_BETS_SET:
+                    bets_string += '1'
+                elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
+                    bets_string += '0'
+                else:
+                    # Don't encode non-bets
+                    continue
+            
+            # Now hand context
+            if bets_string == '':
+                print('\nfirst to act\n')
+            print('context %s\n\tactions so far:' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept]))
+            print(actions_this_round)
+            # Hand baseline, purely for debug
+            self.create_heuristic_action_distribution(round, bets_this_round = bets_this_round, has_button = has_button)
+
+        # Prompt user for action, and see if it parses...
+        # TODO: Separate function, or library method...
+        user_action = None
+        while not user_action:
+            user_move_string = raw_input("Please select action %s -->   " % [actionName[action] for action in actions])
+            print('User action: |%s|' % user_move_string)
+            if len(user_move_string) > 0:
+                user_char = user_move_string.lower()[0]
+                if user_char == 'c':
+                    print('action check/call')
+                    allowed_actions = set(list(ALL_CALLS_SET) + [CHECK_HAND])
+                elif user_char == 'b' or user_char == 'r':
+                    print('action bet/raise')
+                    allowed_actions = ALL_BETS_SET
+                elif user_char == 'f':
+                    print('action FOLD')
+                    allowed_actions = set([FOLD_HAND])
+                else:
+                    print('unparseable action... try again')
+                    continue
+
+                user_actions = list(set.intersection(set(actions), allowed_actions))
+                if (not user_actions) or len(user_actions) != 1:
+                    print('unparseable action... try again')
+                    continue
+                user_action = user_actions[0]
+
+        # Single move, that user selected!
+        return user_action
+        
+    # Human must draw his cards, also!
+    def draw_move(self, deck, num_draws = 1, debug = True):
+        # Reduce debug, if opponent is human, and could see.
+        if self.opponent and self.opponent.is_human:
+            debug = False
+
+        hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
+        if debug:
+            print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
+
+        draw_string = ''
+        while True:
+            user_move_string = raw_input("Choose cards to draw\n%s -->   " % ['%d: %s' % (i, self.draw_hand.dealt_cards[i]) for i in range(5)])
+            if user_move_string == '' or user_move_string == 'p':
+                draw_string = ''
+                break
+            for char in user_move_string:
+                if char.isdigit():
+                    draw_string += char
+                else:
+                    continue
+            if draw_string:
+                break
+
+        print('Got usable draw string |%s|' % draw_string)
+
+        print('\nDrawing %d cards.\n' % len(draw_string))
+
+        discards = self.draw_hand.draw(draw_string)
+        deck.take_discards(discards)
+        new_cards = deck.deal(len(discards))
+        self.draw_hand.deal(new_cards, final_hand=True)
+
+        # Record current setting of these values...
+        # NOTE: heuristic value... is before we got our cards.
+        self.num_cards_kept = 5 - len(discards)
 
 # As simply as possible, simulate a full round of triple draw. Have as much logic as possible, contained in the objects
 # Actors:
@@ -514,6 +667,14 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     # NOTE: This can, and will change, if we do repetative simulation, etc.
     player_one = TripleDrawAIPlayer()
     player_two = TripleDrawAIPlayer()
+
+    # Optionally, compete against human opponent.
+    player_two = TripleDrawHumanPlayer()
+    player_two.is_human = True
+
+    # For easy looking of 'is_human', etc
+    player_one.opponent = player_two
+    player_two.opponent = player_one
     
     # Add model, to players.
     player_one.output_layer = output_layer
@@ -559,10 +720,10 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
 
             print('BB results mean %.2f stdev %.2f: %s (%s)' % (np.mean(bb_results), np.std(bb_results), bb_results[-10:], len(bb_results)))
             print('SB results mean %.2f stdev %.2f: %s (%s)' % (np.mean(sb_results), np.std(sb_results), sb_results[-10:], len(sb_results)))
-            print('p1 results (%s) mean %.2f stdev %.2f: %s (%s)' % (('CNN' if player_one.use_learning_action_model else 'sim' ), 
+            print('p1 results (%s) mean %.2f stdev %.2f: %s (%s)' % (player_one.player_tag(), 
                                                      np.mean(player_one_results), np.std(player_one_results),
                                                      player_one_results[-10:], len(player_one_results)))
-            print('p2 results (%s) mean %.2f stdev %.2f: %s (%s)' % (('CNN' if player_two.use_learning_action_model else 'sim' ), 
+            print('p2 results (%s) mean %.2f stdev %.2f: %s (%s)' % (player_two.player_tag(), 
                                                      np.mean(player_two_results), np.std(player_two_results),
                                                      player_two_results[-10:], len(player_two_results)))
 
