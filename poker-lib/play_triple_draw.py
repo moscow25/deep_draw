@@ -524,7 +524,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     player_two.output_layer = output_layer
     player_two.bets_output_layer = bets_output_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
-    #player_two.use_learning_action_model = True
+    # player_two.use_learning_action_model = True
 
     # Run a bunch of individual hands.
     # Hack: Player one is always on the button...
@@ -577,7 +577,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     sys.stdout.flush()
 
 if __name__ == '__main__':
-    samples = 200 # number of hands to run
+    samples = 5000 # number of hands to run
     output_file_name = 'triple_draw_events_%d.csv' % samples
 
     # Input model filename if given
