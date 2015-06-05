@@ -513,8 +513,11 @@ class TripleDrawDealer():
 
         self.hand_history_this_round = []
 
-        print('starting new hand. Blind %s and button %s' % (hand_string(self.player_blind.draw_hand.dealt_cards),
-                                                             hand_string(self.player_button.draw_hand.dealt_cards)))
+        if not(self.player_blind.is_human or self.player_button.is_human):
+            print('starting new hand. Blind %s and button %s' % (hand_string(self.player_blind.draw_hand.dealt_cards),
+                                                                 hand_string(self.player_button.draw_hand.dealt_cards)))
+        else:
+            print('starting new hand...')
 
         # Post blinds -- hack to foce bets
         self.pot_size = 0.0
