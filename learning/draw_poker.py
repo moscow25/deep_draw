@@ -104,6 +104,10 @@ TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
 # Value of a "zero event." Why baseline? Model doesn't really handle negative numbers!
 EVENTS_VALUE_BASELINE = 2.000
 
+# Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
+# TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
+SAMPLE_RATE_DEUCE_EVENTS = 0.50 # 0.33
+
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
 def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
@@ -485,19 +489,25 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 # If requested, sample out some too common cases. 
                 # A. Better balance
                 # B. Faster training
-                if sampling_policy:
+                if format == 'video' and sampling_policy:
                     output_percent = sampling_policy[output_class]
                     if random.random() > output_percent:
                         continue
-
-                # Alternatively, sample by the *value* of class[31] (keep all)
-                # Example: down-sample all, except dealt pairs, or dealt flushes, etc
-                if sample_by_hold_value and format == 'deuce':
+                elif format == 'deuce' and sample_by_hold_value:
+                    # Alternatively, sample by the *value* of class[31] (keep all)
+                    # Example: down-sample all, except dealt pairs, or dealt flushes, etc
                     sample_rate = sample_rate_for_hold_value(hold_value)
                     if random.random() > sample_rate:
                         #if (hands % 5000) == 0 and hands != last_hands_print:
                         #    print(line)
                         #    print('Skipping item with %s hold value!\n' % hold_value)
+                        continue
+                elif format == 'deuce_events':
+                    # For 'deuce_events', randomly down-sample from full set of events. 
+                    # NOTE: We do this, to cover more hands, and to not over-train on specific hand situation.
+                    # TODO: Control this by flag, or pre-compute data before choosing sample policy
+                    sample_rate = SAMPLE_RATE_DEUCE_EVENTS
+                    if random.random() > sample_rate:
                         continue
 
                 # We can also add output "mask" for which of the "output_array" values matter.
