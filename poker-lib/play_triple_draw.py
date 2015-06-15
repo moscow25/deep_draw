@@ -520,13 +520,20 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
 
         draw_string = ''
         while True:
-            user_move_string = raw_input("Choose cards to draw\n%s -->   " % ['%d: %s' % (i, self.draw_hand.dealt_cards[i]) for i in range(5)])
+            # For player convenience, tag draw cards 1-5 instead of 0-4
+            user_move_string = raw_input("Choose cards to draw\n%s -->   " % ['%d: %s' % (i+1, self.draw_hand.dealt_cards[i]) for i in range(5)])
             if user_move_string == '' or user_move_string == 'p':
                 draw_string = ''
                 break
             for char in user_move_string:
                 if char.isdigit():
-                    draw_string += char
+                    # From player readability, now need to map 2->1, 1->0, etc
+                    #draw_string += char
+                    implied_integer = int(char) - 1
+                    if implied_integer >= 0 and implied_integer <= 4:
+                        draw_string += str(implied_integer)
+                    else:
+                        continue
                 else:
                     continue
             if draw_string:
