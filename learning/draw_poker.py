@@ -106,7 +106,7 @@ EVENTS_VALUE_BASELINE = 2.000
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
-SAMPLE_RATE_DEUCE_EVENTS = 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 1.0 # 0.50 # 0.33
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
@@ -506,6 +506,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # For 'deuce_events', randomly down-sample from full set of events. 
                     # NOTE: We do this, to cover more hands, and to not over-train on specific hand situation.
                     # TODO: Control this by flag, or pre-compute data before choosing sample policy
+                    # TODO: Sample differently by "sim", "man", "cnn" actors...
                     sample_rate = SAMPLE_RATE_DEUCE_EVENTS
                     if random.random() > sample_rate:
                         continue
