@@ -47,9 +47,15 @@ TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
 BATCH_SIZE = 100 # Across all cases
 
 RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %% of the time.
+# Tweak values by up to X (100*chips). Seems like a lot... but not really. 
+# NOTE: Does *not* apply to folds. Don't tweak thos.
+# NOTE: Lets us break out of a rut of similar actions, etc.
+PREDICTION_VALUE_NOISE_HIGH = 0.06
+PREDICTION_VALUE_NOISE_LOW = -0.01 # Do decrease it sometimes... so that we don't massively inflate value of actions
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
+
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponent), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -267,11 +273,28 @@ class TripleDrawAIPlayer():
             if debug:
                 print(value_predictions)
 
+            best_action_no_noise = value_predictions[0][1]
+
+            # Now apply noise to action values, if requested.
+            # Why? If actions are close, don't be vulnerable to small differences that lock us into action.
+            # NOTE: We do *not* want more folds, so only increase values of non-fold actions. Clear folds still fold.
+            if PREDICTION_VALUE_NOISE_HIGH:
+                for prediction in value_predictions:
+                    if prediction[1] != FOLD_HAND:
+                        prediction[0] += np.random.uniform(PREDICTION_VALUE_NOISE_LOW,PREDICTION_VALUE_NOISE_HIGH)
+                value_predictions.sort(reverse=True)
+                if debug:
+                    print(value_predictions)
+            
+            # Highest-value action, after all possible adjustments.
+            best_action = value_predictions[0][1]
+
             # Purely for debug
             if debug:
                 self.create_heuristic_action_distribution(round, bets_this_round = bets_this_round, has_button = has_button)
+            if (best_action_no_noise != best_action) and debug:
+                print('--> changed best action %s -> %s from tweaking!' % (actionName[best_action_no_noise], actionName[best_action]))
 
-            best_action = value_predictions[0][1]
             #print(best_action)
             print('\n%s\n' % actionName[best_action])
             
