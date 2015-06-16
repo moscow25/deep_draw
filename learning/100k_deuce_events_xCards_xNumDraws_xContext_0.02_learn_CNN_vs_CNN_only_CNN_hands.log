@@ -450,3 +450,167 @@ Epoch 27 of 50 took 41.780s
   validation accuracy:		17.06 %%
 pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
 default train for epoch 28
+Epoch 28 of 50 took 41.748s
+  training loss:		0.01446434
+  validation loss:		0.04978966
+  validation accuracy:		17.10 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 29
+Epoch 29 of 50 took 41.869s
+  training loss:		0.01433393
+  validation loss:		0.05027954
+  validation accuracy:		16.98 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 30
+Epoch 30 of 50 took 43.201s
+  training loss:		0.01419288
+  validation loss:		0.05019600
+  validation accuracy:		16.64 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 31
+Epoch 31 of 50 took 43.291s
+  training loss:		0.01406771
+  validation loss:		0.05031849
+  validation accuracy:		17.12 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 32
+Epoch 32 of 50 took 43.485s
+  training loss:		0.01398635
+  validation loss:		0.05043900
+  validation accuracy:		17.30 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 33
+Epoch 33 of 50 took 42.174s
+  training loss:		0.01385798
+  validation loss:		0.05063028
+  validation accuracy:		17.52 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 34
+Epoch 34 of 50 took 41.777s
+  training loss:		0.01372683
+  validation loss:		0.05139098
+  validation accuracy:		16.68 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 35
+Epoch 35 of 50 took 41.712s
+  training loss:		0.01357658
+  validation loss:		0.05114942
+  validation accuracy:		16.82 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 36
+Epoch 36 of 50 took 41.826s
+  training loss:		0.01345299
+  validation loss:		0.05042043
+  validation accuracy:		17.48 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 37
+Epoch 37 of 50 took 41.781s
+  training loss:		0.01347417
+  validation loss:		0.05119076
+  validation accuracy:		18.04 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 38
+Epoch 38 of 50 took 41.759s
+  training loss:		0.01332819
+  validation loss:		0.05054135
+  validation accuracy:		17.38 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 39
+Epoch 39 of 50 took 41.897s
+  training loss:		0.01313689
+  validation loss:		0.05079717
+  validation accuracy:		17.88 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 40
+Epoch 40 of 50 took 41.794s
+  training loss:		0.01303804
+  validation loss:		0.05072213
+  validation accuracy:		18.00 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 41
+Epoch 41 of 50 took 41.742s
+  training loss:		0.01297068
+  validation loss:		0.05096715
+  validation accuracy:		18.06 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 42
+Epoch 42 of 50 took 41.784s
+  training loss:		0.01291450
+  validation loss:		0.05097700
+  validation accuracy:		18.38 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 43
+Epoch 43 of 50 took 41.761s
+  training loss:		0.01276825
+  validation loss:		0.05108436
+  validation accuracy:		18.70 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 44
+Epoch 44 of 50 took 41.710s
+  training loss:		0.01272149
+  validation loss:		0.05093295
+  validation accuracy:		18.40 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 45
+Epoch 45 of 50 took 41.764s
+  training loss:		0.01259814
+  validation loss:		0.05188365
+  validation accuracy:		17.98 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 46
+Epoch 46 of 50 took 41.772s
+  training loss:		0.01247354
+  validation loss:		0.05207022
+  validation accuracy:		18.48 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 47
+Epoch 47 of 50 took 41.769s
+  training loss:		0.01237089
+  validation loss:		0.05224364
+  validation accuracy:		18.64 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 48
+Epoch 48 of 50 took 41.757s
+  training loss:		0.01230056
+  validation loss:		0.05176023
+  validation accuracy:		18.12 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 49
+Epoch 49 of 50 took 41.725s
+  training loss:		0.01218386
+  validation loss:		0.05243471
+  validation accuracy:		18.00 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+default train for epoch 50
+triple_draw_poker_full_output.py:464: UserWarning: layer.get_output(...) is deprecated and will be removed for the first release of Lasagne. Please use lasagne.layers.get_output(layer, ...) instead.
+  pred_all = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+Epoch 50 of 50 took 41.766s
+  training loss:		0.01209241
+  validation loss:		0.05230258
+  validation accuracy:		17.76 %%
+pickling model 12 param values to deuce_eventstriple_draw_conv_0.02_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle
+looking at some test cases: [['3h,3s,3d,5c,6d', 3], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 0], ['3h,3s,3d,5c,6d', 0], ['2h,3s,4d,6c,5s', 2], ['3s,2h,4d,8c,5s', 3], ['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,4s,3d,5c,6d', 2], ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1], ['7c,8c,Tc,Js,Qh', 3], ['2c,8s,5h,8d,2s', 2], ['[8s,9c,8c,Kd,7h]', 2], ['[Qh,3h,6c,5s,4s]', 1], ['[Jh,Td,9s,Ks,5s]', 1], ['[6c,4d,Ts,Jc,6s]', 3], ['[4h,8h,2c,7d,3h]', 2], ['[2c,Ac,Tc,6d,3d]', 1], ['[Ad,3c,Tc,4d,5d]', 1], ['3d,Jc,7d,Ac,6s', 2], ['7h,Kc,5s,2d,Tc', 3], ['5c,6h,Jc,7h,2d', 1], ['Ts,As,3s,2d,4h', 3]]
+Computing predictions on test_batch: <type 'numpy.ndarray'> (100, 26, 17, 17)
+Prediciton: Subtensor{:int64:, :int64:}.0
+[[ 2.10858178  1.99075294  2.0474472   2.01305175  1.99319971]
+ [ 2.06472063  1.93397188  2.04435182  1.98810077  2.00176239]
+ [ 2.82767534  2.95874596  2.55974317  2.98710203  2.0023191 ]
+ [ 1.89412022  1.59872305  1.96782792  1.70536113  1.99425638]
+ [ 2.05263376  1.93372428  2.0354557   1.94542241  2.00006986]
+ [ 2.28450966  2.27653956  2.17934442  2.27239418  2.00136733]
+ [ 2.23021483  2.19772696  2.12212133  2.20412898  1.99432528]
+ [ 1.93985522  1.75861681  1.97814453  1.76007891  1.98713732]
+ [ 1.97796738  1.75889206  1.99340987  1.85396516  2.0000596 ]
+ [ 2.1592679   2.08860707  2.06141448  2.02530432  1.99634767]
+ [ 2.00578451  1.90037286  1.9869945   1.88368726  2.00275588]
+ [ 2.03453374  1.73696005  2.02614546  1.87202621  1.99961066]
+ [ 2.12110949  2.07984638  2.07553482  2.02710867  1.99885368]
+ [ 2.37512183  2.41184354  2.25232482  2.26862955  2.00714731]
+ [ 2.11870599  2.00961876  2.0531857   1.95881677  2.00239873]
+ [ 2.01551008  1.8274076   2.00558734  1.85579371  1.99941897]
+ [ 2.21256828  1.75570261  2.15899181  1.7950362   1.99478829]]
+Maximums argmax
+[0 0 3 4 0 0 0 4 4 0 0 0 0 1 0 0 0]
+['bet', 'bet', 'call', 'fold', 'bet', 'bet', 'bet', 'fold', 'fold', 'bet', 'bet', 'bet', 'bet', 'raise', 'bet', 'bet', 'bet']
+again, the test cases: 
+[['3h,3s,3d,5c,6d', 3], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 0], ['3h,3s,3d,5c,6d', 0], ['2h,3s,4d,6c,5s', 2], ['3s,2h,4d,8c,5s', 3], ['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,4s,3d,5c,6d', 2], ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1], ['7c,8c,Tc,Js,Qh', 3], ['2c,8s,5h,8d,2s', 2], ['[8s,9c,8c,Kd,7h]', 2], ['[Qh,3h,6c,5s,4s]', 1], ['[Jh,Td,9s,Ks,5s]', 1], ['[6c,4d,Ts,Jc,6s]', 3], ['[4h,8h,2c,7d,3h]', 2], ['[2c,Ac,Tc,6d,3d]', 1], ['[Ad,3c,Tc,4d,5d]', 1], ['3d,Jc,7d,Ac,6s', 2], ['7h,Kc,5s,2d,Tc', 3], ['5c,6h,Jc,7h,2d', 1], ['Ts,As,3s,2d,4h', 3], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1], ['2h,3s,4d,6c,5s', 1]]
