@@ -31,7 +31,7 @@ DATA_FILENAME = '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot mo
 MAX_INPUT_SIZE = 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 100 # 500 # 500 # 20 # 20 # 100
+NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
