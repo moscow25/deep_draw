@@ -366,9 +366,9 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     if csv_key_map.has_key('bet_model') and PLAYERS_INCLUDE_DEUCE_EVENTS:
         bet_model = data_array[csv_key_map['bet_model']]
         if not(bet_model in PLAYERS_INCLUDE_DEUCE_EVENTS):
-            if bet_model:
-                print(data_array)
-                print('skipping action from missing or undesireable model. |%s|' % bet_model)
+            #if bet_model:
+            #    print(data_array)
+            #    print('skipping action from missing or undesireable model. |%s|' % bet_model)
             return
 
     # X x 19 x 19 input, including our hand, & num draws. 
