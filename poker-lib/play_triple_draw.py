@@ -52,6 +52,8 @@ RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %
 # NOTE: Lets us break out of a rut of similar actions, etc.
 PREDICTION_VALUE_NOISE_HIGH = 0.06
 PREDICTION_VALUE_NOISE_LOW = -0.01 # Do decrease it sometimes... so that we don't massively inflate value of actions
+# Don't boost aggressive actions so much...
+AGGRESSIVE_ACTION_NOISE_FACTOR = 0.5 
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
@@ -280,8 +282,20 @@ class TripleDrawAIPlayer():
             # NOTE: We do *not* want more folds, so only increase values of non-fold actions. Clear folds still fold.
             if PREDICTION_VALUE_NOISE_HIGH:
                 for prediction in value_predictions:
-                    if prediction[1] != FOLD_HAND:
-                        prediction[0] += np.random.uniform(PREDICTION_VALUE_NOISE_LOW,PREDICTION_VALUE_NOISE_HIGH)
+                    action = prediction[1]
+                    noise = 0.0
+
+                    # Don't boost FOLD at all.
+                    if action == FOLD_HAND:
+                        noise = 0.0
+                    else:
+                        noise = np.random.uniform(PREDICTION_VALUE_NOISE_LOW,PREDICTION_VALUE_NOISE_HIGH)
+
+                    # And boost bet/raise somewhat less than the other actions.
+                    if action in ALL_BETS_SET:
+                        noise *= AGGRESSIVE_ACTION_NOISE_FACTOR
+
+                    prediction[0] += noise
                 value_predictions.sort(reverse=True)
                 if debug:
                     print(value_predictions)
