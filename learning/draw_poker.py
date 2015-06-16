@@ -108,6 +108,9 @@ EVENTS_VALUE_BASELINE = 2.000
 # TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
 SAMPLE_RATE_DEUCE_EVENTS = 1.0 # 0.50 # 0.33
 
+# Use this to train only on results of intelligent players, if different versions available
+PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN', 'man']) # Incude 'sim' and ''?
+
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
 def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
@@ -358,6 +361,16 @@ def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_
 # Thus, we can train on the same model as 3-round draw decisions... resulting good initialization.
 def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event', pad_to_fit = PAD_INPUT, include_hand_context = False): 
     #print(data_array)
+
+    # If we are told which player agent made this move, skip moves from players except those whom we trust.
+    if csv_key_map.has_key('bet_model') and PLAYERS_INCLUDE_DEUCE_EVENTS:
+        bet_model = data_array[csv_key_map['bet_model']]
+        if not(bet_model in PLAYERS_INCLUDE_DEUCE_EVENTS):
+            if bet_model:
+                print(data_array)
+                print('skipping action from missing or undesireable model. |%s|' % bet_model)
+            return
+
     # X x 19 x 19 input, including our hand, & num draws. 
     # TODO: Either add other inputs internally... or generate separately & combine nparray elements.
     cards_input = cards_input_from_string(data_array[csv_key_map['hand']], 
@@ -472,7 +485,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     sys.exit(-3)
             
                 # except (IndexError): # Fewer errors, for debugging
-            except (IndexError, ValueError, KeyError, AssertionError): # Any reading error
+            except (TypeError, IndexError, ValueError, KeyError, AssertionError): # Any reading error
                 #print('\nskipping malformed input line:\n|%s|\n' % line)
                 continue
 
