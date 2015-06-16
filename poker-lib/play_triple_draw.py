@@ -676,8 +676,8 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     player_two = TripleDrawAIPlayer()
 
     # Optionally, compete against human opponent.
-    player_two = TripleDrawHumanPlayer()
-    player_two.is_human = True
+    #player_two = TripleDrawHumanPlayer()
+    #player_two.is_human = True
 
     # For easy looking of 'is_human', etc
     player_one.opponent = player_two
@@ -692,7 +692,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     player_two.output_layer = output_layer
     player_two.bets_output_layer = bets_output_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
-    # player_two.use_learning_action_model = True
+    player_two.use_learning_action_model = True
 
     # Run a bunch of individual hands.
     # Hack: Player one is always on the button...
