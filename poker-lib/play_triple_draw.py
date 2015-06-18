@@ -647,7 +647,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     csv_header_map = CreateMapFromCSVKey(TRIPLE_DRAW_EVENT_HEADER)
     csv_writer=None
     if output_file_name:
-        output_file = open(output_file_name, 'w')
+        output_file = open(output_file_name, 'a') # append to file... 
         csv_writer = csv.writer(output_file)
         csv_writer.writerow(TRIPLE_DRAW_EVENT_HEADER)
 
