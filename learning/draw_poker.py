@@ -384,7 +384,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         # If we want to focus on game structure and ignore cards, push cards all 0's... [still keep 3 bits for number of rounds]
         # TODO: "num_draws_input" should return np.array to avoid confusion about order, etc
         empty_bits_cards = np.zeros((5+1, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
-        num_draws_input = num_draws_input_from_string(num_draws=data_array[csv_key_map['draws_left']], pad_to_fit=pad_to_fit)
+        num_draws_input = num_draws_input_from_string(num_draws_string=data_array[csv_key_map['draws_left']], pad_to_fit=pad_to_fit)
         num_draws_array = np.array([num_draws_input[0], num_draws_input[1], num_draws_input[2]], TRAINING_INPUT_TYPE)
         cards_input = np.concatenate((empty_bits_cards, num_draws_array), axis = 0)
     
@@ -495,7 +495,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('unknown input format: %s' % format)
                     sys.exit(-3)
             
-                # except (IndexError): # Fewer errors, for debugging
+            # except (IndexError): # Fewer errors, for debugging
             except (TypeError, IndexError, ValueError, KeyError, AssertionError): # Any reading error
                 #print('\nskipping malformed input line:\n|%s|\n' % line)
                 continue
