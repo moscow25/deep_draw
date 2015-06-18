@@ -87,10 +87,12 @@ DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10
 DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 + [0.7] * 10 + [1.0] * 5 + [1.0] 
 
 # Pull levers, to zero-out some inputs... while keeping same shape.
+# TODO: Move these into a "Default" class in separate file. Like here: https://github.com/spragunr/deep_q_rl/blob/lasagne_nature/deep_q_rl/run_nature.py
 NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
 PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
 CONTEXT_LENGTH = 2 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
 CONTEXT_ALL_ZERO = False # True # Set true, to map "xPos, xPot, ..." to x0 of same length. Useful for getting baseline for hands, values first
+CARDS_INPUT_ALL_ZERO = False # True # Set true, to map xCards to x0. Why? To train a decision baseline that has to focus on betting & pot odds for a minute.
 
 # Bias training data? It's not just for single draw video poker..
 # hold value == [0.0, 1.0] value of keep-all-five hand.
@@ -109,7 +111,7 @@ EVENTS_VALUE_BASELINE = 2.000
 SAMPLE_RATE_DEUCE_EVENTS = 1.0 # 0.50 # 0.33
 
 # Use this to train only on results of intelligent players, if different versions available
-PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN', 'man']) # Incude 'sim' and ''?
+PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN', 'man', 'sim']) # Incude 'sim' and ''?
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
@@ -178,6 +180,7 @@ def cards_input_from_string(hand_string, pad_to_fit = PAD_INPUT, include_num_dra
 # 2 draws: [0], [1], [1]
 # 1 draws: [0], [0], [1]
 # 0 draws: [0], [0], [0]
+# NOTE: This encodes the number back to front. Keep this for backward compatibility with models. 
 def num_draws_input_from_string(num_draws_string, pad_to_fit = PAD_INPUT, num_draws_all_zero = NUM_DRAWS_ALL_ZERO):
     num_draws = int(num_draws_string)
     card_1 = card_to_matrix_fill(0, pad_to_fit = pad_to_fit)
@@ -196,11 +199,12 @@ def num_draws_input_from_string(num_draws_string, pad_to_fit = PAD_INPUT, num_dr
 
     return [card_3, card_2, card_1]
 
-# More generalized form of the above. Encode 1/5 as 00001
+# More generalized form of the above integer -> bits encoding. But reverse order for better logic. Encode 1/5 as 10000
+# TODO: Add Front/Back flag to flip.
 def integer_to_card_array(number, max_integer, pad_to_fit = PAD_INPUT):
     output_array = [card_to_matrix_fill(0, pad_to_fit = pad_to_fit) for i in range(max_integer)]
     for index in range(len(output_array)):
-        if number >= (max_integer - i):
+        if int(number) > index: # (max_integer - index): Encode 1/5 as 00001
             output_array[index] = card_to_matrix_fill(1, pad_to_fit = pad_to_fit)
     return output_array
 
@@ -372,10 +376,17 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
             return
 
     # X x 19 x 19 input, including our hand, & num draws. 
-    # TODO: Either add other inputs internally... or generate separately & combine nparray elements.
-    cards_input = cards_input_from_string(data_array[csv_key_map['hand']], 
-                                          include_num_draws=True, num_draws=data_array[csv_key_map['draws_left']], 
-                                          include_full_hand = True)
+    if not CARDS_INPUT_ALL_ZERO:
+        cards_input = cards_input_from_string(data_array[csv_key_map['hand']], 
+                                              include_num_draws=True, num_draws=data_array[csv_key_map['draws_left']], 
+                                              include_full_hand = True)
+    else:
+        # If we want to focus on game structure and ignore cards, push cards all 0's... [still keep 3 bits for number of rounds]
+        # TODO: "num_draws_input" should return np.array to avoid confusion about order, etc
+        empty_bits_cards = np.zeros((5+1, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
+        num_draws_input = num_draws_input_from_string(num_draws=data_array[csv_key_map['draws_left']], pad_to_fit=pad_to_fit)
+        num_draws_array = np.array([num_draws_input[0], num_draws_input[1], num_draws_input[2]], TRAINING_INPUT_TYPE)
+        cards_input = np.concatenate((empty_bits_cards, num_draws_array), axis = 0)
     
     # Include this context output... or all xO, depending on what's asked
     if not CONTEXT_ALL_ZERO:
@@ -532,16 +543,35 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 if format == 'deuce_events':
                     output_mask[FOLD_CATEGORY] = 1.0
                 
-                if (hands % 5000) == 0 and hands != last_hands_print:
+                if (hands % 5000) == 1 and hands != last_hands_print:
                     print('\nLoaded %d hands...\n' % hands)
                     print(line)
                     #print(hand_input)
                     print(hand_input.shape)
+
+                    # Attempt to show debug of the input... without the padding...
+                    if HAND_TO_MATRIX_PAD_SIZE == 17:
+                        opt = np.get_printoptions()
+                        np.set_printoptions(threshold='nan')
+
+                        # Also print the whole thing...
+                        #print(hand_input)
+                        #print('-------')
+
+                        # Get all bits for input... excluding padding bits that go to 17x17
+                        debug_input = hand_input[:,6:10,2:15]
+                        print(debug_input)
+                        print(debug_input.shape)
+
+                        # Return options to previous settings...
+                        np.set_printoptions(**opt)
+
                     print(output_class)
                     print(output_mask)
                     if format != 'deuce_events':
                         print('hold value %s' % hold_value)
                     print(output_array)
+                    print('------------')
                     last_hands_print = hands
 
                 # count class, if item chosen
