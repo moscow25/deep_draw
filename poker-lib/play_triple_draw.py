@@ -6,6 +6,7 @@ import time
 import re
 import random
 import os.path # checking file existence, etc
+import argparse # command line arguements parsing
 import numpy as np
 import scipy.stats as ss
 import lasagne
@@ -42,7 +43,8 @@ TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
                             'bet_model', 'value_heuristic', 'position',  'num_cards_kept', 'num_opponent_kept',
                             'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand',
                             'actions_this_round', 'actions_full_hand', 
-                            'total_bet', 'result', 'margin_bet', 'margin_result']
+                            'total_bet', 'result', 'margin_bet', 'margin_result',
+                            'current_margin_result', 'future_margin_result']
 
 BATCH_SIZE = 100 # Across all cases
 
@@ -53,7 +55,7 @@ RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %
 PREDICTION_VALUE_NOISE_HIGH = 0.06
 PREDICTION_VALUE_NOISE_LOW = -0.01 # Do decrease it sometimes... so that we don't massively inflate value of actions
 # Don't boost aggressive actions so much...
-AGGRESSIVE_ACTION_NOISE_FACTOR = 0.5 
+AGGRESSIVE_ACTION_NOISE_FACTOR = 0.5
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
@@ -93,6 +95,7 @@ class TripleDrawAIPlayer():
         self.output_layer = None 
         self.bets_output_layer = None
         self.use_learning_action_model = False # should we use the trained model, to make betting decisions?
+        self.old_bets_output_model = False # "old" model used for NIPS... should be set from the outside
         self.is_human = False
 
         # Current 0-1000 value, based on cards held, and approximation of value from draw model.
@@ -108,7 +111,12 @@ class TripleDrawAIPlayer():
         if self.is_human:
             return 'man'
         elif self.use_learning_action_model and self.bets_output_layer:
-            return 'CNN'
+            # Backward-compatibility hack, to allow support for "old" model used for NIPS paper.
+            # NOTE: Will be deprecated...
+            if self.old_bets_output_model:
+                return 'CNN'
+            else:
+                return 'CNN_2'
         else:
             return 'sim'
 
@@ -471,6 +479,11 @@ class TripleDrawAIPlayer():
 
 # Over-writes bet & draw selections decision, with human prompt
 class TripleDrawHumanPlayer(TripleDrawAIPlayer):
+    # Make sure that automatically know that agent is human!
+    def __init__(self):
+        TripleDrawAIPlayer.__init__(self)
+        self.is_human = True
+
     def choose_action(self, actions, round, bets_this_round = 0, 
                       has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0):
         print('Choosing among actions %s for round %s' % ([actionName[action] for action in actions], round))
@@ -639,7 +652,8 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
 
 # Play a bunch of hands.
 # For now... just rush toward full games, and skip details, or fill in with hacks.
-def play(sample_size, output_file_name=None, draw_model_filename=None, bets_model_filename=None):
+def play(sample_size, output_file_name=None, draw_model_filename=None, bets_model_filename=None, 
+         old_bets_model_filename=None, human_player=None):
     # Compute hand values, or compare hands.
     cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
 
@@ -708,14 +722,34 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     else:
         print('No *bets* model provided or loaded. Expect error if model required. %s', bets_model_filename)
 
+    # Lastly, if supplied "old" bets layer supplied... then load it as well.
+    old_bets_output_layer = None
+    if old_bets_model_filename and os.path.isfile(old_bets_model_filename):
+        print('\nExisting *old bets* model in file %s. Attempt to load it!\n' % old_bets_model_filename)
+        old_bets_all_param_values_from_file = np.load(old_bets_model_filename)
+
+        # Size must match exactly!
+        old_bets_output_layer = build_model(
+            HAND_TO_MATRIX_PAD_SIZE, 
+            HAND_TO_MATRIX_PAD_SIZE,
+            32,
+        )
+        print('filling model with shape %s, with %d params' % (str(old_bets_output_layer.get_output_shape()), len(old_bets_all_param_values_from_file)))
+        lasagne.layers.set_all_param_values(old_bets_output_layer, old_bets_all_param_values_from_file)
+        predict_model(output_layer=old_bets_output_layer, test_batch=test_batch)
+        print('Cases again %s' % str(test_cases))
+        print('Creating player, based on this pickled *bets* model...')
+    else:
+        print('No *old bets* model provided or loaded. Expect error if model required. %s', old_bets_model_filename)
+
     # We initialize deck, and dealer, every round. But players kept constant, and reset for each trial.
     # NOTE: This can, and will change, if we do repetative simulation, etc.
     player_one = TripleDrawAIPlayer()
     player_two = TripleDrawAIPlayer()
 
     # Optionally, compete against human opponent.
-    player_two = TripleDrawHumanPlayer()
-    player_two.is_human = True
+    if human_player:
+        player_two = TripleDrawHumanPlayer()
 
     # For easy looking of 'is_human', etc
     player_one.opponent = player_two
@@ -730,7 +764,12 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     player_two.output_layer = output_layer
     player_two.bets_output_layer = bets_output_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
-    #player_two.use_learning_action_model = True
+    player_two.use_learning_action_model = True
+
+    # Hack... if we want to supply "old" model, for new CNN vs old CNN. 
+    if (not human_player) and old_bets_output_layer:
+        player_two.bets_output_layer = old_bets_output_layer
+        player_two.old_bets_output_model = True
 
     # Run a bunch of individual hands.
     # Hack: Player one is always on the button...
@@ -782,6 +821,16 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     print('completed %d rounds of heads up play' % round)
     sys.stdout.flush()
 
+
+print('parsing command line args %s' % sys.argv)
+parser = argparse.ArgumentParser(description='Play heads-up triple draw against a convolutional network. Or see two networks battle it out.')
+parser.add_argument('-draw_model', '--draw_model', required=True, help='neural net model for draws, or simulate betting if no bet model') # draws, from 32-length array
+parser.add_argument('-CNN_model', '--CNN_model', default=None, help='neural net model for betting') # Optional CNN model. If not supplied, uses draw model to "sim" decent play
+parser.add_argument('-output', '--output', help='output CSV') # CSV output file, in append mode.
+parser.add_argument('--human_player', action='store_true', help='pass for p2 = human player') # Declare if we want a human competitor? (as player_2)
+parser.add_argument('-CNN_old_model', '--CNN_old_model', default=None, help='pass for p2 = old model (or second model)') # useful, if we want to test two CNN models against each other. Give old model to player_2
+args = parser.parse_args()
+
 if __name__ == '__main__':
     samples = 5000 # number of hands to run
     output_file_name = 'triple_draw_events_%d.csv' % samples
@@ -790,6 +839,19 @@ if __name__ == '__main__':
     # TODO: set via command line flagz
     draw_model_filename = None # how to draw, given cards, numDraws (also outputs hand value estimate)
     bets_model_filename = None # what is the value of bet, raise, check, call, fold in this instance?
+    old_bets_model_filename = None # use "old" model if we want to compare CNN vs CNN
+    human_player = False # do we want one player to be human?
+
+    # Now fill in these values from command line parameters...
+    draw_model_filename = args.draw_model
+    bets_model_filename = args.CNN_model
+    old_bets_model_filename = args.CNN_old_model
+    if args.output:
+        output_file_name = args.output
+    if args.human_player:
+        human_player = True
+
+    """
     if len(sys.argv) >= 2:
         draw_model_filename = sys.argv[1]
         
@@ -798,7 +860,11 @@ if __name__ == '__main__':
 
     if len(sys.argv) >= 4:
         output_file_name = sys.argv[3]
+        """
+
+    
 
     # TODO: Take num samples from command line.
     play(sample_size=samples, output_file_name=output_file_name,
-         draw_model_filename=draw_model_filename, bets_model_filename=bets_model_filename)
+         draw_model_filename=draw_model_filename, bets_model_filename=bets_model_filename, 
+         old_bets_model_filename=old_bets_model_filename, human_player=human_player)

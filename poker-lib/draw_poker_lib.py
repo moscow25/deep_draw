@@ -141,6 +141,20 @@ class PokerAction:
         self.total_bet = final_bet
         self.margin_bet = margin_bet
         self.margin_result = margin_result
+
+        # Try to break up margin result (rewards) into 'current' and 'future' values.
+        # 'current' includes pot before the bet, and this current bet.
+        # 'future' includes all future bets won or lost.
+        # NOTE: Does not properly support chops, split pots, etc. Assumes that we won the pot, lost the pot, or folded.
+        if margin_result == 0.0:
+            self.current_margin_result = 0
+            self.future_margin_result = 0
+        elif margin_result > 0:
+            self.current_margin_result = self.pot_size
+            self.future_margin_result = margin_result - self.current_margin_result
+        else:
+            self.current_margin_result = -1 * self.bet_size
+            self.future_margin_result = margin_result - self.current_margin_result
         
     # Consise summary, of the action taken.
     def __str__(self):
@@ -186,8 +200,12 @@ class PokerAction:
             output_map['result'] = self.result
             output_map['margin_bet'] = self.margin_bet
             output_map['margin_result'] = self.margin_result
+            
+            # Break up into 'current' and 'future' results... (to apply discount later, if we like)
+            output_map['current_margin_result'] = self.current_margin_result
+            output_map['future_margin_result'] = self.future_margin_result
         
-        # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result']
+        # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result', 'current_margin_result', 'future_margin_result']
         output_row = VectorFromKeysAndSparseMap(keys=header_map, sparse_data_map=output_map, default_value = '')
         return output_row
 
@@ -571,7 +589,8 @@ class TripleDrawDealer():
                                     actions_this_round = [],
                                     actions_full_hand = self.hand_history,
                                     value = self.player_blind.heuristic_value,
-                                    bet_this_hand = self.player_blind.bet_this_hand)
+                                    bet_this_hand = self.player_blind.bet_this_hand,
+                                    bet_model = self.player_blind.player_tag())
             self.hand_history.append(draw_action)
             draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
                                      hand_before = self.player_button.draw_hand.dealt_cards, 
@@ -583,7 +602,8 @@ class TripleDrawDealer():
                                     actions_this_round = [],
                                     actions_full_hand = self.hand_history,
                                     value = self.player_button.heuristic_value,
-                                    bet_this_hand = self.player_button.bet_this_hand)
+                                    bet_this_hand = self.player_button.bet_this_hand,
+                                    bet_model = self.player_button.player_tag())
             self.hand_history.append(draw_action)
 
         # TODO: Switch to pre-draw & evaluate heuristics in a function?
@@ -638,7 +658,8 @@ class TripleDrawDealer():
                                     actions_this_round = [],
                                     actions_full_hand = self.hand_history,
                                     value = self.player_blind.heuristic_value,
-                                    bet_this_hand = self.player_blind.bet_this_hand)
+                                    bet_this_hand = self.player_blind.bet_this_hand,
+                                    bet_model = self.player_blind.player_tag())
             self.hand_history.append(draw_action)
             draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
                                      hand_before = self.player_button.draw_hand.dealt_cards, 
@@ -650,7 +671,8 @@ class TripleDrawDealer():
                                     actions_this_round = [],
                                     actions_full_hand = self.hand_history,
                                     value = self.player_button.heuristic_value,
-                                    bet_this_hand = self.player_button.bet_this_hand)
+                                    bet_this_hand = self.player_button.bet_this_hand,
+                                    bet_model = self.player_button.player_tag())
             self.hand_history.append(draw_action)
 
         # TODO: Switch to pre-draw & evaluate heuristics in a function?
@@ -705,7 +727,8 @@ class TripleDrawDealer():
                                     actions_this_round = [],
                                     actions_full_hand = self.hand_history,
                                     value = self.player_blind.heuristic_value,
-                                    bet_this_hand = self.player_blind.bet_this_hand)
+                                    bet_this_hand = self.player_blind.bet_this_hand,
+                                    bet_model = self.player_blind.player_tag())
             self.hand_history.append(draw_action)
             draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
                                      hand_before = self.player_button.draw_hand.dealt_cards, 
@@ -717,7 +740,8 @@ class TripleDrawDealer():
                                     actions_this_round = [],
                                     actions_full_hand = self.hand_history,
                                     value = self.player_button.heuristic_value,
-                                    bet_this_hand = self.player_button.bet_this_hand)
+                                    bet_this_hand = self.player_button.bet_this_hand,
+                                    bet_model = self.player_button.player_tag())
             self.hand_history.append(draw_action)
 
         # NOTE: Do *not* copy hands for final round of betting. It screws up "showdown" evaluation and debug. Evaluate on "final_hand" instead.
