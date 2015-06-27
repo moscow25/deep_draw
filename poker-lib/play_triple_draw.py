@@ -851,19 +851,6 @@ if __name__ == '__main__':
     if args.human_player:
         human_player = True
 
-    """
-    if len(sys.argv) >= 2:
-        draw_model_filename = sys.argv[1]
-        
-    if len(sys.argv) >= 3:
-        bets_model_filename = sys.argv[2]
-
-    if len(sys.argv) >= 4:
-        output_file_name = sys.argv[3]
-        """
-
-    
-
     # TODO: Take num samples from command line.
     play(sample_size=samples, output_file_name=output_file_name,
          draw_model_filename=draw_model_filename, bets_model_filename=bets_model_filename, 

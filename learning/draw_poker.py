@@ -259,6 +259,46 @@ def pot_to_array(pot_size, pad_to_fit = PAD_INPUT):
     pot_size_card = hand_to_matrix(pot_to_cards, pad_to_fit=pad_to_fit)
     return pot_size_card
 
+# Return all legal actions (or the flipside) for given heads-up context
+def legal_actions_context(num_draws, position, bets_string, reverse = False):
+    num_bets = 0
+    for c in bets_string:
+        if c == '1':
+            num_bets += 1
+    # special cases for first round... (because of blinds)
+    #print([num_draws, position, bets_string, reverse])
+    if num_draws == 3:
+        #print('adding implied bet for first round action')
+        num_bets += 1
+
+    legal_actions = set([])
+    if num_bets == 0:
+        assert(num_draws < 3) # No such thing as zero bets on first round of actions
+        legal_actions.add(BET_CATEGORY)
+        legal_actions.add(CHECK_CATEGORY)
+    elif num_draws == 3 and num_bets == 1:
+        # Special case, for SB and BB and no raise yet...
+        if position:
+            #print('--> first to act, in position, preflop')
+            legal_actions.add(RAISE_CATEGORY)
+            legal_actions.add(CALL_CATEGORY)
+            legal_actions.add(FOLD_CATEGORY)
+        else:
+            #print('--> check or raise, in BB, preflop')
+            legal_actions.add(RAISE_CATEGORY)
+            legal_actions.add(CHECK_CATEGORY)
+    elif num_bets < 4:
+        legal_actions.add(RAISE_CATEGORY)
+        legal_actions.add(CALL_CATEGORY)
+        legal_actions.add(FOLD_CATEGORY)
+    else:
+        legal_actions.add(CALL_CATEGORY)
+        legal_actions.add(FOLD_CATEGORY)
+
+    if reverse:
+        return (ALL_ACTION_CATEGORY_SET - legal_actions)
+    else:
+        return legal_actions
 
 # a hack, since we aren't able to implement liner loss in Theano...
 # To remove, or reduce problems with really big values... map values above 2.0 points to sqrt(remainder)
@@ -391,12 +431,14 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     # Include this context output... or all xO, depending on what's asked
     if not CONTEXT_ALL_ZERO:
         # Along with xCards and xNumDraws, also encode...
+        num_draws = int(data_array[csv_key_map['draws_left']]) # for completeness...
         # xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept
         position = int(data_array[csv_key_map['position']]) # binary
         pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
         bets_string = data_array[csv_key_map['actions_this_round']] # items like '0111' (5 max)
         cards_kept = int(data_array[csv_key_map['num_cards_kept']]) # 0-5
         opponent_cards_kept = int(data_array[csv_key_map['num_opponent_kept']]) # 0-5
+        #print('Context: %s' % [num_draws, position, pot_size, bets_string, cards_kept, opponent_cards_kept])
 
         hand_context_input = hand_input_from_context(position=position, pot_size=pot_size, bets_string=bets_string,
                                                      cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
@@ -426,20 +468,39 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     # Which place in the 32-vector array does this action map to?
     output_category = category_from_event_action(action_taken)
 
+    # In parallel, encode the values that we observed, to train on.
+    output_mask_classes = np.zeros(32)
+    output_array = np.zeros(32)
+
+    # Encode large negative value for illegal actions. Helps with debug, and action model
+    illegal_actions = legal_actions_context(num_draws, position, bets_string, reverse = True)
+    #print('illegal actions for context: %s' % illegal_actions)
+    for action in illegal_actions:
+        output_mask_classes[action] = 1.0
+
     # Our results... is an empty 32-vector, with only action's value set
     action_marginal_value = adjust_float_value(float(data_array[csv_key_map['margin_result']]), mode=adjust_floats)
-    output_array = np.zeros(32)
     output_array[output_category] = action_marginal_value
+    output_mask_classes[output_category] = 1.0
 
     # Also, we need to code FOLD --> 0.0. Why? This helps with calibration. 
-    fold_marginal_value = adjust_float_value(0.0, mode=adjust_floats)
-    output_array[FOLD_CATEGORY] = fold_marginal_value
+    # [only if fold is allowed!]
+    if not(FOLD_CATEGORY in illegal_actions):
+        fold_marginal_value = adjust_float_value(0.0, mode=adjust_floats)
+        output_array[FOLD_CATEGORY] = fold_marginal_value
+        output_mask_classes[FOLD_CATEGORY] = 1.0
+
+    # print('output mask: %s' % output_mask_classes)
+
+    # Optionally, encode moves that can be implied.
+    # TODO: Encode river call value (value is result of hand). [Need opponent hand...]
+    # TODO: Encode river check/call, if we bet in actual hand (assume that better hand will bet, worse hand will check)
 
     # Do we return just the hand, or also 17 "bits" of context?
     if include_hand_context:
-        return (full_input, output_category, output_array)
+        return (full_input, output_category, output_array, output_mask_classes)
     else:
-        return (cards_input, output_category, output_array)
+        return (cards_input, output_category, output_array, output_mask_classes)
     
 # Read CSV lines, create giant numpy arrays of the input & output values.
 def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True, keep_all_data=False, format='video', include_num_draws = False, include_full_hand = False, sample_by_hold_value = SAMPLE_BY_HOLD_VALUE, include_hand_context = False):
@@ -469,7 +530,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     y_count_by_bucket = [0 for i in range(32)] 
     for line in csv_reader:
         lines += 1
-        if lines % 10000 == 0:
+        if lines % 5000 == 0:
             print('Read %d lines' % lines)
 
         # Read the CSV key, so we look for columns in the data, not fixed positions.
@@ -487,7 +548,9 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # For less confusion, if input data is "events" ie bets, checks, etc... 
                     # Data gets zipped into the same training format, trained with same shape, but just initialize it differently
                     # (re-use sub functions for encoding a hand, etc, whereever possible)
-                    hand_input, output_class, output_array = read_poker_event_line(line, csv_key_map, adjust_floats = format, include_hand_context = include_hand_context)
+                    hand_input, output_class, output_array, output_mask_classes = read_poker_event_line(line, csv_key_map, adjust_floats = format, include_hand_context = include_hand_context)
+
+                    #print('processed line: %s' % line)
 
                     # Get rid of input shuffling. At least for now
                     hand_inputs_all = [hand_input]
@@ -495,7 +558,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('unknown input format: %s' % format)
                     sys.exit(-3)
             
-            # except (IndexError): # Fewer errors, for debugging
+            #except (IndexError, AssertionError, TypeError): # Fewer errors, for debugging
             except (TypeError, IndexError, ValueError, KeyError, AssertionError): # Any reading error
                 #print('\nskipping malformed input line:\n|%s|\n' % line)
                 continue
@@ -533,15 +596,17 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # TODO: Sample differently by "sim", "man", "cnn" actors...
                     sample_rate = SAMPLE_RATE_DEUCE_EVENTS
                     if random.random() > sample_rate:
+                        #print('\nskipping form sample %s\n' % sample_rate)
                         continue
 
                 # We can also add output "mask" for which of the "output_array" values matter.
                 # As default, for testing, etc, try applying mask for "output_class" == 1
-                output_mask = np.zeros((len(output_array)))
-                output_mask[output_class] = 1.0 
-                # For events, we also encode that fold == 0 value. Let's hope this helps sparse training.
-                if format == 'deuce_events':
-                    output_mask[FOLD_CATEGORY] = 1.0
+                # NOTE: For deuce events, we can also encode other know values (call on river,etc), as well as to code in illegal actions.
+                if format == 'deuce_events' and len(output_mask_classes) > 0:
+                    output_mask = output_mask_classes
+                else:
+                    output_mask = np.zeros(32)
+                    output_mask[output_class] = 1.0
                 
                 if (hands % 5000) == 1 and hands != last_hands_print:
                     print('\nLoaded %d hands...\n' % hands)
@@ -573,6 +638,8 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print(output_array)
                     print('------------')
                     last_hands_print = hands
+
+                    # time.sleep(5)
 
                 # count class, if item chosen
                 y_count_by_bucket[output_class] += 1
