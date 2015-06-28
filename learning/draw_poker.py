@@ -108,7 +108,7 @@ EVENTS_VALUE_BASELINE = 2.000
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
-SAMPLE_RATE_DEUCE_EVENTS = 0.7 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 1.0 # 0.7 # 1.0 # 0.50 # 0.33
 
 # Use this to train only on results of intelligent players, if different versions available
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_2', 'CNN_3', 'man']) # learn only from better models, or man's actions
@@ -505,7 +505,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     
 # Read CSV lines, create giant numpy arrays of the input & output values.
 def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True, keep_all_data=False, format='video', include_num_draws = False, include_full_hand = False, sample_by_hold_value = SAMPLE_BY_HOLD_VALUE, include_hand_context = False):
-    csv_reader = csv.reader(open(filename, 'rb')) # 'rU')) "line contains NULL byte"
+    csv_reader = csv.reader(open(filename, 'rb'), lineterminator='\n') # 'rU')) "line contains NULL byte"
 
     csv_key = None
     csv_key_map = None
@@ -561,7 +561,8 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             
             #except (IndexError, AssertionError, TypeError): # Fewer errors, for debugging
             except (TypeError, IndexError, ValueError, KeyError, AssertionError): # Any reading error
-                #print('\nskipping malformed input line:\n|%s|\n' % line)
+                if lines % 1000 == 0:
+                    print('\nskipping malformed/unusable input line:\n|%s|\n' % line)
                 continue
 
 
