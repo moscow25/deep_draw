@@ -290,6 +290,51 @@ def build_model(input_width, input_height, output_dim,
 def linear_error(x, t):
     return abs(x - t)
 
+# Hack a more complex error function.
+# A. must return same shape matrix as input...
+# B. but frist 5 rows, straight difference
+# C. next five rows, action*value
+# D. special row = (sum of actions) - 1.0
+# E. special row = (value/action sum)
+
+first_five_vector = np.zeros(32)
+for i in [0,1,2,3,4]: 
+    first_five_vector[i] = 1.0
+first_five_matrix = [first_five_vector for i in xrange(BATCH_SIZE)]
+first_five_mask = np.array(first_five_matrix)
+
+print('first_five_mask:')
+print(first_five_mask)
+
+# Can we at least use outside mask??
+def value_action_error(output_matrix, target_matrix):
+    # Apply mask to values that matter.
+    output_matrix_masked = output_matrix * first_five_mask 
+
+    
+    # Now, use matrix manipulation to tease out the current action vector, and current value vector
+    value_matrix = output_matrix[:,0:5]
+    action_matrix = output_matrix[:,5:10]
+    weighted_value_matrix = value_matrix * action_matrix
+    values_sum_vector = weighted_value_matrix.sum(axis=1) # action-weighted value average for values
+    values_sum_inverse_vector = 1. / (values_sum_vector + 0.001) # minimize this, to maximize average value!
+    probabilities_sum_vector = action_matrix.sum(axis=1) # sum of all probabilities...
+    #for batch_row in xrange(BATCH_SIZE):
+        #simple_error[batch_row][10] = weighted_value_matrix[i][:].sum()
+    
+    # not sure if this is correct, but try it... 
+    #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_vector)
+    values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_inverse_vector)
+    new_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,11], probabilities_sum_vector)
+
+    # Values that can't be controlled... won't be.
+    #simple_error = output_matrix_masked - target_matrix
+    simple_error = new_output_matrix_masked - target_matrix
+
+    return simple_error ** 2
+    #return new_simple_error ** 2
+
+
 # Adjust from the standard create_iter_functions, to deal with z_batch being vector of values.
 def create_iter_functions_full_output(dataset, output_layer,
                                       X_tensor_type=T.tensor4, # T.matrix,
@@ -311,6 +356,15 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     batch_slice = slice(batch_index * batch_size,
                         (batch_index + 1) * batch_size)
+
+    
+    # Also, attempt to multiply the 5 [bet, raise, check, call, fold] values 
+    # by the 5 [bet, raise, check, call, fold] action percentages.
+    # Can we do this with slicing?
+    #vals_batch = T.matrix('vals') # 100x5 matrix of value estimates
+    #actions_batch = T.matrix('actions') # 100x5 matric of value estimates
+
+
 
     # Use categorical_crossentropy objective, if we want to just predict best class, and not class values.
     #objective = lasagne.objectives.Objective(output_layer,
@@ -340,7 +394,10 @@ def create_iter_functions_full_output(dataset, output_layer,
             masked_loss_function = linear_error
         else:
             # Use this, if results correct, or mostly correct, and we need this well reflected.
-            masked_loss_function = lasagne.objectives.mse
+            #masked_loss_function = lasagne.objectives.mse
+
+            # Test this hack...
+            masked_loss_function=value_action_error
 
         objective_mask = lasagne.objectives.MaskedObjective(output_layer, masked_loss_function)
                                                   
@@ -360,6 +417,7 @@ def create_iter_functions_full_output(dataset, output_layer,
         loss_eval = loss_eval_no_mask
     
     # Prediction actually stays the same! Since we still want biggest value in the array... and compare to Y
+    # NOTE: If accuracy really supposed to be first 5... use [:,0:5] below.
     pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
 
@@ -466,10 +524,14 @@ def predict_model(output_layer, test_batch, format = 'deuce'):
         pred = pred_all
     else:
         # Slice it, so only relevant rows are looked at
-        pred = pred_all[:17,:5] # hack: show first 17 examples only
+        pred = pred_all[:17,:10] # pred_all[:17,:5] # hack: show first 17 examples only
 
-    # TODO: For 'deuce_events' format, zero out predictions past our last one.
+    # Print out entire predictions array
+    opt = np.get_printoptions()
+    np.set_printoptions(threshold='nan')
     print('Prediciton: %s' % pred) 
+    # Return options to previous settings...
+    np.set_printoptions(**opt)
 
     # TODO: For "deuce_events" format... show best action inside of events actions only.
 
@@ -477,7 +539,7 @@ def predict_model(output_layer, test_batch, format = 'deuce'):
     softmax_values = pred.eval()
     print(softmax_values)
 
-    pred_max = T.argmax(pred, axis=1)
+    pred_max = T.argmax(pred[:,0:5], axis=1)
 
     print('Maximums %s' % pred_max)
     #print(tp.pprint(pred_max))

@@ -604,6 +604,22 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 # NOTE: For deuce events, we can also encode other know values (call on river,etc), as well as to code in illegal actions.
                 if format == 'deuce_events' and len(output_mask_classes) > 0:
                     output_mask = output_mask_classes
+                    
+                    # HACK: for deuce game, allow computing loss on [5-9] as "action %" on the give bets
+                    # And also 10, 11 as sum of action% and average value...
+                    # TODO: Document, or fix this hack.
+                    output_mask[5] = 1.0
+                    output_mask[6] = 1.0
+                    output_mask[7] = 1.0
+                    output_mask[8] = 1.0
+                    output_mask[9] = 1.0
+                    output_mask[10] = 1.0
+                    output_mask[11] = 1.0
+
+                    # Super hack. Try to increase array sum...
+                    output_array[10] = 0.0 # Choose zero, to maximize the inverse... # 4.0 choose a big number, to maximize values
+                    output_array[11] = 1.0 # Probabilities sum target...
+
                 else:
                     output_mask = np.zeros(32)
                     output_mask[output_class] = 1.0
