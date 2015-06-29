@@ -277,7 +277,8 @@ class TripleDrawAIPlayer():
 
             # Show all the raw returns from training. [0:5] -> values of actions [5:10] -> probabilities recommended
             if debug:
-                print([val - 2.0 for val in bets_vector[:10]])
+                print([val - 2.0 for val in bets_vector[:5]])
+                print([val for val in bets_vector[5:10]])
             value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
             value_predictions.sort(reverse=True)
             

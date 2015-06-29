@@ -28,7 +28,7 @@ DATA_FILENAME = '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot mo
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 60000 # 120000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 100000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
@@ -317,8 +317,8 @@ def value_action_error(output_matrix, target_matrix):
     action_matrix = output_matrix[:,5:10]
     weighted_value_matrix = value_matrix * action_matrix
     values_sum_vector = weighted_value_matrix.sum(axis=1) # action-weighted value average for values
-    values_sum_inverse_vector = 1. / (values_sum_vector + 0.001) # minimize this, to maximize average value!
-    probabilities_sum_vector = action_matrix.sum(axis=1) # sum of all probabilities...
+    values_sum_inverse_vector = 1.0 / (values_sum_vector + 0.001) # minimize this, to maximize average value!
+    probabilities_sum_vector = 0.5 * action_matrix.sum(axis=1) # sum of all probabilities...
     #for batch_row in xrange(BATCH_SIZE):
         #simple_error[batch_row][10] = weighted_value_matrix[i][:].sum()
     

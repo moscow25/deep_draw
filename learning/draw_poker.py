@@ -108,10 +108,10 @@ EVENTS_VALUE_BASELINE = 2.000
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
-SAMPLE_RATE_DEUCE_EVENTS = 1.0 # 0.7 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.6 # 1.0 # 0.7 # 1.0 # 0.50 # 0.33
 
 # Use this to train only on results of intelligent players, if different versions available
-PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_2', 'CNN_3', 'man']) # learn only from better models, or man's actions
+PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN', 'CNN_2', 'CNN_3', 'man']) # learn only from better models, or man's actions
 # set(['CNN', 'CNN_2', 'CNN_3', 'man', 'sim']) # Incude 'sim' and ''?
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
@@ -620,7 +620,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
 
                     # Super hack. Try to increase array sum...
                     output_array[10] = 0.0 # Choose zero, to maximize the inverse... # 4.0 choose a big number, to maximize values
-                    output_array[11] = 1.0 # Probabilities sum target...
+                    output_array[11] = 0.5 # 1.0 # Probabilities sum target...
 
                 else:
                     output_mask = np.zeros(32)
