@@ -528,11 +528,14 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     # TODO: Encode river check/call, if we bet in actual hand (assume that better hand will bet, worse hand will check)
     # NOTE: By far the most important, is to encode "call" for river fold actions... less so, encode "check" where we bet the river.
 
+    # Do no encode unknown values as val == 0.0... that confuses things.
+    """
     # Lastly, fill in default value... for non-illegal, non-fold, and not action actually taken
     # Why? To distinguish between unknown actions centered at 0.0, and known illegal actions centered at -2.0
     for legal_action in legal_actions:
         if output_mask_classes[legal_action] == 0.0:
             output_array[legal_action] = adjust_float_value(0.0, mode=adjust_floats)
+            """
 
     # print('output mask: %s' % output_mask_classes)
 
@@ -649,11 +652,11 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # HACK: for deuce game, allow computing loss on [5-9] as "action %" on the give bets
                     # And also 10, 11 as sum of action% and average value...
                     # TODO: Document, or fix this hack.
-                    output_mask[5] = 1.0
-                    output_mask[6] = 1.0
-                    output_mask[7] = 1.0
-                    output_mask[8] = 1.0
-                    output_mask[9] = 1.0
+                    output_mask[5] = 0.0
+                    output_mask[6] = 0.0
+                    output_mask[7] = 0.0
+                    output_mask[8] = 0.0
+                    output_mask[9] = 0.0
                     output_mask[10] = 1.0
                     output_mask[11] = 1.0
                     output_mask[12] = 1.0

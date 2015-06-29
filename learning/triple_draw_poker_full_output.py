@@ -28,8 +28,8 @@ DATA_FILENAME = '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot mo
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 90000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 5000
+MAX_INPUT_SIZE = 80000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 10000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -92,17 +92,24 @@ def value_action_error(output_matrix, target_matrix):
 
     
     # Now, use matrix manipulation to tease out the current action vector, and current value vector
+    action_matrix = output_matrix[:,5:10] # Always output matrix. It's all we got!
     value_matrix_output = output_matrix[:,0:5] # implied from the current model.
     value_matrix_target = target_matrix[:,0:5] # directly from observation
-
+    # value_matrix = value_matrix_output # Try to learn values from the network. Warning! This creates a gradient, and network will change.
     value_matrix = value_matrix_target # Use real values. And reduce/remove pressure to tweak values, which is bad.
 
-    action_matrix = output_matrix[:,5:10] # Always output matrix. It's all we got!
-    weighted_value_matrix = value_matrix * action_matrix
+    # create a mask, for non-zero values in the observed (values) space
+    value_matrix_mask = T.ceil(0.1 * value_matrix) # Ends up with reasonable (available) values --> 1.0, zero values --> 0.0
+
+    # This is the action-weighted sum of the values. Don't worry, we normalize by action sum.
+    # A mask is needed, so that we ignore the unknown values inherent. 
+    # NOTE: As an alternative... we can take the max of known, and network value. To try this, need to sever connection to network, so gradient isn't distorted.
+    weighted_value_matrix = value_matrix * action_matrix * value_matrix_mask 
 
     # action-weighted value average for values
     # Average value will be ~2.0 [zero-value action]
-    values_sum_vector = weighted_value_matrix.sum(axis=1) / (action_matrix.sum(axis=1) + 0.001) 
+    # We use the mask, so that action-weights on unknown values are ignored. In both the sum, and the average.
+    values_sum_vector = weighted_value_matrix.sum(axis=1) / ((action_matrix * value_matrix_mask).sum(axis=1) + 0.05) 
 
     # minimize this, to maximize average value!
     # Average value will be ~1/3.0 = 0.33 [since normal/worst value of a normal spot is all folds]
@@ -113,13 +120,14 @@ def value_action_error(output_matrix, target_matrix):
     # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
     # Therefore, dampen the value. But also make sure that this matches the target.
     probabilities_sum_vector = 0.05 * action_matrix.sum(axis=1) 
-    probabilities_square_vector = 0.05 * (action_matrix ** 2).sum(axis=1) 
+    #probabilities_square_vector = 0.05 * (action_matrix ** 2).sum(axis=1) 
     
     # not sure if this is correct, but try it... 
     #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_vector)
     values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_inverse_vector)
     probability_sum_output_matrix_masked = T.set_subtensor(values_output_matrix_masked[:,11], probabilities_sum_vector)
-    new_output_matrix_masked = T.set_subtensor(probability_sum_output_matrix_masked[:,12], probabilities_square_vector)
+    new_output_matrix_masked = probability_sum_output_matrix_masked
+    #new_output_matrix_masked = T.set_subtensor(probability_sum_output_matrix_masked[:,12], probabilities_square_vector)
 
     # Values that can't be controlled... won't be.
     #simple_error = output_matrix_masked - target_matrix
