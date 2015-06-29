@@ -101,15 +101,15 @@ def value_action_error(output_matrix, target_matrix):
     values_sum_vector = weighted_value_matrix.sum(axis=1) / (action_matrix.sum(axis=1) + 0.001) 
 
     # minimize this, to maximize average value!
-    # Average value will be ~1/3.0 = 0.66 [since normal/worst value of a normal spot is all folds]
+    # Average value will be ~1/3.0 = 0.33 [since normal/worst value of a normal spot is all folds]
     # Further reduce this, if we want the network to learn it slowly, not change values, etc.
-    values_sum_inverse_vector = 2.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
+    values_sum_inverse_vector = 1.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
 
     # sum of all probabilities...
     # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
     # Therefore, dampen the value. But also make sure that this matches the target.
-    probabilities_sum_vector = 0.10 * action_matrix.sum(axis=1) 
-    probabilities_square_vector = (0.10 ** 2) * (action_matrix ** 2).sum(axis=1) 
+    probabilities_sum_vector = 0.05 * action_matrix.sum(axis=1) 
+    probabilities_square_vector = 0.05 * (action_matrix ** 2).sum(axis=1) 
     
     # not sure if this is correct, but try it... 
     #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_vector)
