@@ -334,7 +334,7 @@ def value_action_error(output_matrix, target_matrix):
     # not sure if this is correct, but try it... 
     #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_vector)
     values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_inverse_vector)
-    new_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,11], probabilities_sum_vector)
+    new_output_matrix_masked = T.set_subtensor(values_output_matrix_masked[:,11], probabilities_sum_vector)
 
     # Values that can't be controlled... won't be.
     #simple_error = output_matrix_masked - target_matrix
