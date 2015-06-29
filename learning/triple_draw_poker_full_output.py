@@ -92,8 +92,12 @@ def value_action_error(output_matrix, target_matrix):
 
     
     # Now, use matrix manipulation to tease out the current action vector, and current value vector
-    value_matrix = output_matrix[:,0:5]
-    action_matrix = output_matrix[:,5:10]
+    value_matrix_output = output_matrix[:,0:5] # implied from the current model.
+    value_matrix_target = target_matrix[:,0:5] # directly from observation
+
+    value_matrix = value_matrix_target # Use real values. And reduce/remove pressure to tweak values, which is bad.
+
+    action_matrix = output_matrix[:,5:10] # Always output matrix. It's all we got!
     weighted_value_matrix = value_matrix * action_matrix
 
     # action-weighted value average for values

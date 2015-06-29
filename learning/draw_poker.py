@@ -107,7 +107,7 @@ TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
 EVENTS_VALUE_BASELINE = 2.000
 
 # Keep the focus on current results (pot, probability of winning this bet, etc)
-DISCOUNT_FUTURE_RESULTS = False
+DISCOUNT_FUTURE_RESULTS = True
 FUTURE_DISCOUNT = 0.9 
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
@@ -479,6 +479,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
 
     # Encode large negative value for illegal actions. Helps with debug, and action model
     illegal_actions = legal_actions_context(num_draws, position, bets_string, reverse = True)
+    legal_actions = legal_actions_context(num_draws, position, bets_string, reverse = False)
     #print('illegal actions for context: %s' % illegal_actions)
     for action in illegal_actions:
         output_mask_classes[action] = 1.0
@@ -522,11 +523,18 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         output_array[FOLD_CATEGORY] = fold_marginal_value
         output_mask_classes[FOLD_CATEGORY] = 1.0
 
-    # print('output mask: %s' % output_mask_classes)
-
     # Optionally, encode moves that can be implied.
     # TODO: Encode river call value (value is result of hand). [Need opponent hand...]
     # TODO: Encode river check/call, if we bet in actual hand (assume that better hand will bet, worse hand will check)
+    # NOTE: By far the most important, is to encode "call" for river fold actions... less so, encode "check" where we bet the river.
+
+    # Lastly, fill in default value... for non-illegal, non-fold, and not action actually taken
+    # Why? To distinguish between unknown actions centered at 0.0, and known illegal actions centered at -2.0
+    for legal_action in legal_actions:
+        if output_mask_classes[legal_action] == 0.0:
+            output_array[legal_action] = adjust_float_value(0.0, mode=adjust_floats)
+
+    # print('output mask: %s' % output_mask_classes)
 
     # Do we return just the hand, or also 17 "bits" of context?
     if include_hand_context:
