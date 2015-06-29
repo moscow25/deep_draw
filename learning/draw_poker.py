@@ -106,12 +106,16 @@ TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
 # Value of a "zero event." Why baseline? Model doesn't really handle negative numbers!
 EVENTS_VALUE_BASELINE = 2.000
 
+# Keep the focus on current results (pot, probability of winning this bet, etc)
+DISCOUNT_FUTURE_RESULTS = True
+FUTURE_DISCOUNT = 0.9 
+
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
-SAMPLE_RATE_DEUCE_EVENTS = 1.0 # 0.7 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.7 # 1.0 # 0.50 # 0.33
 
 # Use this to train only on results of intelligent players, if different versions available
-PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_2', 'CNN_3', 'man']) # learn only from better models, or man's actions
+PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN', 'CNN_2', 'CNN_3', 'man']) # learn only from better models, or man's actions
 # set(['CNN', 'CNN_2', 'CNN_3', 'man', 'sim']) # Incude 'sim' and ''?
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
@@ -479,9 +483,36 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     for action in illegal_actions:
         output_mask_classes[action] = 1.0
 
+    # Now, consider the value of this action.
+    margin_result = float(data_array[csv_key_map['margin_result']])
+    margin_value = margin_result
+
+    # Optionally, we can consider how this action breaks down by current and future rewards.
+    # Why? Current rewards are this pot, and this bet. Future rewards depend on future play.
+    # Use a discount rate to focus on current play
+
+    # NOTE: For more recent data... we can get the current & future rewards directly.
+    if DISCOUNT_FUTURE_RESULTS and FUTURE_DISCOUNT:
+        pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
+        bet_size = float(data_array[csv_key_map['bet_size']]) # 150 - 3000 or so
+        if margin_result == 0.0:
+            current_margin_result = 0
+            future_margin_result = 0
+        elif margin_result > 0:
+            current_margin_result = pot_size
+            future_margin_result = margin_result - current_margin_result
+        else:
+            current_margin_result = -1 * bet_size
+            future_margin_result = margin_result - current_margin_result
+
+        # Discount future results by a (small) factor. Just enough to nudge toward focusing on better-known, current value.
+        margin_value = 1.0 * current_margin_result + FUTURE_DISCOUNT * future_margin_result
+        # print('For discount rate %.2f, margin_result %.2f [%.2f, %.2f] --> %.3f' % 
+        #      (FUTURE_DISCOUNT, margin_result, current_margin_result, future_margin_result, margin_value))
+
     # Our results... is an empty 32-vector, with only action's value set
-    action_marginal_value = adjust_float_value(float(data_array[csv_key_map['margin_result']]), mode=adjust_floats)
-    output_array[output_category] = action_marginal_value
+    action_margin_value = adjust_float_value(margin_value, mode=adjust_floats)
+    output_array[output_category] = action_margin_value
     output_mask_classes[output_category] = 1.0
 
     # Also, we need to code FOLD --> 0.0. Why? This helps with calibration. 
@@ -617,10 +648,12 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     output_mask[9] = 1.0
                     output_mask[10] = 1.0
                     output_mask[11] = 1.0
+                    output_mask[12] = 1.0
 
                     # Super hack. Try to increase array sum...
                     output_array[10] = 0.0 # Choose zero, to maximize the inverse... # 4.0 choose a big number, to maximize values
-                    output_array[11] = 0.05 # 1.0 # Probabilities sum target...
+                    output_array[11] = 0.10 # 1.0 # Probabilities sum target...
+                    output_array[12] = 0.0 # spread the action values around, within reason (huge discount, but should be a factor)
 
                 else:
                     output_mask = np.zeros(32)

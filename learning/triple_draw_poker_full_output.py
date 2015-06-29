@@ -28,7 +28,7 @@ DATA_FILENAME = '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot mo
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 80000 # 120000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 90000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
@@ -65,8 +65,67 @@ DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch 
 # Helps speed up inputs?
 TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
 
-# TODO: Include "empty" bits... so we can get a model started... which can be used as basis for next data?
+# HACK linear error
+def linear_error(x, t):
+    return abs(x - t)
 
+# Hack a more complex error function.
+# A. must return same shape matrix as input...
+# B. but frist 5 rows, straight difference
+# C. next five rows, action*value
+# D. special row = (sum of actions) - 1.0
+# E. special row = (value/action sum)
+
+first_five_vector = np.zeros(32)
+for i in [0,1,2,3,4]: 
+    first_five_vector[i] = 1.0
+first_five_matrix = [first_five_vector for i in xrange(BATCH_SIZE)]
+first_five_mask = np.array(first_five_matrix)
+
+print('first_five_mask:')
+print(first_five_mask)
+
+# Can we at least use outside mask??
+def value_action_error(output_matrix, target_matrix):
+    # Apply mask to values that matter.
+    output_matrix_masked = output_matrix * first_five_mask 
+
+    
+    # Now, use matrix manipulation to tease out the current action vector, and current value vector
+    value_matrix = output_matrix[:,0:5]
+    action_matrix = output_matrix[:,5:10]
+    weighted_value_matrix = value_matrix * action_matrix
+
+    # action-weighted value average for values
+    # Average value will be ~2.0 [zero-value action]
+    values_sum_vector = weighted_value_matrix.sum(axis=1) / (action_matrix.sum(axis=1) + 0.001) 
+
+    # minimize this, to maximize average value!
+    # Average value will be ~1/3.0 = 0.66 [since normal/worst value of a normal spot is all folds]
+    # Further reduce this, if we want the network to learn it slowly, not change values, etc.
+    values_sum_inverse_vector = 2.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
+
+    # sum of all probabilities...
+    # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
+    # Therefore, dampen the value. But also make sure that this matches the target.
+    probabilities_sum_vector = 0.10 * action_matrix.sum(axis=1) 
+    probabilities_square_vector = (0.10 ** 2) * (action_matrix ** 2).sum(axis=1) 
+    
+    # not sure if this is correct, but try it... 
+    #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_vector)
+    values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_inverse_vector)
+    probability_sum_output_matrix_masked = T.set_subtensor(values_output_matrix_masked[:,11], probabilities_sum_vector)
+    new_output_matrix_masked = T.set_subtensor(probability_sum_output_matrix_masked[:,12], probabilities_square_vector)
+
+    # Values that can't be controlled... won't be.
+    #simple_error = output_matrix_masked - target_matrix
+    simple_error = new_output_matrix_masked - target_matrix
+
+    return simple_error ** 2
+    #return new_simple_error ** 2
+
+
+# TODO: Include "empty" bits... so we can get a model started... which can be used as basis for next data?
 def load_data():
     print('About to load up to %d items of data, for training format %s' % (MAX_INPUT_SIZE, TRAINING_FORMAT))
     # Do *not* bias the data, or smooth out big weight values, as we would for video poker.
@@ -285,63 +344,6 @@ def build_model(input_width, input_height, output_dim,
     print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.output_shape)))
 
     return l_out
-
-# HACK linear error
-def linear_error(x, t):
-    return abs(x - t)
-
-# Hack a more complex error function.
-# A. must return same shape matrix as input...
-# B. but frist 5 rows, straight difference
-# C. next five rows, action*value
-# D. special row = (sum of actions) - 1.0
-# E. special row = (value/action sum)
-
-first_five_vector = np.zeros(32)
-for i in [0,1,2,3,4]: 
-    first_five_vector[i] = 1.0
-first_five_matrix = [first_five_vector for i in xrange(BATCH_SIZE)]
-first_five_mask = np.array(first_five_matrix)
-
-print('first_five_mask:')
-print(first_five_mask)
-
-# Can we at least use outside mask??
-def value_action_error(output_matrix, target_matrix):
-    # Apply mask to values that matter.
-    output_matrix_masked = output_matrix * first_five_mask 
-
-    
-    # Now, use matrix manipulation to tease out the current action vector, and current value vector
-    value_matrix = output_matrix[:,0:5]
-    action_matrix = output_matrix[:,5:10]
-    weighted_value_matrix = value_matrix * action_matrix
-
-    # action-weighted value average for values
-    # Average value will be ~2.0 [zero-value action]
-    values_sum_vector = weighted_value_matrix.sum(axis=1) / (action_matrix.sum(axis=1) + 0.001) 
-
-    # minimize this, to maximize average value!
-    # Average value will be ~1/3.0 = 0.33 [since normal/worst value of a normal spot is all folds]
-    # Further reduce this, if we want the network to learn it slowly, not change values, etc.
-    values_sum_inverse_vector = 0.5 * 1.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
-
-    # sum of all probabilities...
-    # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
-    # Therefore, dampen the value. But also make sure that this matches the target.
-    probabilities_sum_vector = 0.05 * action_matrix.sum(axis=1) 
-    
-    # not sure if this is correct, but try it... 
-    #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_vector)
-    values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_inverse_vector)
-    new_output_matrix_masked = T.set_subtensor(values_output_matrix_masked[:,11], probabilities_sum_vector)
-
-    # Values that can't be controlled... won't be.
-    #simple_error = output_matrix_masked - target_matrix
-    simple_error = new_output_matrix_masked - target_matrix
-
-    return simple_error ** 2
-    #return new_simple_error ** 2
 
 
 # Adjust from the standard create_iter_functions, to deal with z_batch being vector of values.
