@@ -28,7 +28,7 @@ DATA_FILENAME = '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot mo
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 100000 # 120000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 80000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
@@ -316,11 +316,20 @@ def value_action_error(output_matrix, target_matrix):
     value_matrix = output_matrix[:,0:5]
     action_matrix = output_matrix[:,5:10]
     weighted_value_matrix = value_matrix * action_matrix
-    values_sum_vector = weighted_value_matrix.sum(axis=1) # action-weighted value average for values
-    values_sum_inverse_vector = 1.0 / (values_sum_vector + 0.001) # minimize this, to maximize average value!
-    probabilities_sum_vector = 0.5 * action_matrix.sum(axis=1) # sum of all probabilities...
-    #for batch_row in xrange(BATCH_SIZE):
-        #simple_error[batch_row][10] = weighted_value_matrix[i][:].sum()
+
+    # action-weighted value average for values
+    # Average value will be ~2.0 [zero-value action]
+    values_sum_vector = weighted_value_matrix.sum(axis=1) / (action_matrix.sum(axis=1) + 0.001) 
+
+    # minimize this, to maximize average value!
+    # Average value will be ~1/2.0 = 0.5 [since normal/worst value of a normal spot is all folds]
+    # Further reduce this, if we want the network to learn it slowly, not change values, etc.
+    values_sum_inverse_vector = 0.5 * 1.0 / (values_sum_vector + 0.001) 
+
+    # sum of all probabilities...
+    # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
+    # Therefore, dampen the value. But also make sure that this matches the target.
+    probabilities_sum_vector = 0.05 * action_matrix.sum(axis=1) 
     
     # not sure if this is correct, but try it... 
     #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_vector)
