@@ -322,9 +322,9 @@ def value_action_error(output_matrix, target_matrix):
     values_sum_vector = weighted_value_matrix.sum(axis=1) / (action_matrix.sum(axis=1) + 0.001) 
 
     # minimize this, to maximize average value!
-    # Average value will be ~1/2.0 = 0.5 [since normal/worst value of a normal spot is all folds]
+    # Average value will be ~1/3.0 = 0.33 [since normal/worst value of a normal spot is all folds]
     # Further reduce this, if we want the network to learn it slowly, not change values, etc.
-    values_sum_inverse_vector = 0.5 * 1.0 / (values_sum_vector + 0.001) 
+    values_sum_inverse_vector = 0.5 * 1.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
 
     # sum of all probabilities...
     # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
