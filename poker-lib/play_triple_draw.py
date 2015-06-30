@@ -637,7 +637,11 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
 def game_round(round, cashier, player_button=None, player_blind=None, csv_writer=None, csv_header_map=None):
     print '\n-- New Round %d --\n' % round
     # Performance suffers... a lot, over time. Can we improve this with garbage collection?
-    if round > 0 and round % 10 == 2:
+    # NOTE: Not really, but doesn't hurt. If you want to improve performance, need to purge the theano-cache
+    # "theano-cache purge" --> on GPU
+    # "theano-cache clear" --> enough on CPU
+    # TODO: How to do this, in-code??
+    if round > 0 and round % 100 == 1:
         now = time.time()
         print('--> wait for manual garbage collection...')
         gc.collect()
