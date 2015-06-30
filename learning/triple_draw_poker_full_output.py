@@ -28,8 +28,8 @@ DATA_FILENAME = '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot mo
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 80000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 10000
+MAX_INPUT_SIZE = 100000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -542,7 +542,8 @@ def create_iter_functions_full_output(dataset, output_layer,
 def predict_model(output_layer, test_batch, format = 'deuce'):
     print('Computing predictions on test_batch: %s %s' % (type(test_batch), test_batch.shape))
     #pred = T.argmax(output_layer.get_output(test_batch, deterministic=True), axis=1)
-    pred_all = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+    #pred_all = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True) # deprecated
+    pred_all = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
     if format != 'deuce_events':
         pred = pred_all
     else:
@@ -621,7 +622,8 @@ def evaluate_single_event(output_layer, event_input):
     print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
 
-    pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+    #pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True) # deprecated...
+    pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
     print('%.2fs to get_output' % (time.time() - now))
     now = time.time()
 
