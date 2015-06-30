@@ -1,4 +1,5 @@
 import sys
+import gc
 import csv
 import logging
 import math
@@ -24,6 +25,15 @@ from triple_draw_poker_full_output import predict_model # outputs result for [BA
 from triple_draw_poker_full_output import evaluate_single_hand # single hand... returns 32-point vector
 from triple_draw_poker_full_output import evaluate_single_event # just give it the 26x17x17 bits... and get a vector back
 # from triple_draw_poker_full_output import evaluate_batch_hands # much faster to evaluate a batch of hands
+
+print('parsing command line args %s' % sys.argv)
+parser = argparse.ArgumentParser(description='Play heads-up triple draw against a convolutional network. Or see two networks battle it out.')
+parser.add_argument('-draw_model', '--draw_model', required=True, help='neural net model for draws, or simulate betting if no bet model') # draws, from 32-length array
+parser.add_argument('-CNN_model', '--CNN_model', default=None, help='neural net model for betting') # Optional CNN model. If not supplied, uses draw model to "sim" decent play
+parser.add_argument('-output', '--output', help='output CSV') # CSV output file, in append mode.
+parser.add_argument('--human_player', action='store_true', help='pass for p2 = human player') # Declare if we want a human competitor? (as player_2)
+parser.add_argument('-CNN_old_model', '--CNN_old_model', default=None, help='pass for p2 = old model (or second model)') # useful, if we want to test two CNN models against each other. Give old model to player_2
+args = parser.parse_args()
 
 """
 Author: Nikolai Yakovenko
@@ -53,9 +63,16 @@ RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %
 # NOTE: Does *not* apply to folds. Don't tweak thos.
 # NOTE: Lets us break out of a rut of similar actions, etc.
 PREDICTION_VALUE_NOISE_HIGH = 0.06
-PREDICTION_VALUE_NOISE_LOW = -0.01 # Do decrease it sometimes... so that we don't massively inflate value of actions
-# Don't boost aggressive actions so much...
-AGGRESSIVE_ACTION_NOISE_FACTOR = 0.5
+PREDICTION_VALUE_NOISE_LOW = -0.04 # Do decrease it sometimes... so that we don't massively inflate value of actions
+
+# Alternatively, use a more sophisticated "tail distribution" from Gumbel
+# http://docs.scipy.org/doc/numpy/reference/generated/numpy.random.gumbel.html
+# mean = mu + 0.58821 * beta (centered around mu). So match above
+PREDICTION_VALUE_NOISE_BETA = 0.06 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
+PREDICTION_VALUE_NOISE_MU = (PREDICTION_VALUE_NOISE_HIGH + PREDICTION_VALUE_NOISE_LOW)/2.0 - 0.58821 * PREDICTION_VALUE_NOISE_BETA
+
+# Don't boost aggressive actions so much... we want to see more calls, check, especially checks, attempted in spots that might be close.
+AGGRESSIVE_ACTION_NOISE_FACTOR = 0.7 # 0.5
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
@@ -114,9 +131,9 @@ class TripleDrawAIPlayer():
             # Backward-compatibility hack, to allow support for "old" model used for NIPS paper.
             # NOTE: Will be deprecated...
             if self.old_bets_output_model:
-                return 'CNN_2'
-            else:
                 return 'CNN_3'
+            else:
+                return 'CNN_4'
         else:
             return 'sim'
 
@@ -275,8 +292,11 @@ class TripleDrawAIPlayer():
 
             bets_vector = evaluate_single_event(self.bets_output_layer, full_input)
 
+            # Show all the raw returns from training. [0:5] -> values of actions [5:10] -> probabilities recommended
+            # NOTE: Actions are exploratory, and wrong. But see how it goes...
             if debug:
-                print([val - 2.0 for val in bets_vector[:5]])
+                print('vals\t%s' % ([val - 2.0 for val in bets_vector[:5]]))
+                print('acts\t%s' % ([val for val in bets_vector[5:10]]))
             value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
             value_predictions.sort(reverse=True)
             
@@ -297,7 +317,12 @@ class TripleDrawAIPlayer():
                     if action == FOLD_HAND:
                         noise = 0.0
                     else:
-                        noise = np.random.uniform(PREDICTION_VALUE_NOISE_LOW,PREDICTION_VALUE_NOISE_HIGH)
+                        # Naive approach: random value between x and y
+                        # noise = np.random.uniform(PREDICTION_VALUE_NOISE_LOW,PREDICTION_VALUE_NOISE_HIGH)
+
+                        # Better, "tail" approach is the Gumbel distribution
+                        # http://docs.scipy.org/doc/numpy/reference/generated/numpy.random.gumbel.html
+                        noise = np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)
 
                     # And boost bet/raise somewhat less than the other actions.
                     if action in ALL_BETS_SET:
@@ -611,6 +636,13 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
 # players -- acts directly on a poker hand. Makes draw and betting decisions... when propted by the dealer
 def game_round(round, cashier, player_button=None, player_blind=None, csv_writer=None, csv_header_map=None):
     print '\n-- New Round %d --\n' % round
+    # Performance suffers... a lot, over time. Can we improve this with garbage collection?
+    if round > 0 and round % 10 == 2:
+        now = time.time()
+        print('--> wait for manual garbage collection...')
+        gc.collect()
+        print ('--> gc %d took %.1f seconds...\n' % (round, time.time() - now))
+
     deck = PokerDeck(shuffle=True)
 
     dealer = TripleDrawDealer(deck=deck, player_button=player_button, player_blind=player_blind)
@@ -820,16 +852,6 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
 
     print('completed %d rounds of heads up play' % round)
     sys.stdout.flush()
-
-
-print('parsing command line args %s' % sys.argv)
-parser = argparse.ArgumentParser(description='Play heads-up triple draw against a convolutional network. Or see two networks battle it out.')
-parser.add_argument('-draw_model', '--draw_model', required=True, help='neural net model for draws, or simulate betting if no bet model') # draws, from 32-length array
-parser.add_argument('-CNN_model', '--CNN_model', default=None, help='neural net model for betting') # Optional CNN model. If not supplied, uses draw model to "sim" decent play
-parser.add_argument('-output', '--output', help='output CSV') # CSV output file, in append mode.
-parser.add_argument('--human_player', action='store_true', help='pass for p2 = human player') # Declare if we want a human competitor? (as player_2)
-parser.add_argument('-CNN_old_model', '--CNN_old_model', default=None, help='pass for p2 = old model (or second model)') # useful, if we want to test two CNN models against each other. Give old model to player_2
-args = parser.parse_args()
 
 if __name__ == '__main__':
     samples = 5000 # number of hands to run
