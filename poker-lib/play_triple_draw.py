@@ -53,9 +53,16 @@ RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %
 # NOTE: Does *not* apply to folds. Don't tweak thos.
 # NOTE: Lets us break out of a rut of similar actions, etc.
 PREDICTION_VALUE_NOISE_HIGH = 0.06
-PREDICTION_VALUE_NOISE_LOW = -0.01 # Do decrease it sometimes... so that we don't massively inflate value of actions
+PREDICTION_VALUE_NOISE_LOW = -0.03 # Do decrease it sometimes... so that we don't massively inflate value of actions
+
+# Alternatively, use a more sophisticated "tail distribution" from Gumbel
+# http://docs.scipy.org/doc/numpy/reference/generated/numpy.random.gumbel.html
+# mean = mu + 0.58821 * beta (centered around mu). So match above
+PREDICTION_VALUE_NOISE_BETA = 0.05 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
+PREDICTION_VALUE_NOISE_MU = (PREDICTION_VALUE_NOISE_HIGH + PREDICTION_VALUE_NOISE_LOW)/2.0 - 0.58821 * PREDICTION_VALUE_NOISE_BETA
+
 # Don't boost aggressive actions so much...
-AGGRESSIVE_ACTION_NOISE_FACTOR = 0.5
+AGGRESSIVE_ACTION_NOISE_FACTOR = 1.0 # 0.5
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
@@ -114,9 +121,9 @@ class TripleDrawAIPlayer():
             # Backward-compatibility hack, to allow support for "old" model used for NIPS paper.
             # NOTE: Will be deprecated...
             if self.old_bets_output_model:
-                return 'CNN_2'
-            else:
                 return 'CNN_3'
+            else:
+                return 'CNN_4'
         else:
             return 'sim'
 
@@ -276,9 +283,10 @@ class TripleDrawAIPlayer():
             bets_vector = evaluate_single_event(self.bets_output_layer, full_input)
 
             # Show all the raw returns from training. [0:5] -> values of actions [5:10] -> probabilities recommended
+            # NOTE: Actions are exploratory, and wrong. But see how it goes...
             if debug:
-                print([val - 2.0 for val in bets_vector[:5]])
-                print([val for val in bets_vector[5:10]])
+                print('vals\t%s' % ([val - 2.0 for val in bets_vector[:5]]))
+                print('acts\t%s' % ([val for val in bets_vector[5:10]]))
             value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
             value_predictions.sort(reverse=True)
             
@@ -299,7 +307,12 @@ class TripleDrawAIPlayer():
                     if action == FOLD_HAND:
                         noise = 0.0
                     else:
-                        noise = np.random.uniform(PREDICTION_VALUE_NOISE_LOW,PREDICTION_VALUE_NOISE_HIGH)
+                        # Naive approach: random value between x and y
+                        # noise = np.random.uniform(PREDICTION_VALUE_NOISE_LOW,PREDICTION_VALUE_NOISE_HIGH)
+
+                        # Better, "tail" approach is the Gumbel distribution
+                        # http://docs.scipy.org/doc/numpy/reference/generated/numpy.random.gumbel.html
+                        noise = np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)
 
                     # And boost bet/raise somewhat less than the other actions.
                     if action in ALL_BETS_SET:
