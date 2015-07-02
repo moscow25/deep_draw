@@ -107,12 +107,12 @@ TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
 EVENTS_VALUE_BASELINE = 2.000
 
 # Keep the focus on current results (pot, probability of winning this bet, etc)
-DISCOUNT_FUTURE_RESULTS = False # Just confuses things. Keep it 100
+DISCOUNT_FUTURE_RESULTS = True # We want to encourage going after the current pot...
 FUTURE_DISCOUNT = 0.9 
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
-SAMPLE_RATE_DEUCE_EVENTS = 0.7 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.6 # 1.0 # 0.50 # 0.33
 
 # Use this to train only on results of intelligent players, if different versions available
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_2', 'CNN_3', 'CNN_4', 'man']) # learn only from better models, or man's actions
