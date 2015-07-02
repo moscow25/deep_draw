@@ -107,7 +107,7 @@ TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
 EVENTS_VALUE_BASELINE = 2.000
 
 # Keep the focus on current results (pot, probability of winning this bet, etc)
-DISCOUNT_FUTURE_RESULTS = True
+DISCOUNT_FUTURE_RESULTS = False # Just confuses things. Keep it 100
 FUTURE_DISCOUNT = 0.9 
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.

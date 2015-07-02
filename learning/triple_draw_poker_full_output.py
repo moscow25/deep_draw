@@ -594,7 +594,7 @@ def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUD
     print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
 
-    pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True)
+    pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
     print('%.2fs to get_output' % (time.time() - now))
     now = time.time()
 
