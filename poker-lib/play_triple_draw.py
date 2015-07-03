@@ -131,9 +131,9 @@ class TripleDrawAIPlayer():
             # Backward-compatibility hack, to allow support for "old" model used for NIPS paper.
             # NOTE: Will be deprecated...
             if self.old_bets_output_model:
-                return 'CNN_5'
-            else:
                 return 'CNN_4'
+            else:
+                return 'CNN_5'
         else:
             return 'sim'
 
