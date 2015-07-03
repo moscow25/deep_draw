@@ -551,7 +551,7 @@ class TripleDrawDealer():
                                                                                              self.player_button.name,
                                                                                              self.player_button.bet_this_hand))
 
-        print(self.hand_history)
+        # print(self.hand_history)
 
         # Now, query the CNN, to find out current value of each hand.
         # NOTE: We re-run the computation a minute later for "best draw..." but that's fine. Redundancy is ok.
@@ -565,7 +565,7 @@ class TripleDrawDealer():
         # B. Player folds (thus concedes the hand)
         self.play_betting_round(round = PRE_DRAW_BET_ROUND)
 
-        print(self.hand_history)
+        # print(self.hand_history)
 
         if self.player_blind.live and self.player_button.live:
             print('\n-- 1st draw --\n')
@@ -632,7 +632,7 @@ class TripleDrawDealer():
 
         self.play_betting_round(round = DRAW_1_BET_ROUND)
         
-        print(self.hand_history)
+        # print(self.hand_history)
 
         if self.player_blind.live and self.player_button.live:
             print('\n-- 2nd draw --\n')
@@ -701,7 +701,7 @@ class TripleDrawDealer():
 
         self.play_betting_round(round = DRAW_2_BET_ROUND)
         
-        print(self.hand_history)
+        # print(self.hand_history)
 
         if self.player_blind.live and self.player_button.live:
             print('\n-- 3rd draw --\n')
@@ -773,7 +773,7 @@ class TripleDrawDealer():
 
         self.play_betting_round(round = DRAW_3_BET_ROUND)
         
-        print(self.hand_history)
+        # print(self.hand_history)
 
         print('Made it all the way, with betting on the river')
 

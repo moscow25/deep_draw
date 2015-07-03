@@ -591,11 +591,11 @@ def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUD
                                                    include_full_hand = INCLUDE_FULL_HAND,
                                                    include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], TRAINING_INPUT_TYPE)
 
-    print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
+    # print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
 
     pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
-    print('%.2fs to get_output' % (time.time() - now))
+    # print('%.2fs to get_output' % (time.time() - now))
     now = time.time()
 
     #print('Prediciton: %s' % pred)
@@ -619,12 +619,12 @@ def evaluate_single_hand(output_layer, hand_string_dealt, num_draws = 1,
 def evaluate_single_event(output_layer, event_input):
     now = time.time()
     test_batch = np.array([event_input for i in range(BATCH_SIZE)], TRAINING_INPUT_TYPE)
-    print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
+    # print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
 
     #pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True) # deprecated...
     pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
-    print('%.2fs to get_output' % (time.time() - now))
+    # print('%.2fs to get_output' % (time.time() - now))
     now = time.time()
 
     softmax_values = pred.eval()

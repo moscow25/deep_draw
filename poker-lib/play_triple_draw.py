@@ -32,7 +32,8 @@ parser.add_argument('-draw_model', '--draw_model', required=True, help='neural n
 parser.add_argument('-CNN_model', '--CNN_model', default=None, help='neural net model for betting') # Optional CNN model. If not supplied, uses draw model to "sim" decent play
 parser.add_argument('-output', '--output', help='output CSV') # CSV output file, in append mode.
 parser.add_argument('--human_player', action='store_true', help='pass for p2 = human player') # Declare if we want a human competitor? (as player_2)
-parser.add_argument('-CNN_old_model', '--CNN_old_model', default=None, help='pass for p2 = old model (or second model)') # useful, if we want to test two CNN models against each other. Give old model to player_2
+parser.add_argument('-CNN_old_model', '--CNN_old_model', default=None, help='pass for p2 = old model (or second model)') # useful, if we want to test two CNN models against each other.
+parser.add_argument('-CNN_other_old_model', '--CNN_other_old_model', default=None, help='pass for p2 = other old model (or 3rd model)') # and a third model, 
 args = parser.parse_args()
 
 """
@@ -72,11 +73,14 @@ PREDICTION_VALUE_NOISE_BETA = 0.06 # vast majority of change within +- 0.05 valu
 PREDICTION_VALUE_NOISE_MU = (PREDICTION_VALUE_NOISE_HIGH + PREDICTION_VALUE_NOISE_LOW)/2.0 - 0.58821 * PREDICTION_VALUE_NOISE_BETA
 
 # Don't boost aggressive actions so much... we want to see more calls, check, especially checks, attempted in spots that might be close.
-AGGRESSIVE_ACTION_NOISE_FACTOR = 0.7 # 0.5
+AGGRESSIVE_ACTION_NOISE_FACTOR = 1.0 # 0.5
+MULTIPLE_MODELS_NOISE_FACTOR = 0.2 # Reduce noise... by a lot... if using multiple models already (noise that way)
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
-
+SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
+USE_MIXED_MODEL_WHEN_AVAILABLE = True # When possible, including against human, use 2 or 3 models, and choose randomly which one decides actions.
+RETRY_FOLD_ACTION = True # If we get a model that says fold preflop... try again. But just once. We should avoid raise/fold pre
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponent), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -109,10 +113,12 @@ class TripleDrawAIPlayer():
 
         # TODO: Name, and track, multiple models. 
         # This is the draw model. Also, outputs the heuristic (value) of a hand, given # of draws left.
-        self.output_layer = None 
-        self.bets_output_layer = None
+        self.output_layer = None # for draws
+        self.bets_output_layer = None 
         self.use_learning_action_model = False # should we use the trained model, to make betting decisions?
         self.old_bets_output_model = False # "old" model used for NIPS... should be set from the outside
+        self.other_old_bets_output_model = False # the "other" old bets model [CNN3 vs CNN5, etc]
+        self.bets_output_array = [] # if we use *multiple* models, and choose randomly between them
         self.is_human = False
 
         # Current 0-1000 value, based on cards held, and approximation of value from draw model.
@@ -128,9 +134,13 @@ class TripleDrawAIPlayer():
         if self.is_human:
             return 'man'
         elif self.use_learning_action_model and self.bets_output_layer:
-            # Backward-compatibility hack, to allow support for "old" model used for NIPS paper.
+            # Backward-compatibility hack, to allow support for "old" model used for NIPS paper (CNN)
             # NOTE: Will be deprecated...
-            if self.old_bets_output_model:
+            if self.bets_output_array and len(self.bets_output_array) > 0:
+                return 'CNN_45' # we sample from multiple models!
+            if self.other_old_bets_output_model:
+                return 'CNN_3'
+            elif self.old_bets_output_model:
                 return 'CNN_4'
             else:
                 return 'CNN_5'
@@ -140,7 +150,7 @@ class TripleDrawAIPlayer():
     # Takes action on the hand. But first... get Theano output...
     def draw_move(self, deck, num_draws = 1, debug = True):
         # Reduce debug, if opponent is human, and could see.
-        if self.opponent and self.opponent.is_human:
+        if self.opponent and self.opponent.is_human and (not SHOW_MACHINE_DEBUG_AGAINST_HUMAN):
             debug = False
 
         hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
@@ -166,6 +176,7 @@ class TripleDrawAIPlayer():
 
         if debug:
             print('Draw string from AI! |%s|' % draw_string)
+            print('\nDraw %d cards.\n' % len(draw_string))
         else:
             print('\nDraw %d cards.\n' % len(draw_string))
 
@@ -243,14 +254,26 @@ class TripleDrawAIPlayer():
 
     # This should choose an action policy... based on things we know, randomness, CNN output, RL, etc
     def choose_action(self, actions, round, bets_this_round = 0, 
-                      has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0, debug = True):
+                      has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0, 
+                      debug = True, retry = False):
         # Reduce debug, if opponent is human, and could see.
-        if self.opponent and self.opponent.is_human:
+        if self.opponent and self.opponent.is_human and (not SHOW_MACHINE_DEBUG_AGAINST_HUMAN):
             debug = False
 
         # print('Choosing among actions %s for round %s' % (actions, round))
         # self.choose_random_action(actions, round)
-        if self.bets_output_layer and self.use_learning_action_model:
+
+        # Either use bets model... or if given several... choose one at random to apply
+        # NOTE: We do not want to average the *values* in models, but the actual choices. Thus we'll be stochastic & unpredicatable.
+        bets_layer = None
+        if self.bets_output_array:
+            bets_layer = random.choice(self.bets_output_array)
+            if debug:
+                print('chose bets model %d in %d-length models index...' % (self.bets_output_array.index(bets_layer), len(self.bets_output_array)))
+        else:
+            bets_layer = self.bets_output_layer
+
+        if bets_layer and self.use_learning_action_model:
             #print('We has a *bets* output model. Use it!')
             num_draws_left = 3
             if round == PRE_DRAW_BET_ROUND:
@@ -290,7 +313,16 @@ class TripleDrawAIPlayer():
                                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
             full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
 
-            bets_vector = evaluate_single_event(self.bets_output_layer, full_input)
+            # TODO: Rewrite with input and output layer... so that we can avoid putting all this data into Theano.shared()
+            bets_vector = evaluate_single_event(bets_layer, full_input)
+
+            """
+            # For special (and slow) debug... show all models, if available...
+            if debug and self.bets_output_array:
+                for model_layer in self.bets_output_array:
+                    possible_bets_vector = evaluate_single_event(model_layer, full_input)
+                    print('vals\t%s' % ([val - 2.0 for val in possible_bets_vector[:5]]))
+                    """
 
             # Show all the raw returns from training. [0:5] -> values of actions [5:10] -> probabilities recommended
             # NOTE: Actions are exploratory, and wrong. But see how it goes...
@@ -328,6 +360,10 @@ class TripleDrawAIPlayer():
                     if action in ALL_BETS_SET:
                         noise *= AGGRESSIVE_ACTION_NOISE_FACTOR
 
+                    # NOTE: Do *not* apply noise, if already using a mixed model. That is noise enough.
+                    if self.bets_output_array:
+                        noise *= MULTIPLE_MODELS_NOISE_FACTOR
+
                     prediction[0] += noise
                 value_predictions.sort(reverse=True)
                 if debug:
@@ -335,6 +371,16 @@ class TripleDrawAIPlayer():
             
             # Highest-value action, after all possible adjustments.
             best_action = value_predictions[0][1]
+
+            # Final Hack! We need should aim to avoid close folds pre-draw.
+            # Thus, if close, try again.
+            if round == PRE_DRAW_BET_ROUND and best_action == FOLD_HAND and retry == False and RETRY_FOLD_ACTION:
+                if debug:
+                    'Retrying preflop fold action...'
+                return self.choose_action(actions=actions, round=round, bets_this_round = bets_this_round, 
+                                          has_button = has_button, pot_size=pot_size, actions_this_round=actions_this_round,
+                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept, 
+                                          debug = debug, retry = True)
 
             # Purely for debug
             if debug:
@@ -689,7 +735,7 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
 # Play a bunch of hands.
 # For now... just rush toward full games, and skip details, or fill in with hacks.
 def play(sample_size, output_file_name=None, draw_model_filename=None, bets_model_filename=None, 
-         old_bets_model_filename=None, human_player=None):
+         old_bets_model_filename=None, other_old_bets_model_filename=None, human_player=None):
     # Compute hand values, or compare hands.
     cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
 
@@ -758,7 +804,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     else:
         print('No *bets* model provided or loaded. Expect error if model required. %s', bets_model_filename)
 
-    # Lastly, if supplied "old" bets layer supplied... then load it as well.
+    # If supplied "old" bets layer supplied... then load it as well.
     old_bets_output_layer = None
     if old_bets_model_filename and os.path.isfile(old_bets_model_filename):
         print('\nExisting *old bets* model in file %s. Attempt to load it!\n' % old_bets_model_filename)
@@ -778,6 +824,26 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     else:
         print('No *old bets* model provided or loaded. Expect error if model required. %s', old_bets_model_filename)
 
+    # Lastly, load a third model...
+    other_old_bets_output_layer = None
+    if other_old_bets_model_filename and os.path.isfile(other_old_bets_model_filename):
+        print('\nExisting *old bets* model in file %s. Attempt to load it!\n' % other_old_bets_model_filename)
+        other_old_bets_all_param_values_from_file = np.load(other_old_bets_model_filename)
+
+        # Size must match exactly!
+        other_old_bets_output_layer = build_model(
+            HAND_TO_MATRIX_PAD_SIZE, 
+            HAND_TO_MATRIX_PAD_SIZE,
+            32,
+        )
+        print('filling model with shape %s, with %d params' % (str(other_old_bets_output_layer.get_output_shape()), len(other_old_bets_all_param_values_from_file)))
+        lasagne.layers.set_all_param_values(other_old_bets_output_layer, other_old_bets_all_param_values_from_file)
+        predict_model(output_layer=other_old_bets_output_layer, test_batch=test_batch)
+        print('Cases again %s' % str(test_cases))
+        print('Creating player, based on this pickled *bets* model...')
+    else:
+        print('No *old bets* model provided or loaded. Expect error if model required. %s', other_old_bets_model_filename)
+
     # We initialize deck, and dealer, every round. But players kept constant, and reset for each trial.
     # NOTE: This can, and will change, if we do repetative simulation, etc.
     player_one = TripleDrawAIPlayer()
@@ -792,20 +858,38 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     player_two.opponent = player_one
     
     # Add model, to players.
+
+    # Player 1 plays the latest model... or a mixed bag of models, if provided.
     player_one.output_layer = output_layer
     player_one.bets_output_layer = bets_output_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
     player_one.use_learning_action_model = True
+    if USE_MIXED_MODEL_WHEN_AVAILABLE and (old_bets_output_layer or other_old_bets_output_layer):
+        player_one.bets_output_array = []
+        player_one.bets_output_array.append(bets_output_layer) # lastest model
+        if old_bets_output_layer:
+            player_one.bets_output_array.append(old_bets_output_layer)
+        if other_old_bets_output_layer:
+            player_one.bets_output_array.append(other_old_bets_output_layer)
+        print('loaded player_one with %d-mixed model!' % len(player_one.bets_output_array))
 
+    # Player 2 plays the least late model... unless player 1 is playing a mixed bag.
+    # NOTE: This sounds confusing, but is not. We need to test vs human (with mixed model, if given)
+    # Otherwise, we want to test the latest model, against the mix. Or the latest model, against the oldest given.
     player_two.output_layer = output_layer
     player_two.bets_output_layer = bets_output_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
     player_two.use_learning_action_model = True
 
-    # Hack... if we want to supply "old" model, for new CNN vs old CNN. 
-    if (not human_player) and old_bets_output_layer:
+    # If we want to supply "old" model, for new CNN vs old CNN. 
+    if (not human_player) and old_bets_output_layer and (not player_one.bets_output_array):
         player_two.bets_output_layer = old_bets_output_layer
         player_two.old_bets_output_model = True
+
+    # Use the "other" "old" model, if provided
+    if (not human_player) and other_old_bets_output_layer and (not player_one.bets_output_array):
+        player_two.bets_output_layer = other_old_bets_output_layer
+        player_two.other_old_bets_output_model = True
 
     # Run a bunch of individual hands.
     # Hack: Player one is always on the button...
@@ -866,12 +950,14 @@ if __name__ == '__main__':
     draw_model_filename = None # how to draw, given cards, numDraws (also outputs hand value estimate)
     bets_model_filename = None # what is the value of bet, raise, check, call, fold in this instance?
     old_bets_model_filename = None # use "old" model if we want to compare CNN vs CNN
+    other_old_bets_model_filename = None # a third "old" model
     human_player = False # do we want one player to be human?
 
     # Now fill in these values from command line parameters...
     draw_model_filename = args.draw_model
     bets_model_filename = args.CNN_model
     old_bets_model_filename = args.CNN_old_model
+    other_old_bets_model_filename = args.CNN_other_old_model
     if args.output:
         output_file_name = args.output
     if args.human_player:
@@ -879,5 +965,8 @@ if __name__ == '__main__':
 
     # TODO: Take num samples from command line.
     play(sample_size=samples, output_file_name=output_file_name,
-         draw_model_filename=draw_model_filename, bets_model_filename=bets_model_filename, 
-         old_bets_model_filename=old_bets_model_filename, human_player=human_player)
+         draw_model_filename=draw_model_filename, 
+         bets_model_filename=bets_model_filename, 
+         old_bets_model_filename=old_bets_model_filename, 
+         other_old_bets_model_filename=other_old_bets_model_filename, 
+         human_player=human_player)
