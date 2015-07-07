@@ -21,7 +21,8 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot more events) from man vs CNN, CNN vs sim, and sim vs sim [need more CNN vs CNN]
+DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of human play, and CNN vs CNN, for CNN3,4,5 and 45 (mix of CNN3, CNN4, CNN5)
+# '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot more events) from man vs CNN, CNN vs sim, and sim vs sim [need more CNN vs CNN]
 # '../data/60k_triple_draw_events.csv' # 60k 'event's from a few thousand full hands.
 # '../data/500k_hands_sample_details_all.csv' # all 32 values for 'deuce' (draws)
 # '../data/500k_hands_sample_details_all.csv' # all 32 values.
