@@ -115,7 +115,7 @@ FUTURE_DISCOUNT = 0.9
 SAMPLE_RATE_DEUCE_EVENTS = 0.6 # 1.0 # 0.50 # 0.33
 
 # Use this to train only on results of intelligent players, if different versions available
-PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_45', 'man']) # learn only from better models, or man's actions
+PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'man']) # learn only from better models, or man's actions
 # set(['CNN', 'CNN_2', 'CNN_3', 'man', 'sim']) # Incude 'sim' and ''?
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
@@ -418,7 +418,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
             #if bet_model:
             #    print(data_array)
             #    print('skipping action from missing or undesireable model. |%s|' % bet_model)
-            return
+            raise AssertionError()
 
     # X x 19 x 19 input, including our hand, & num draws. 
     if not CARDS_INPUT_ALL_ZERO:
@@ -466,7 +466,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     if not ((action_taken in ALL_BETS_SET) or (action_taken in ALL_CALLS_SET) or (action_taken == CHECK_HAND) or (action_taken == FOLD_HAND)):
         #print('action not useful for poker event training %s' % action_taken)
         raise AssertionError()
-    #else
+    #else:
         #print('acceptable & useful action %s' % action_taken)
         
 
@@ -493,9 +493,9 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     # Use a discount rate to focus on current play
 
     # NOTE: For more recent data... we can get the current & future rewards directly.
+    pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
+    bet_size = float(data_array[csv_key_map['bet_size']]) # 150 - 3000 or so
     if DISCOUNT_FUTURE_RESULTS and FUTURE_DISCOUNT:
-        pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
-        bet_size = float(data_array[csv_key_map['bet_size']]) # 150 - 3000 or so
         if margin_result == 0.0:
             current_margin_result = 0
             future_margin_result = 0
@@ -527,6 +527,55 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     # TODO: Encode river call value (value is result of hand). [Need opponent hand...]
     # TODO: Encode river check/call, if we bet in actual hand (assume that better hand will bet, worse hand will check)
     # NOTE: By far the most important, is to encode "call" for river fold actions... less so, encode "check" where we bet the river.
+
+    # Encode counter-factual information that can be applied...
+    # A. Must be on the river,
+    # B. Opponent information must be present, both in CSV key, and in data (check length of input, to backward-compatible)
+    # C. Call instead of fold
+    # D. Check/call instead of bet/raise. 
+    if num_draws == 0 and csv_key_map.has_key('oppn_hand') and len(data_array) > csv_key_map['oppn_hand']:
+        #print('\nconsidering counter-factual information, given opponent hand...')
+        #print(data_array)
+        
+        if action_taken == FOLD_HAND:
+            #print('--> consider counter-factual of call instead of FOLD')
+            call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
+            if call_result == 0.0:
+                call_result = -1.0 * BIG_BET_SIZE
+            #print('we would win %.1f by calling... ' % call_result)
+            call_marginal_value = adjust_float_value(call_result, mode=adjust_floats)
+            output_array[CALL_CATEGORY] = call_marginal_value
+            output_mask_classes[CALL_CATEGORY] = 1.0
+        elif action_taken in ALL_BETS_SET:
+            #print('consider counter-factual of check/call instead of bet/raise...')
+            if output_category == BET_CATEGORY and not position:
+                #print('We bet first to act... so counter-factual is check/call')
+                check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
+                # opponent will bet if ahead, check if behind. And we always call
+                # NOTE: This is the the counter-factual to cases where we *already* bet out
+                if check_call_result == 0.0:
+                    check_call_result = -1.0 * BIG_BET_SIZE
+            elif output_category == BET_CATEGORY:
+                #print('We bet, when could have checked behind')
+                check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
+            else:
+                #print('We raised, when could have called')
+                check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
+                if check_call_result == 0.0:
+                    check_call_result = -1.0 * BIG_BET_SIZE
+            #print('we would win %.1f by check/calling... ' % check_call_result)
+            check_call_margin_value = adjust_float_value(check_call_result, mode=adjust_floats)
+            if output_category == BET_CATEGORY:
+                output_array[CHECK_CATEGORY] = check_call_margin_value
+                output_mask_classes[CHECK_CATEGORY] = 1.0
+            else:
+                output_array[CALL_CATEGORY] = check_call_margin_value
+                output_mask_classes[CALL_CATEGORY] = 1.0
+        #else:
+            #print('no possible counter-factual to action taken |%s|... yet' % action_taken)
+
+        #print(output_array)
+        #print(output_mask_classes)
 
     # Do no encode unknown values as val == 0.0... that confuses things.
     """
@@ -601,7 +650,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('unknown input format: %s' % format)
                     sys.exit(-3)
             
-            #except (IndexError, AssertionError, TypeError): # Fewer errors, for debugging
+            #except (AssertionError): # Fewer errors, for debugging
             except (TypeError, IndexError, ValueError, KeyError, AssertionError): # Any reading error
                 if lines % 1000 == 0:
                     print('\nskipping malformed/unusable input line:\n|%s|\n' % line)

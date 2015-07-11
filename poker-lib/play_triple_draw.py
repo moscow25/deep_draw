@@ -55,7 +55,8 @@ TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
                             'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand',
                             'actions_this_round', 'actions_full_hand', 
                             'total_bet', 'result', 'margin_bet', 'margin_result',
-                            'current_margin_result', 'future_margin_result']
+                            'current_margin_result', 'future_margin_result',
+                            'oppn_hand', 'current_hand_win']
 
 BATCH_SIZE = 100 # Across all cases
 
@@ -139,11 +140,11 @@ class TripleDrawAIPlayer():
             if self.bets_output_array and len(self.bets_output_array) > 0:
                 return 'CNN_45' # we sample from multiple models!
             if self.other_old_bets_output_model:
-                return 'CNN_3'
-            elif self.old_bets_output_model:
                 return 'CNN_4'
-            else:
+            elif self.old_bets_output_model:
                 return 'CNN_5'
+            else:
+                return 'CNN_6'
         else:
             return 'sim'
 

@@ -77,13 +77,33 @@ class PokerAction:
         self.hand = None
         self.best_draw = None
         self.hand_after = None
+        self.cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
+    
+    # Assumes that we know our hand and opponent hand. But can also handle errors.
+    # TODO: Use this to estimate future winning percentage? In allin situations...
+    def current_win_percentage(self):
+        if (not self.hand) or (not self.oppn_hand):
+            return 0.5 # unknown, so 50/50
+        our_hand = PokerHand(cards = self.hand)
+        oppn_hand = PokerHand(cards = self.oppn_hand)
+        winners = self.cashier.showdown([our_hand, oppn_hand])
+        if winners == our_hand:
+            return 1.0
+        elif winners == oppn_hand:
+            return 0.0
+        else:
+            return 0.5 # chop, or unknown.
+
 
     # Context needed, to record actions properly to CVS...
     def add_context(self, hand, draws_left, position, 
                     actions_this_round, actions_full_hand, 
                     value = RANDOM_HAND_HEURISTIC_BASELINE, bet_this_hand = 0,
-                    num_cards_kept = 0, num_opponent_kept = 0, bet_model = ''):
+                    num_cards_kept = 0, num_opponent_kept = 0, bet_model = '', oppn_hand = None):
         self.hand = list(hand) # makes copy of 5-card array
+        self.oppn_hand = list(oppn_hand) # copy of opponent's current hand
+        self.current_hand_win = self.current_win_percentage() # where are we at, right now? [Current hands comparison]
+
         self.draws_left = draws_left
         self.value = value # heuristic estimation
         self.bet_this_hand = bet_this_hand # how much did we already commit into this hand, previously [useful for calculating value]
@@ -204,8 +224,13 @@ class PokerAction:
             # Break up into 'current' and 'future' results... (to apply discount later, if we like)
             output_map['current_margin_result'] = self.current_margin_result
             output_map['future_margin_result'] = self.future_margin_result
+
+        # Opponent hand, if present.
+        if hasattr(self, 'oppn_hand'):
+            output_map['oppn_hand'] = hand_string(self.oppn_hand)
+            output_map['current_hand_win'] = self.current_hand_win
         
-        # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result', 'current_margin_result', 'future_margin_result']
+        # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result', 'current_margin_result', 'future_margin_result', 'oppn_hand', 'current_hand_win']
         output_row = VectorFromKeysAndSparseMap(keys=header_map, sparse_data_map=output_map, default_value = '')
         return output_row
 
@@ -318,7 +343,8 @@ class TripleDrawDealer():
                            actions_this_round = self.hand_history_this_round,
                            actions_full_hand = self.hand_history,
                            bet_this_hand = self.action_on.bet_this_hand,
-                           bet_model = self.action_on.player_tag())
+                           bet_model = self.action_on.player_tag(),
+                           oppn_hand = (self.action_off.draw_hand.dealt_cards if round < DRAW_3_BET_ROUND else self.action_off.draw_hand.final_hand))
         self.process_action(action, pass_control = True)
         #self.pass_control()
 
@@ -332,7 +358,8 @@ class TripleDrawDealer():
                            actions_this_round = self.hand_history_this_round,
                            actions_full_hand = self.hand_history,
                            bet_this_hand = self.action_on.bet_this_hand,
-                           bet_model = self.action_on.player_tag())
+                           bet_model = self.action_on.player_tag(),
+                           oppn_hand = (self.action_off.draw_hand.dealt_cards if round < DRAW_3_BET_ROUND else self.action_off.draw_hand.final_hand))
         self.process_action(action, pass_control = False)
         # DO NOT pass_control()
 
@@ -497,7 +524,8 @@ class TripleDrawDealer():
                                bet_this_hand = self.action_on.bet_this_hand,
                                num_cards_kept = self.action_on.num_cards_kept, 
                                num_opponent_kept = self.action_off.num_cards_kept,
-                               bet_model = self.action_on.player_tag())
+                               bet_model = self.action_on.player_tag(),
+                               oppn_hand = (self.action_off.draw_hand.dealt_cards if round < DRAW_3_BET_ROUND else self.action_off.draw_hand.final_hand))
 
             self.process_action(action, pass_control = True)
             if keep_betting:
@@ -578,7 +606,6 @@ class TripleDrawDealer():
             # Similar to "player.move()" in the single-draw video poker context
             self.player_blind.draw(deck=self.deck, num_draws=3)
             self.player_button.draw(deck=self.deck, num_draws=3)
-
             draw_action = DrawAction(actor_name = self.player_blind.name, pot_size = self.pot_size, 
                                      hand_before = self.player_blind.draw_hand.dealt_cards, 
                                      best_draw = self.player_blind.draw_hand.held_cards, 
@@ -590,8 +617,10 @@ class TripleDrawDealer():
                                     actions_full_hand = self.hand_history,
                                     value = self.player_blind.heuristic_value,
                                     bet_this_hand = self.player_blind.bet_this_hand,
-                                    bet_model = self.player_blind.player_tag())
+                                    bet_model = self.player_blind.player_tag(),
+                                    oppn_hand = (self.player_button.draw_hand.dealt_cards))
             self.hand_history.append(draw_action)
+            
             draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
                                      hand_before = self.player_button.draw_hand.dealt_cards, 
                                      best_draw = self.player_button.draw_hand.held_cards, 
@@ -603,7 +632,8 @@ class TripleDrawDealer():
                                     actions_full_hand = self.hand_history,
                                     value = self.player_button.heuristic_value,
                                     bet_this_hand = self.player_button.bet_this_hand,
-                                    bet_model = self.player_button.player_tag())
+                                    bet_model = self.player_button.player_tag(),
+                                    oppn_hand = (self.player_blind.draw_hand.final_hand)) # use hand we are already up against!
             self.hand_history.append(draw_action)
 
         # TODO: Switch to pre-draw & evaluate heuristics in a function?
@@ -659,7 +689,8 @@ class TripleDrawDealer():
                                     actions_full_hand = self.hand_history,
                                     value = self.player_blind.heuristic_value,
                                     bet_this_hand = self.player_blind.bet_this_hand,
-                                    bet_model = self.player_blind.player_tag())
+                                    bet_model = self.player_blind.player_tag(),
+                                    oppn_hand = (self.player_button.draw_hand.dealt_cards))
             self.hand_history.append(draw_action)
             draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
                                      hand_before = self.player_button.draw_hand.dealt_cards, 
@@ -672,7 +703,8 @@ class TripleDrawDealer():
                                     actions_full_hand = self.hand_history,
                                     value = self.player_button.heuristic_value,
                                     bet_this_hand = self.player_button.bet_this_hand,
-                                    bet_model = self.player_button.player_tag())
+                                    bet_model = self.player_button.player_tag(),
+                                    oppn_hand = (self.player_blind.draw_hand.final_hand)) # use hand that we are already up against
             self.hand_history.append(draw_action)
 
         # TODO: Switch to pre-draw & evaluate heuristics in a function?
@@ -728,7 +760,8 @@ class TripleDrawDealer():
                                     actions_full_hand = self.hand_history,
                                     value = self.player_blind.heuristic_value,
                                     bet_this_hand = self.player_blind.bet_this_hand,
-                                    bet_model = self.player_blind.player_tag())
+                                    bet_model = self.player_blind.player_tag(),
+                                    oppn_hand = (self.player_button.draw_hand.dealt_cards))
             self.hand_history.append(draw_action)
             draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
                                      hand_before = self.player_button.draw_hand.dealt_cards, 
@@ -741,19 +774,9 @@ class TripleDrawDealer():
                                     actions_full_hand = self.hand_history,
                                     value = self.player_button.heuristic_value,
                                     bet_this_hand = self.player_button.bet_this_hand,
-                                    bet_model = self.player_button.player_tag())
+                                    bet_model = self.player_button.player_tag(),
+                                    oppn_hand = (self.player_blind.draw_hand.final_hand)) # last draw on last hand = against opponent's final hand!
             self.hand_history.append(draw_action)
-
-        # NOTE: Do *not* copy hands for final round of betting. It screws up "showdown" evaluation and debug. Evaluate on "final_hand" instead.
-        """
-        # TODO: Switch to pre-draw & evaluate heuristics in a function?
-        draw_hand_blind = PokerHand()
-        draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
-        self.player_blind.draw_hand = draw_hand_blind
-        draw_hand_button = PokerHand()
-        draw_hand_button.deal(self.player_button.draw_hand.final_hand)
-        self.player_button.draw_hand = draw_hand_button
-        """
 
         # Next round. We bet again, then draw again
         self.live = True 

@@ -653,7 +653,7 @@ class HandSimResult(object):
 
 # A wrapper around array of cards. But deals with draws, remembering discards, etc
 class PokerHand(object):
-    def __init__(self):
+    def __init__(self, cards = None):
         self.dealt_cards = []
         self.held_cards = []
         self.discards = []
@@ -667,6 +667,10 @@ class PokerHand(object):
 
         # optionally, store reward here
         self.reward = 0
+
+        # Supply cards, for quick evaluation...
+        if cards:
+            self.deal(cards, final_hand = True)
         
     # Receive cards from the deck.
     # NOTE: Hardcoded for 1-time draw.
