@@ -223,11 +223,16 @@ def bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
             break
         else:
             if c == '0':
-                continue
+                index += 1
             elif c == '1':
                 output_array[index] = card_to_matrix_fill(1, pad_to_fit = pad_to_fit)
+                index += 1
             else:
                 assert (c == '1' or c == '0'), 'unknown char |%s| in bets string!' % c
+
+    # Debug...
+    #print('\nencoded bet string |%s|' % bets_string)
+    #print(output_array)
     return output_array
 
 # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
@@ -442,7 +447,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         position = int(data_array[csv_key_map['position']]) # binary
         pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
         bets_string = data_array[csv_key_map['actions_this_round']] # items like '0111' (5 max)
-        if not bets_string and actions_this_round:
+        if (not bets_string) and actions_this_round:
             #print('replacing actions_this_round string with %s' % actions_this_round)
             bets_string = actions_this_round # replace, but only if empty
         cards_kept = int(data_array[csv_key_map['num_cards_kept']]) # 0-5
@@ -690,12 +695,16 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                             if position:
                                 #print('set in_position # kept = %d' % len(cards_kept))
                                 num_draw_in_position = len(cards_kept)
+                                actions_this_round = '' # reset actions after last player draws
                             else:
                                 #print('set out_position # kept = %d' % len(cards_kept))
                                 num_draw_out_position = len(cards_kept)
-                        else:
+                        elif line[csv_key_map['actions_this_round']]:
                             # Also keep track, to pass to "Draw" context, if missing.
+                            #print('unpdating actions_this_round = %s' % line[csv_key_map['actions_this_round']])
                             actions_this_round = line[csv_key_map['actions_this_round']]
+                        #else:
+                        #    print('unable to update actions_this_round...')
                                 
                                                       
 
@@ -707,7 +716,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('unknown input format: %s' % format)
                     sys.exit(-3)
             
-            #except (AssertionError): # Fewer errors, for debugging
+            #except (AssertionError, KeyError): # Fewer errors, for debugging
             except (TypeError, IndexError, ValueError, KeyError, AssertionError): # Any reading error
                 if lines % 1000 == 0:
                     print('\nskipping malformed/unusable input line:\n|%s|\n' % line)
