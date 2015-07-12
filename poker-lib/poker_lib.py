@@ -156,7 +156,19 @@ FOLD_CATEGORY = 4
 ALL_ACTION_CATEGORY_SET = set([BET_CATEGORY, RAISE_CATEGORY, CHECK_CATEGORY, CALL_CATEGORY, FOLD_CATEGORY]) 
 eventCategoryName = {BET_CATEGORY: 'bet', RAISE_CATEGORY: 'raise', CHECK_CATEGORY: 'check',
                      CALL_CATEGORY: 'call', FOLD_CATEGORY: 'fold'}
-def category_from_event_action(action):
+# Similarly, we can encode decision to keep {0,1,2,3,4,5} cards.
+# NOTE: We enocode this further down in the output array. Why? Separation, room for action% for bets.
+KEEP_0_CARDS = 15
+KEEP_1_CARDS = 16
+KEEP_2_CARDS = 17
+KEEP_3_CARDS = 18
+KEEP_4_CARDS = 19
+KEEP_5_CARDS = 20 # stand pat
+DRAW_CATEGORY_SET = set([KEEP_0_CARDS, KEEP_1_CARDS, KEEP_2_CARDS, KEEP_3_CARDS, KEEP_4_CARDS, KEEP_5_CARDS])
+drawCategoryName = {KEEP_0_CARDS: 'draw_5', KEEP_1_CARDS: 'draw_4', KEEP_2_CARDS: 'draw_3', 
+                    KEEP_3_CARDS: 'draw_2', KEEP_4_CARDS: 'draw_1', KEEP_5_CARDS: 'pat'}
+
+def category_from_event_action(action, cards_kept = 0):
     if action in ALL_RAISES_SET:
         return RAISE_CATEGORY
     elif action in ALL_BETS_SET:
@@ -167,6 +179,21 @@ def category_from_event_action(action):
         return CHECK_CATEGORY
     elif action == FOLD_HAND:
         return FOLD_CATEGORY
+    elif action == DRAW_ACTION:
+        if cards_kept == 0:
+            return KEEP_0_CARDS
+        elif cards_kept == 1:
+            return KEEP_1_CARDS
+        elif cards_kept == 2:
+            return KEEP_2_CARDS
+        elif cards_kept == 3:
+            return KEEP_3_CARDS
+        elif cards_kept == 4:
+            return KEEP_4_CARDS
+        elif cards_kept == 5:
+            return KEEP_5_CARDS
+        else:
+            return None
     else:
         return None
 

@@ -30,7 +30,7 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of hum
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 110000 # 120000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 120000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 10000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
@@ -79,7 +79,9 @@ def linear_error(x, t):
 # E. special row = (value/action sum)
 
 first_five_vector = np.zeros(32)
-for i in [0,1,2,3,4]: 
+for i in ALL_ACTION_CATEGORY_SET: 
+    first_five_vector[i] = 1.0
+for i in DRAW_CATEGORY_SET:
     first_five_vector[i] = 1.0
 first_five_matrix = [first_five_vector for i in xrange(BATCH_SIZE)]
 first_five_mask = np.array(first_five_matrix)
@@ -97,8 +99,8 @@ def value_action_error(output_matrix, target_matrix):
     action_matrix = output_matrix[:,5:10] # Always output matrix. It's all we got!
     value_matrix_output = output_matrix[:,0:5] # implied from the current model.
     value_matrix_target = target_matrix[:,0:5] # directly from observation
-    # value_matrix = value_matrix_output # Try to learn values from the network. Warning! This creates a gradient, and network will change.
-    value_matrix = value_matrix_target # Use real values. And reduce/remove pressure to tweak values, which is bad.
+    value_matrix = theano.gradient.disconnected_grad(value_matrix_output) # Try to learn values from the network. 
+    #value_matrix = value_matrix_target # Use real values. And reduce/remove pressure to tweak values, which is bad.
 
     # create a mask, for non-zero values in the observed (values) space
     value_matrix_mask = T.ceil(0.1 * value_matrix) # Ends up with reasonable (available) values --> 1.0, zero values --> 0.0
@@ -121,7 +123,7 @@ def value_action_error(output_matrix, target_matrix):
     # sum of all probabilities...
     # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
     # Therefore, dampen the value. But also make sure that this matches the target.
-    probabilities_sum_vector = 0.05 * action_matrix.sum(axis=1) 
+    probabilities_sum_vector = 0.10 * action_matrix.sum(axis=1) 
     #probabilities_square_vector = 0.05 * (action_matrix ** 2).sum(axis=1) 
     
     # not sure if this is correct, but try it... 

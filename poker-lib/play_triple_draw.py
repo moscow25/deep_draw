@@ -235,7 +235,58 @@ class TripleDrawAIPlayer():
         return expected_payout
 
     # Apply current model, based on known information, to draw 0-5 cards from the deck.
-    def draw(self, deck, num_draws = 1):
+    def draw(self, deck, num_draws = 1, bets_this_round = 0, 
+             has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0, 
+             debug = True, retry = False):
+        # If we have context and bets model that also outputs draws... at least give it a look.
+        bets_layer = self.bets_output_layer # use latest "bets" layer, even if multiple available.
+        if bets_layer and self.use_learning_action_model:
+            print('trying draw model in debug mode...')
+            num_draws_left = num_draws
+            if (num_draws_left >= 1):
+                hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
+            else:
+                hand_string_dealt = hand_string(self.draw_hand.final_hand)
+
+            # Input related to the hand
+            cards_input = cards_input_from_string(hand_string_dealt, include_num_draws=True, 
+                                                  num_draws=num_draws_left, include_full_hand = True, 
+                                                  include_hand_context = False)
+
+            # TODO: This should be a util function.
+            bets_string = ''
+            for action in actions_this_round:
+                if action.type in ALL_BETS_SET:
+                    bets_string += '1'
+                elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
+                    bets_string += '0'
+                else:
+                    # Don't encode non-bets
+                    continue
+            
+            # Now hand context
+            if debug:
+                print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept]))
+            hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
+                                                         cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
+            full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
+            # TODO: Rewrite with input and output layer... so that we can avoid putting all this data into Theano.shared()
+            bets_vector = evaluate_single_event(bets_layer, full_input)
+
+            # Show the values for all draws [0, 5] cards kept.
+            if debug:
+                print('vals\t%s' % ([val - 2.0 for val in bets_vector[:5]]))
+                print('acts\t%s' % ([val for val in bets_vector[5:10]]))
+                print('drws\t%s' % ([val - 2.0 for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]))
+            #value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
+            value_predictions = [[(bets_vector[action] - 2.0), action, '%s: %.3f' % (drawCategoryName[action], bets_vector[action] - 2.0)] for action in DRAW_CATEGORY_SET]
+            value_predictions.sort(reverse=True)
+            
+            if debug:
+                print(value_predictions)
+
+
+        # Get and apply action... from 0-32 actions layer.
         self.draw_move(deck, num_draws)
 
         # TODO: We should log this, and output information useful for tracking.
@@ -330,6 +381,7 @@ class TripleDrawAIPlayer():
             if debug:
                 print('vals\t%s' % ([val - 2.0 for val in bets_vector[:5]]))
                 print('acts\t%s' % ([val for val in bets_vector[5:10]]))
+                print('drws\t%s' % ([val - 2.0 for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]))
             value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
             value_predictions.sort(reverse=True)
             

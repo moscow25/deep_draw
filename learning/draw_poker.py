@@ -408,7 +408,8 @@ def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_
 # output_class --> index of event actually taken
 # output_array --> 32-length output... but only the 'output_class' index matters. The rest are zero
 # Thus, we can train on the same model as 3-round draw decisions... resulting good initialization.
-def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event', pad_to_fit = PAD_INPUT, include_hand_context = False): 
+def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event', pad_to_fit = PAD_INPUT, include_hand_context = False, 
+                          num_draw_out_position = 0, num_draw_in_position = 0, actions_this_round = ''): 
     #print(data_array)
 
     # If we are told which player agent made this move, skip moves from players except those whom we trust.
@@ -441,8 +442,17 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         position = int(data_array[csv_key_map['position']]) # binary
         pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
         bets_string = data_array[csv_key_map['actions_this_round']] # items like '0111' (5 max)
+        if not bets_string and actions_this_round:
+            #print('replacing actions_this_round string with %s' % actions_this_round)
+            bets_string = actions_this_round # replace, but only if empty
         cards_kept = int(data_array[csv_key_map['num_cards_kept']]) # 0-5
+        #if cards_kept == 0:
+        #    print(['us', cards_kept, (num_draw_in_position if position else num_draw_out_position)])
+        cards_kept = max(cards_kept, (num_draw_in_position if position else num_draw_out_position)) # update from outside, if better info)
         opponent_cards_kept = int(data_array[csv_key_map['num_opponent_kept']]) # 0-5
+        #if opponent_cards_kept == 0:
+        #    print(['them', opponent_cards_kept, (num_draw_in_position if not position else num_draw_out_position)])
+        opponent_cards_kept = max(opponent_cards_kept, (num_draw_in_position if not position else num_draw_out_position)) # update from outside, if better info)
         #print('Context: %s' % [num_draws, position, pot_size, bets_string, cards_kept, opponent_cards_kept])
 
         hand_context_input = hand_input_from_context(position=position, pot_size=pot_size, bets_string=bets_string,
@@ -462,24 +472,40 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     action_taken = actionNameToAction[action_name]
     #print(action_taken)
 
-    # We are only interesting in bets, raises, calls, checks and folds. All other actions can be ignored...
-    if not ((action_taken in ALL_BETS_SET) or (action_taken in ALL_CALLS_SET) or (action_taken == CHECK_HAND) or (action_taken == FOLD_HAND)):
+    # We can handle bets (bet, raise, check, call fold) and draws (how many?).
+    # Other valid action (posting blinds, etc) don't do much for us.
+    # TODO: Control with a constant, which valid action groups to train on...
+    bets_action = False
+    if ((action_taken in ALL_BETS_SET) or (action_taken in ALL_CALLS_SET) or (action_taken == CHECK_HAND) or (action_taken == FOLD_HAND)):
+        #print('acceptable & useful betting action %s' % action_taken)
+        bets_action = True
+
+        # Which place in the 32-vector array does this action map to?
+        output_category = category_from_event_action(action_taken)
+    elif action_taken == DRAW_ACTION:
+        cards_kept = hand_string_to_array(data_array[csv_key_map['best_draw']])
+        #print('draw action with %d cards kept' % len(cards_kept))
+        bets_action = False
+
+        # Which place in the 32-vector array does this action map to?
+        output_category = category_from_event_action(action_taken, cards_kept = len(cards_kept))
+    else:
         #print('action not useful for poker event training %s' % action_taken)
         raise AssertionError()
-    #else:
-        #print('acceptable & useful action %s' % action_taken)
-        
-
-    # Which place in the 32-vector array does this action map to?
-    output_category = category_from_event_action(action_taken)
 
     # In parallel, encode the values that we observed, to train on.
     output_mask_classes = np.zeros(32)
     output_array = np.zeros(32)
 
-    # Encode large negative value for illegal actions. Helps with debug, and action model
-    illegal_actions = legal_actions_context(num_draws, position, bets_string, reverse = True)
-    legal_actions = legal_actions_context(num_draws, position, bets_string, reverse = False)
+    if bets_action:
+        # Encode large negative value for illegal actions. Helps with debug, and action model
+        illegal_actions = legal_actions_context(num_draws, position, bets_string, reverse = True)
+        legal_actions = legal_actions_context(num_draws, position, bets_string, reverse = False)
+    else: 
+        # Don't fill in bets... if we are encoding a draw move.
+        illegal_actions = set([])
+        legal_actions = set([])
+
     #print('illegal actions for context: %s' % illegal_actions)
     for action in illegal_actions:
         output_mask_classes[action] = 1.0
@@ -518,7 +544,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
 
     # Also, we need to code FOLD --> 0.0. Why? This helps with calibration. 
     # [only if fold is allowed!]
-    if not(FOLD_CATEGORY in illegal_actions):
+    if (FOLD_CATEGORY in legal_actions):
         fold_marginal_value = adjust_float_value(0.0, mode=adjust_floats)
         output_array[FOLD_CATEGORY] = fold_marginal_value
         output_mask_classes[FOLD_CATEGORY] = 1.0
@@ -533,7 +559,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     # B. Opponent information must be present, both in CSV key, and in data (check length of input, to backward-compatible)
     # C. Call instead of fold
     # D. Check/call instead of bet/raise. 
-    if num_draws == 0 and csv_key_map.has_key('oppn_hand') and len(data_array) > csv_key_map['oppn_hand']:
+    if bets_action and num_draws == 0 and csv_key_map.has_key('oppn_hand') and len(data_array) > csv_key_map['oppn_hand']:
         #print('\nconsidering counter-factual information, given opponent hand...')
         #print(data_array)
         
@@ -574,8 +600,8 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         #else:
             #print('no possible counter-factual to action taken |%s|... yet' % action_taken)
 
-        #print(output_array)
-        #print(output_mask_classes)
+    #print(output_array)
+    #print(output_mask_classes)
 
     # Do no encode unknown values as val == 0.0... that confuses things.
     """
@@ -637,10 +663,41 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 if format == 'video' or format == 'deuce':
                     hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = format, include_num_draws=include_num_draws, include_full_hand = include_full_hand, include_hand_context = include_hand_context)
                 elif format == 'deuce_events':
+                    # Hack! Not properly tracking number of cards drawn, especially for draw decision. So build it line by line.
+                    # NOTE: Reset at every blind post, set at every draw. Pass optionally to read_poker_line.
+                    # TODO: Fix data collection...
+                    if line and line[csv_key_map['action']]:
+                        action_name = line[csv_key_map['action']]
+                        action = actionNameToAction[action_name]
+                        if action in ALL_BLINDS_SET:
+                            #print('resetting # draws for both players')
+                            num_draw_out_position = 0
+                            num_draw_in_position = 0
+                            actions_this_round = ''
+
                     # For less confusion, if input data is "events" ie bets, checks, etc... 
                     # Data gets zipped into the same training format, trained with same shape, but just initialize it differently
                     # (re-use sub functions for encoding a hand, etc, whereever possible)
-                    hand_input, output_class, output_array, output_mask_classes = read_poker_event_line(line, csv_key_map, adjust_floats = format, include_hand_context = include_hand_context)
+                    hand_input, output_class, output_array, output_mask_classes = read_poker_event_line(line, csv_key_map, adjust_floats = format, include_hand_context = include_hand_context, num_draw_out_position = num_draw_out_position, num_draw_in_position = num_draw_in_position, actions_this_round = actions_this_round)
+
+                    # Now, after line processed, upate # of cards drawn, if applicable
+                    if line and line[csv_key_map['action']]:
+                        action_name = line[csv_key_map['action']]
+                        action = actionNameToAction[action_name]
+                        if action == DRAW_ACTION:
+                            cards_kept = hand_string_to_array(line[csv_key_map['best_draw']])
+                            position = int(line[csv_key_map['position']]) # binary
+                            if position:
+                                #print('set in_position # kept = %d' % len(cards_kept))
+                                num_draw_in_position = len(cards_kept)
+                            else:
+                                #print('set out_position # kept = %d' % len(cards_kept))
+                                num_draw_out_position = len(cards_kept)
+                        else:
+                            # Also keep track, to pass to "Draw" context, if missing.
+                            actions_this_round = line[csv_key_map['actions_this_round']]
+                                
+                                                      
 
                     #print('processed line: %s' % line)
 
@@ -706,20 +763,23 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     output_mask[7] = 0.0
                     output_mask[8] = 0.0
                     output_mask[9] = 0.0
-                    output_mask[10] = 1.0
-                    output_mask[11] = 1.0
-                    output_mask[12] = 1.0
 
-                    # Super hack. Try to increase array sum...
-                    output_array[10] = 0.0 # Choose zero, to maximize the inverse... # 4.0 choose a big number, to maximize values
-                    output_array[11] = 0.05 # 1.0 # Probabilities sum target...
-                    output_array[12] = 0.0 # spread the action values around, within reason (huge discount, but should be a factor)
+                    # Try to train toward action% sum... but onl if we are making a betting action (not a draw action)
+                    if output_class in ALL_ACTION_CATEGORY_SET:
+                        output_mask[10] = 1.0
+                        output_mask[11] = 1.0
+                        output_mask[12] = 1.0
+
+                        # Super hack. Try to increase array sum...
+                        output_array[10] = 0.0 # Choose zero, to maximize the inverse... # 4.0 choose a big number, to maximize values
+                        output_array[11] = 0.1 # 1.0 # Probabilities sum target...
+                        output_array[12] = 0.0 # spread the action values around, within reason (huge discount, but should be a factor)
 
                 else:
                     output_mask = np.zeros(32)
                     output_mask[output_class] = 1.0
                 
-                if (hands % 5000) == 1 and hands != last_hands_print:
+                if (hands % 2500 == 1) and hands != last_hands_print:
                     print('\nLoaded %d hands...\n' % hands)
                     print(line)
                     #print(hand_input)
@@ -768,6 +828,11 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             #sys.exit(-3)
 
     # Show histogram... of counts by 32 categories.
+    if format == 'deuce_events':
+        for action in ALL_ACTION_CATEGORY_SET:
+            DRAW_VALUE_KEYS[action] = eventCategoryName[action]
+        for action in DRAW_CATEGORY_SET:
+            DRAW_VALUE_KEYS[action] = drawCategoryName[action]
     print('count ground truth for 32 categories:\n%s\n' % ('\n'.join([str([DRAW_VALUE_KEYS[i],y_count_by_bucket[i],'%.1f%%' % (y_count_by_bucket[i]*100.0/hands)]) for i in range(32)])))
 
     X_train = np.array(X_train_not_np)

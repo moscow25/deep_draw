@@ -604,8 +604,18 @@ class TripleDrawDealer():
         # Make draws for each player, in turn
         if (self.live):
             # Similar to "player.move()" in the single-draw video poker context
-            self.player_blind.draw(deck=self.deck, num_draws=3)
-            self.player_button.draw(deck=self.deck, num_draws=3)
+            self.player_blind.draw(deck=self.deck, num_draws=3, 
+                                   has_button = False,
+                                   pot_size=self.pot_size, 
+                                   actions_this_round=self.hand_history_this_round, 
+                                   cards_kept=self.player_blind.num_cards_kept, 
+                                   opponent_cards_kept=self.player_button.num_cards_kept)
+            self.player_button.draw(deck=self.deck, num_draws=3,
+                                    has_button = True,
+                                    pot_size=self.pot_size, 
+                                    actions_this_round=self.hand_history_this_round, 
+                                    cards_kept=self.player_button.num_cards_kept, 
+                                    opponent_cards_kept=self.player_blind.num_cards_kept)
             draw_action = DrawAction(actor_name = self.player_blind.name, pot_size = self.pot_size, 
                                      hand_before = self.player_blind.draw_hand.dealt_cards, 
                                      best_draw = self.player_blind.draw_hand.held_cards, 
@@ -675,8 +685,18 @@ class TripleDrawDealer():
             # Similar to "player.move()" in the single-draw video poker context
             # NOTE: Player already knows his own hand.
             # TODO: We should also integrate context, like hand history, pot size, opponent's actions.
-            self.player_blind.draw(deck=self.deck, num_draws=2)
-            self.player_button.draw(deck=self.deck, num_draws=2)
+            self.player_blind.draw(deck=self.deck, num_draws=2, 
+                                   has_button = False,
+                                   pot_size=self.pot_size, 
+                                   actions_this_round=self.hand_history_this_round, 
+                                   cards_kept=self.player_blind.num_cards_kept, 
+                                   opponent_cards_kept=self.player_button.num_cards_kept)
+            self.player_button.draw(deck=self.deck, num_draws=2,
+                                    has_button = True,
+                                    pot_size=self.pot_size, 
+                                    actions_this_round=self.hand_history_this_round, 
+                                    cards_kept=self.player_button.num_cards_kept, 
+                                    opponent_cards_kept=self.player_blind.num_cards_kept)
 
             draw_action = DrawAction(actor_name = self.player_blind.name, pot_size = self.pot_size, 
                                      hand_before = self.player_blind.draw_hand.dealt_cards, 
@@ -746,8 +766,18 @@ class TripleDrawDealer():
             # Similar to "player.move()" in the single-draw video poker context
             # NOTE: Player already knows his own hand.
             # TODO: We should also integrate context, like hand history, pot size, opponent's actions.
-            self.player_blind.draw(deck=self.deck, num_draws=1)
-            self.player_button.draw(deck=self.deck, num_draws=1)
+            self.player_blind.draw(deck=self.deck, num_draws=1, 
+                                   has_button = False,
+                                   pot_size=self.pot_size, 
+                                   actions_this_round=self.hand_history_this_round, 
+                                   cards_kept=self.player_blind.num_cards_kept, 
+                                   opponent_cards_kept=self.player_button.num_cards_kept)
+            self.player_button.draw(deck=self.deck, num_draws=1,
+                                    has_button = True,
+                                    pot_size=self.pot_size, 
+                                    actions_this_round=self.hand_history_this_round, 
+                                    cards_kept=self.player_button.num_cards_kept, 
+                                    opponent_cards_kept=self.player_blind.num_cards_kept)
             
             draw_action = DrawAction(actor_name = self.player_blind.name, pot_size = self.pot_size, 
                                      hand_before = self.player_blind.draw_hand.dealt_cards, 
