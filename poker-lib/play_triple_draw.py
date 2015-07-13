@@ -70,12 +70,17 @@ PREDICTION_VALUE_NOISE_LOW = -0.04 # Do decrease it sometimes... so that we don'
 # Alternatively, use a more sophisticated "tail distribution" from Gumbel
 # http://docs.scipy.org/doc/numpy/reference/generated/numpy.random.gumbel.html
 # mean = mu + 0.58821 * beta (centered around mu). So match above
-PREDICTION_VALUE_NOISE_BETA = 0.06 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
+PREDICTION_VALUE_NOISE_BETA = 0.05 # 0.06 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
 PREDICTION_VALUE_NOISE_MU = (PREDICTION_VALUE_NOISE_HIGH + PREDICTION_VALUE_NOISE_LOW)/2.0 - 0.58821 * PREDICTION_VALUE_NOISE_BETA
 
 # Don't boost aggressive actions so much... we want to see more calls, check, especially checks, attempted in spots that might be close.
 AGGRESSIVE_ACTION_NOISE_FACTOR = 1.0 # 0.5
 MULTIPLE_MODELS_NOISE_FACTOR = 0.2 # Reduce noise... by a lot... if using multiple models already (noise that way)
+
+# Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
+USE_NUM_DRAW_MODEL = True
+NUM_DRAW_MODEL_RATE = 0.5 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a little. 
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
@@ -105,6 +110,35 @@ def baseline_heuristic_value(round, bets_this_round = 0):
 
     return baseline
 
+# Return indices for [0, 5] cards kept (best x-card draw)
+def best_five_draws(hand_draws_vector):
+    best_draws = []
+    offset = 0
+    # 0-card draw
+    best_draws.append(0)
+    offset += 1
+    # 1-card draw
+    sub_array = hand_draws_vector[offset:offset+5]
+    best_draw = np.argmax(sub_array)
+    best_draws.append(best_draw + offset)
+    offset += 5
+    # 2-card draw
+    sub_array = hand_draws_vector[offset:offset+10]
+    best_draw = np.argmax(sub_array)
+    best_draws.append(best_draw + offset)
+    offset += 10
+    # 3-card draw
+    sub_array = hand_draws_vector[offset:offset+10]
+    best_draw = np.argmax(sub_array)
+    best_draws.append(best_draw + offset)
+    offset += 10
+    # 4-card draw
+    sub_array = hand_draws_vector[offset:offset+5]
+    best_draw = np.argmax(sub_array)
+    best_draws.append(best_draw + offset)
+    # 5-card draw
+    best_draws.append(31)
+    return best_draws
 
 # Should inherit from more general player... when we need one. (For example, manual player who chooses his own moves and own draws)
 class TripleDrawAIPlayer():
@@ -149,7 +183,7 @@ class TripleDrawAIPlayer():
             return 'sim'
 
     # Takes action on the hand. But first... get Theano output...
-    def draw_move(self, deck, num_draws = 1, debug = True):
+    def draw_move(self, deck, num_draws = 1, debug = True, draw_recommendations = None):
         # Reduce debug, if opponent is human, and could see.
         if self.opponent and self.opponent.is_human and (not SHOW_MACHINE_DEBUG_AGAINST_HUMAN):
             debug = False
@@ -160,15 +194,38 @@ class TripleDrawAIPlayer():
 
         # Get 32-length vector for each possible draw, from the model.
         hand_draws_vector = evaluate_single_hand(self.output_layer, hand_string_dealt, num_draws = num_draws) #, test_batch=self.test_batch)
-
-        
         if debug:
             print('All 32 values: %s' % str(hand_draws_vector))
-
+        # For further debug, and to use outside suggestion of #draw... select best draw for each 0-5 cards kept
+        best_draws_by_num_kept = best_five_draws(hand_draws_vector)
+        if debug:
+            print('best draws: %s' % best_draws_by_num_kept)
+            for i in xrange(len(best_draws_by_num_kept)):
+                best_draw = best_draws_by_num_kept[i]
+                print('\tBest draw %d: %d [value %.2f] (%s)' % (5-i, best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
+        # Just choose best draw, ignoring recommendations of # cards (break, snow, etc)
         best_draw = np.argmax(hand_draws_vector)
-        
+        best_draw_no_model = best_draw # for debub & comparison
         if debug:
             print('Best draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
+        
+        # Alternatively, use the recommendation from num_draw model, if available
+        # [do this X% of the time]
+        if draw_recommendations and USE_NUM_DRAW_MODEL and random.random() <= NUM_DRAW_MODEL_RATE:
+            action = draw_recommendations[0][1]
+            cards_kept = drawCategoryNumCardsKept[action]
+            best_draw = best_draws_by_num_kept[cards_kept]
+            if debug:
+                print('\tchosen to use num_draw model with %.1f%%' % (NUM_DRAW_MODEL_RATE * 100.0))
+                print(draw_recommendations)
+                print('\trecommend keeping %d cards' % cards_kept)
+                print('\tBest draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
+
+                if best_draw != best_draw_no_model:
+                    print('\t->model changed the draw!')
+                else:
+                    print('\t->model recommends same draw!')
+
         expected_payout = hand_draws_vector[best_draw] # keep this, and average it, as well
         draw_string = ''
         for i in range(0,5):
@@ -238,10 +295,15 @@ class TripleDrawAIPlayer():
     def draw(self, deck, num_draws = 1, bets_this_round = 0, 
              has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0, 
              debug = True, retry = False):
+        # Reduce debug, if opponent is human, and could see.
+        if (self.opponent and self.opponent.is_human and (not SHOW_MACHINE_DEBUG_AGAINST_HUMAN)) or self.is_human:
+            debug = False
+
         # If we have context and bets model that also outputs draws... at least give it a look.
         bets_layer = self.bets_output_layer # use latest "bets" layer, even if multiple available.
         if bets_layer and self.use_learning_action_model:
-            print('trying draw model in debug mode...')
+            if debug:
+                print('trying draw model in debug mode...')
             num_draws_left = num_draws
             if (num_draws_left >= 1):
                 hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
@@ -285,9 +347,22 @@ class TripleDrawAIPlayer():
             if debug:
                 print(value_predictions)
 
+            # Here is where we add noise to predictions, if so inclined...
+            # (add very little noise, as many values are correctly, close together)
+            if NUM_DRAW_MODEL_NOISE_FACTOR:
+                for prediction in value_predictions:
+                    action = prediction[1]
+                    noise = 0.0
+                    noise = np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)
+                    noise *= NUM_DRAW_MODEL_NOISE_FACTOR
+                    # TODO: Do we want to exclude some draws from noise? Like 4, 5 card draws that we prefer to discourage...
+                    prediction[0] += noise
+
+                if debug:
+                    print(value_predictions)
 
         # Get and apply action... from 0-32 actions layer.
-        self.draw_move(deck, num_draws)
+        self.draw_move(deck, num_draws, draw_recommendations = value_predictions)
 
         # TODO: We should log this, and output information useful for tracking.
         #self.draw_random(deck)
@@ -517,8 +592,8 @@ class TripleDrawAIPlayer():
         if has_button and bets_this_round < 2:
             raise_minimum += 0.5
 
-        if raise_minimum and raise_minimum > bet_raise:
-            print('resetting mimimum raise to %.2f. Fortune favors the bold!' % max(bet_raise + raise_minimum, raise_minimum))
+        #if raise_minimum and raise_minimum > bet_raise:
+        #    print('resetting mimimum raise to %.2f. Fortune favors the bold!' % max(bet_raise + raise_minimum, raise_minimum))
 
         return (max(bet_raise + raise_minimum, raise_minimum), check_call, max(fold, 0.0))
         
@@ -683,8 +758,8 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
         # Single move, that user selected!
         return user_action
         
-    # Human must draw his cards, also!
-    def draw_move(self, deck, num_draws = 1, debug = True):
+    # Human must draw his cards, also! [skips draw recommendations]
+    def draw_move(self, deck, num_draws = 1, debug = True,  draw_recommendations = None):
         # Reduce debug, if opponent is human, and could see.
         if self.opponent and self.opponent.is_human:
             debug = False

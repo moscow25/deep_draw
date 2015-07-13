@@ -167,6 +167,8 @@ KEEP_5_CARDS = 20 # stand pat
 DRAW_CATEGORY_SET = set([KEEP_0_CARDS, KEEP_1_CARDS, KEEP_2_CARDS, KEEP_3_CARDS, KEEP_4_CARDS, KEEP_5_CARDS])
 drawCategoryName = {KEEP_0_CARDS: 'draw_5', KEEP_1_CARDS: 'draw_4', KEEP_2_CARDS: 'draw_3', 
                     KEEP_3_CARDS: 'draw_2', KEEP_4_CARDS: 'draw_1', KEEP_5_CARDS: 'pat'}
+drawCategoryNumCardsKept = {KEEP_0_CARDS: 0, KEEP_1_CARDS: 1, KEEP_2_CARDS: 2, 
+                            KEEP_3_CARDS: 3, KEEP_4_CARDS: 4, KEEP_5_CARDS: 5}
 
 def category_from_event_action(action, cards_kept = 0):
     if action in ALL_RAISES_SET:
