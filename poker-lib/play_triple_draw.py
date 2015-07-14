@@ -82,7 +82,9 @@ BOOST_PAT_BET_ACTION_NOISE = True # Do we explicitly support betting after stand
 
 # Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
 USE_NUM_DRAW_MODEL = True
-NUM_DRAW_MODEL_RATE = 0.8 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+# Use a num_draw model... and tend to do so more later in the hand. For example, 30% first draw, 60% 2nd draw, 90% 3rd draw.
+NUM_DRAW_MODEL_RATE = 0.9 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW = 0.3 # Use model on the final draw, but perhaps less on previous draws...
 NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a little. 
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
@@ -216,7 +218,11 @@ class TripleDrawAIPlayer():
         
         # Alternatively, use the recommendation from num_draw model, if available
         # [do this X% of the time]
-        if draw_recommendations and USE_NUM_DRAW_MODEL and random.random() <= NUM_DRAW_MODEL_RATE:
+        draw_model_rate = NUM_DRAW_MODEL_RATE
+        if NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW:
+            # reduce frequency of num_draws model use... as we go earlier in the hand.
+            draw_model_rate -= (num_draws - 1) * NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW
+        if draw_recommendations and USE_NUM_DRAW_MODEL and random.random() <= draw_model_rate:
             # The point isn't to over-rule 0-32 model in close cases. The point is to look for *clear advantages* to 
             # snowing a hand, or breaking a hand. Therefore, add a bonus to the move already preferred by 0-32 model.
             if FAVOR_DEFAULT_NUM_DRAW_MODEL:
@@ -226,7 +232,7 @@ class TripleDrawAIPlayer():
                     # Boost the value by fixed amount... and also noise (but only on the upside)
                     # This will reduce randomly choosing an inferior draw. But not every time. And *much better* draw action wins easily.
                     if drawCategoryNumCardsKept[action] == default_num_kept:
-                        noise = 1.5 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 4.0
+                        noise = 1.0 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 3.0
                         noise += PREDICTION_VALUE_NOISE_AVERAGE * 4.0
                         prediction[0] += noise
                         if debug:
@@ -238,7 +244,7 @@ class TripleDrawAIPlayer():
             cards_kept = drawCategoryNumCardsKept[action]
             best_draw = best_draws_by_num_kept[cards_kept]
             if debug:
-                print('\tchosen to use num_draw model with %.1f%%' % (NUM_DRAW_MODEL_RATE * 100.0))
+                print('\tchosen to use num_draw model with %.1f%%' % (draw_model_rate * 100.0))
                 print(draw_recommendations)
                 print('\trecommend keeping %d cards' % cards_kept)
                 print('\tBest draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
@@ -786,6 +792,10 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
                 elif user_char == 'b' or user_char == 'r':
                     print('action bet/raise')
                     allowed_actions = ALL_BETS_SET
+
+                    # If we are capped out, and can't raise but only call... parse that too.
+                    if len(list(set.intersection(set(actions), ALL_BETS_SET))) == 0:
+                        allowed_actions = set(list(ALL_CALLS_SET))
                 elif user_char == 'f':
                     print('action FOLD')
                     allowed_actions = set([FOLD_HAND])
