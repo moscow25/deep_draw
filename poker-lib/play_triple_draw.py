@@ -232,7 +232,7 @@ class TripleDrawAIPlayer():
                     # Boost the value by fixed amount... and also noise (but only on the upside)
                     # This will reduce randomly choosing an inferior draw. But not every time. And *much better* draw action wins easily.
                     if drawCategoryNumCardsKept[action] == default_num_kept:
-                        noise = 1.0 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 3.0
+                        noise = 1.5 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 4.0
                         noise += PREDICTION_VALUE_NOISE_AVERAGE * 4.0
                         prediction[0] += noise
                         if debug:
