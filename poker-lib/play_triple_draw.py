@@ -357,6 +357,8 @@ class TripleDrawAIPlayer():
                     noise *= NUM_DRAW_MODEL_NOISE_FACTOR
                     # TODO: Do we want to exclude some draws from noise? Like 4, 5 card draws that we prefer to discourage...
                     prediction[0] += noise
+                # re-sort the values, after noise added
+                value_predictions.sort(reverse=True)
 
                 if debug:
                     print(value_predictions)
