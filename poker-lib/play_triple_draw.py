@@ -75,12 +75,13 @@ PREDICTION_VALUE_NOISE_BETA = 0.04 # 0.06 # vast majority of change within +- 0.
 PREDICTION_VALUE_NOISE_MU = PREDICTION_VALUE_NOISE_AVERAGE - 0.58821 * PREDICTION_VALUE_NOISE_BETA
 
 # Don't boost aggressive actions so much... we want to see more calls, check, especially checks, attempted in spots that might be close.
-AGGRESSIVE_ACTION_NOISE_FACTOR = 1.0 # 0.5
+AGGRESSIVE_ACTION_NOISE_FACTOR = 2.0 # 1.0 # 0.5
+BOOST_AGGRESSIVE_ACTION_NOISE = True # training only(?), increase value of aggressive actions (don't let them go negative)
 MULTIPLE_MODELS_NOISE_FACTOR = 0.3 # Reduce noise... by a lot... if using multiple models already (noise that way)
 
 # Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
 USE_NUM_DRAW_MODEL = True
-NUM_DRAW_MODEL_RATE = 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+NUM_DRAW_MODEL_RATE = 0.8 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
 NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a little. 
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
@@ -224,8 +225,8 @@ class TripleDrawAIPlayer():
                     # Boost the value by fixed amount... and also noise (but only on the upside)
                     # This will reduce randomly choosing an inferior draw. But not every time. And *much better* draw action wins easily.
                     if drawCategoryNumCardsKept[action] == default_num_kept:
-                        noise = (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 2.0
-                        noise += PREDICTION_VALUE_NOISE_AVERAGE * 5.0
+                        noise = (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 3.0
+                        noise += PREDICTION_VALUE_NOISE_AVERAGE * 4.0
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted %d-card draw by %.3f' % (5-default_num_kept, noise))
@@ -507,9 +508,12 @@ class TripleDrawAIPlayer():
                         # http://docs.scipy.org/doc/numpy/reference/generated/numpy.random.gumbel.html
                         noise = np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)
 
-                    # And boost bet/raise somewhat less than the other actions.
+                    # And boost bet/raise somewhat more or less, than the other actions.
                     if action in ALL_BETS_SET:
                         noise *= AGGRESSIVE_ACTION_NOISE_FACTOR
+                        # If turned on, boost aggressive actions... but letting noise go positive only, and not negative.
+                        if BOOST_AGGRESSIVE_ACTION_NOISE:
+                            noise = max(PREDICTION_VALUE_NOISE_AVERAGE, noise) 
 
                     # NOTE: Do *not* apply noise, if already using a mixed model. That is noise enough.
                     if self.bets_output_array:
