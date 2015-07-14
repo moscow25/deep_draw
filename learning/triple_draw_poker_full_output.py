@@ -444,7 +444,7 @@ def create_iter_functions_full_output(dataset, output_layer,
         loss_eval = loss_eval_no_mask
     
     # Prediction actually stays the same! Since we still want biggest value in the array... and compare to Y
-    # NOTE: If accuracy really supposed to be first 5... use [:,0:5] below.
+    # NOTE: If accuracy really supposed to be first 5... use [:,0:5] below [multiply by mask, before argmax]
     pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
 

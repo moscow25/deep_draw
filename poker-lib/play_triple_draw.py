@@ -79,7 +79,7 @@ MULTIPLE_MODELS_NOISE_FACTOR = 0.2 # Reduce noise... by a lot... if using multip
 
 # Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
 USE_NUM_DRAW_MODEL = True
-NUM_DRAW_MODEL_RATE = 0.5 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+NUM_DRAW_MODEL_RATE = 0.333 # 0.5 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
 NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a little. 
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
