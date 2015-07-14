@@ -65,22 +65,24 @@ RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %
 # NOTE: Does *not* apply to folds. Don't tweak thos.
 # NOTE: Lets us break out of a rut of similar actions, etc.
 PREDICTION_VALUE_NOISE_HIGH = 0.06
-PREDICTION_VALUE_NOISE_LOW = -0.04 # Do decrease it sometimes... so that we don't massively inflate value of actions
+PREDICTION_VALUE_NOISE_LOW = -0.03 # Do decrease it sometimes... so that we don't massively inflate value of actions
+PREDICTION_VALUE_NOISE_AVERAGE = (PREDICTION_VALUE_NOISE_HIGH + PREDICTION_VALUE_NOISE_LOW)/2.0 
 
 # Alternatively, use a more sophisticated "tail distribution" from Gumbel
 # http://docs.scipy.org/doc/numpy/reference/generated/numpy.random.gumbel.html
 # mean = mu + 0.58821 * beta (centered around mu). So match above
-PREDICTION_VALUE_NOISE_BETA = 0.05 # 0.06 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
-PREDICTION_VALUE_NOISE_MU = (PREDICTION_VALUE_NOISE_HIGH + PREDICTION_VALUE_NOISE_LOW)/2.0 - 0.58821 * PREDICTION_VALUE_NOISE_BETA
+PREDICTION_VALUE_NOISE_BETA = 0.04 # 0.06 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
+PREDICTION_VALUE_NOISE_MU = PREDICTION_VALUE_NOISE_AVERAGE - 0.58821 * PREDICTION_VALUE_NOISE_BETA
 
 # Don't boost aggressive actions so much... we want to see more calls, check, especially checks, attempted in spots that might be close.
 AGGRESSIVE_ACTION_NOISE_FACTOR = 1.0 # 0.5
-MULTIPLE_MODELS_NOISE_FACTOR = 0.2 # Reduce noise... by a lot... if using multiple models already (noise that way)
+MULTIPLE_MODELS_NOISE_FACTOR = 0.3 # Reduce noise... by a lot... if using multiple models already (noise that way)
 
 # Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
 USE_NUM_DRAW_MODEL = True
-NUM_DRAW_MODEL_RATE = 0.333 # 0.5 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+NUM_DRAW_MODEL_RATE = 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
 NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a little. 
+FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
@@ -206,12 +208,30 @@ class TripleDrawAIPlayer():
         # Just choose best draw, ignoring recommendations of # cards (break, snow, etc)
         best_draw = np.argmax(hand_draws_vector)
         best_draw_no_model = best_draw # for debub & comparison
+        best_draw_num_kept = len(all_draw_patterns[best_draw])
         if debug:
             print('Best draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
         
         # Alternatively, use the recommendation from num_draw model, if available
         # [do this X% of the time]
         if draw_recommendations and USE_NUM_DRAW_MODEL and random.random() <= NUM_DRAW_MODEL_RATE:
+            # The point isn't to over-rule 0-32 model in close cases. The point is to look for *clear advantages* to 
+            # snowing a hand, or breaking a hand. Therefore, add a bonus to the move already preferred by 0-32 model.
+            if FAVOR_DEFAULT_NUM_DRAW_MODEL:
+                default_num_kept = best_draw_num_kept # 0-5
+                for prediction in draw_recommendations:
+                    action = prediction[1]
+                    # Boost the value by fixed amount... and also noise (but only on the upside)
+                    # This will reduce randomly choosing an inferior draw. But not every time. And *much better* draw action wins easily.
+                    if drawCategoryNumCardsKept[action] == default_num_kept:
+                        noise = (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 2.0
+                        noise += PREDICTION_VALUE_NOISE_AVERAGE * 5.0
+                        prediction[0] += noise
+                        if debug:
+                            print('\tBoosted %d-card draw by %.3f' % (5-default_num_kept, noise))
+                # Re-sort results, of course.
+                draw_recommendations.sort(reverse=True)
+
             action = draw_recommendations[0][1]
             cards_kept = drawCategoryNumCardsKept[action]
             best_draw = best_draws_by_num_kept[cards_kept]
@@ -285,7 +305,7 @@ class TripleDrawAIPlayer():
             best_draw = 31
         
         if debug:
-            print('Best draw: %d [value %.2f] (%s)' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
+            print('Best draw: %d [value %.2f] (%s)\n' % (best_draw, hand_draws_vector[best_draw], str(all_draw_patterns[best_draw])))
         expected_payout = hand_draws_vector[best_draw] # keep this, and average it, as well
         self.heuristic_value = expected_payout
 
@@ -301,6 +321,7 @@ class TripleDrawAIPlayer():
 
         # If we have context and bets model that also outputs draws... at least give it a look.
         bets_layer = self.bets_output_layer # use latest "bets" layer, even if multiple available.
+        value_predictions = None
         if bets_layer and self.use_learning_action_model:
             if debug:
                 print('trying draw model in debug mode...')
