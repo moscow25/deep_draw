@@ -75,9 +75,10 @@ PREDICTION_VALUE_NOISE_BETA = 0.04 # 0.06 # vast majority of change within +- 0.
 PREDICTION_VALUE_NOISE_MU = PREDICTION_VALUE_NOISE_AVERAGE - 0.58821 * PREDICTION_VALUE_NOISE_BETA
 
 # Don't boost aggressive actions so much... we want to see more calls, check, especially checks, attempted in spots that might be close.
-AGGRESSIVE_ACTION_NOISE_FACTOR = 2.0 # 1.0 # 0.5
+AGGRESSIVE_ACTION_NOISE_FACTOR = 1.0 # 1.0 # 0.5
 BOOST_AGGRESSIVE_ACTION_NOISE = True # training only(?), increase value of aggressive actions (don't let them go negative)
-MULTIPLE_MODELS_NOISE_FACTOR = 0.3 # Reduce noise... by a lot... if using multiple models already (noise that way)
+MULTIPLE_MODELS_NOISE_FACTOR = 0.4 # Reduce noise... by a lot... if using multiple models already (noise that way)
+BOOST_PAT_BET_ACTION_NOISE = True # Do we explicitly support betting after standing pat? Yes. Even if hand is weak (snowed, etc).
 
 # Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
 USE_NUM_DRAW_MODEL = True
@@ -225,7 +226,7 @@ class TripleDrawAIPlayer():
                     # Boost the value by fixed amount... and also noise (but only on the upside)
                     # This will reduce randomly choosing an inferior draw. But not every time. And *much better* draw action wins easily.
                     if drawCategoryNumCardsKept[action] == default_num_kept:
-                        noise = (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 3.0
+                        noise = 1.5 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 4.0
                         noise += PREDICTION_VALUE_NOISE_AVERAGE * 4.0
                         prediction[0] += noise
                         if debug:
@@ -511,9 +512,25 @@ class TripleDrawAIPlayer():
                     # And boost bet/raise somewhat more or less, than the other actions.
                     if action in ALL_BETS_SET:
                         noise *= AGGRESSIVE_ACTION_NOISE_FACTOR
-                        # If turned on, boost aggressive actions... but letting noise go positive only, and not negative.
+
+                    # Also, boost a *bet* value, if we stood pat last round. Why? Helps with snowing, etc.
+                    # Boost only *bet* (not raise). And only if we are pat, and opponent is not.
+                    if (action in ALL_BETS_SET) and not (action in ALL_RAISES_SET):
+                        # Make sure that boost to bets is non-negative.
                         if BOOST_AGGRESSIVE_ACTION_NOISE:
                             noise = max(PREDICTION_VALUE_NOISE_AVERAGE, noise) 
+
+                        # If we are pat, consider boosting the bet value. Too many checks after patting (not only on snow)
+                        # (similarly, though less, tend to bet when we took fewer cards than apponent)
+                        draws_ahead_boost = 2.0 * PREDICTION_VALUE_NOISE_AVERAGE +  max([0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA), np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA), np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)])
+                        if BOOST_PAT_BET_ACTION_NOISE and cards_kept == 5 and opponent_cards_kept != 5:
+                            if debug:
+                                print('considering boosting the *bet* for pat hand. Opponent won\'t bet hand for us!')
+                            noise += draws_ahead_boost
+                        elif BOOST_PAT_BET_ACTION_NOISE and cards_kept == 4 and opponent_cards_kept < cards_kept:
+                            if debug:
+                                print('considering boosting the *bet* for drawing hand that is ahead. Opponent won\'t bet hand for us!')
+                            noise += draws_ahead_boost * 0.5
 
                     # NOTE: Do *not* apply noise, if already using a mixed model. That is noise enough.
                     if self.bets_output_array:

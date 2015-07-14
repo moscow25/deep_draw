@@ -30,7 +30,7 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of hum
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 110000 # 120000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 110000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 10000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
@@ -79,12 +79,16 @@ def linear_error(x, t):
 # E. special row = (value/action sum)
 
 first_five_vector = np.zeros(32)
+only_first_five_vector = np.zeros(32)
 for i in ALL_ACTION_CATEGORY_SET: 
     first_five_vector[i] = 1.0
+    only_first_five_vector[i] = 1.0
 for i in DRAW_CATEGORY_SET:
     first_five_vector[i] = 1.0
 first_five_matrix = [first_five_vector for i in xrange(BATCH_SIZE)]
 first_five_mask = np.array(first_five_matrix)
+only_first_five_matrix = [only_first_five_vector for i in xrange(BATCH_SIZE)]
+only_first_five_mask = np.array(only_first_five_matrix)
 
 print('first_five_mask:')
 print(first_five_mask)
@@ -99,8 +103,8 @@ def value_action_error(output_matrix, target_matrix):
     action_matrix = output_matrix[:,5:10] # Always output matrix. It's all we got!
     value_matrix_output = output_matrix[:,0:5] # implied from the current model.
     value_matrix_target = target_matrix[:,0:5] # directly from observation
-    value_matrix = theano.gradient.disconnected_grad(value_matrix_output) # Try to learn values from the network. 
-    #value_matrix = value_matrix_target # Use real values. And reduce/remove pressure to tweak values, which is bad.
+    #value_matrix = theano.gradient.disconnected_grad(value_matrix_output) # Try to learn values from the network. 
+    value_matrix = value_matrix_target # Use real values. And reduce/remove pressure to tweak values, which is bad.
 
     # create a mask, for non-zero values in the observed (values) space
     value_matrix_mask = T.ceil(0.1 * value_matrix) # Ends up with reasonable (available) values --> 1.0, zero values --> 0.0
@@ -445,7 +449,11 @@ def create_iter_functions_full_output(dataset, output_layer,
     
     # Prediction actually stays the same! Since we still want biggest value in the array... and compare to Y
     # NOTE: If accuracy really supposed to be first 5... use [:,0:5] below [multiply by mask, before argmax]
-    pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
+    if TRAIN_MASKED_OBJECTIVE:
+        # Apply [0:5] only mask, to consider accuracy (for bet values)
+        pred = T.argmax(output_layer.get_output(X_batch, deterministic=True) * only_first_five_mask, axis=1)
+    else:
+        pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
 
     all_params = lasagne.layers.get_all_params(output_layer)
