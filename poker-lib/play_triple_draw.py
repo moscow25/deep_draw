@@ -155,7 +155,9 @@ class TripleDrawAIPlayer():
         # TODO: Name, and track, multiple models. 
         # This is the draw model. Also, outputs the heuristic (value) of a hand, given # of draws left.
         self.output_layer = None # for draws
+        self.input_layer = None
         self.bets_output_layer = None 
+        self.bets_input_layer = None
         self.use_learning_action_model = False # should we use the trained model, to make betting decisions?
         self.old_bets_output_model = False # "old" model used for NIPS... should be set from the outside
         self.other_old_bets_output_model = False # the "other" old bets model [CNN3 vs CNN5, etc]
@@ -199,7 +201,7 @@ class TripleDrawAIPlayer():
             print('dealt %s for draw %s' % (hand_string_dealt, num_draws))
 
         # Get 32-length vector for each possible draw, from the model.
-        hand_draws_vector = evaluate_single_hand(self.output_layer, hand_string_dealt, num_draws = num_draws) #, test_batch=self.test_batch)
+        hand_draws_vector = evaluate_single_hand(self.output_layer, hand_string_dealt, num_draws = num_draws, input_layer=self.input_layer) #, test_batch=self.test_batch)
         if debug:
             print('All 32 values: %s' % str(hand_draws_vector))
         # For further debug, and to use outside suggestion of #draw... select best draw for each 0-5 cards kept
@@ -301,7 +303,7 @@ class TripleDrawAIPlayer():
             return
 
         # Get 32-length vector for each possible draw, from the model.
-        hand_draws_vector = evaluate_single_hand(self.output_layer, hand_string_dealt, num_draws = max(num_draws, 1)) #, test_batch=self.test_batch)
+        hand_draws_vector = evaluate_single_hand(self.output_layer, hand_string_dealt, num_draws = max(num_draws, 1), input_layer=self.input_layer) #, test_batch=self.test_batch)
 
         # Except for num_draws == 0, value is value of the best draw...
         if num_draws >= 1:
@@ -329,6 +331,7 @@ class TripleDrawAIPlayer():
 
         # If we have context and bets model that also outputs draws... at least give it a look.
         bets_layer = self.bets_output_layer # use latest "bets" layer, even if multiple available.
+        bets_input_layer = self.bets_input_layer
         value_predictions = None
         if bets_layer and self.use_learning_action_model:
             if debug:
@@ -362,7 +365,7 @@ class TripleDrawAIPlayer():
                                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
             full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
             # TODO: Rewrite with input and output layer... so that we can avoid putting all this data into Theano.shared()
-            bets_vector = evaluate_single_event(bets_layer, full_input)
+            bets_vector = evaluate_single_event(bets_layer, full_input, input_layer = bets_input_layer)
 
             # Show the values for all draws [0, 5] cards kept.
             if debug:
@@ -424,12 +427,16 @@ class TripleDrawAIPlayer():
         # Either use bets model... or if given several... choose one at random to apply
         # NOTE: We do not want to average the *values* in models, but the actual choices. Thus we'll be stochastic & unpredicatable.
         bets_layer = None
+        bets_input_layer = None
         if self.bets_output_array:
-            bets_layer = random.choice(self.bets_output_array)
+            # TODO: Also track input layer, for faster evaluation...
+            index = random.randrange(0, len(self.bets_output_array))
+            bets_layer, bets_input_layer = self.bets_output_array[index]
             if debug:
-                print('chose bets model %d in %d-length models index...' % (self.bets_output_array.index(bets_layer), len(self.bets_output_array)))
+                print('chose bets model %d in %d-length models index...' % (index, len(self.bets_output_array)))
         else:
             bets_layer = self.bets_output_layer
+            bets_input_layer = self.bets_input_layer
 
         if bets_layer and self.use_learning_action_model:
             #print('We has a *bets* output model. Use it!')
@@ -472,7 +479,7 @@ class TripleDrawAIPlayer():
             full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
 
             # TODO: Rewrite with input and output layer... so that we can avoid putting all this data into Theano.shared()
-            bets_vector = evaluate_single_event(bets_layer, full_input)
+            bets_vector = evaluate_single_event(bets_layer, full_input, input_layer = bets_input_layer)
 
             """
             # For special (and slow) debug... show all models, if available...
@@ -953,7 +960,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
         all_param_values_from_file = np.load(draw_model_filename)
         
         # Size must match exactly!
-        output_layer = build_model(
+        output_layer, input_layer, layers  = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
             HAND_TO_MATRIX_PAD_SIZE,
             32,
@@ -973,7 +980,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
         bets_all_param_values_from_file = np.load(bets_model_filename)
 
         # Size must match exactly!
-        bets_output_layer = build_model(
+        bets_output_layer, bets_input_layer, bets_layers  = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
             HAND_TO_MATRIX_PAD_SIZE,
             32,
@@ -993,7 +1000,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
         old_bets_all_param_values_from_file = np.load(old_bets_model_filename)
 
         # Size must match exactly!
-        old_bets_output_layer = build_model(
+        old_bets_output_layer, old_bets_input_layer, old_bets_layers = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
             HAND_TO_MATRIX_PAD_SIZE,
             32,
@@ -1013,7 +1020,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
         other_old_bets_all_param_values_from_file = np.load(other_old_bets_model_filename)
 
         # Size must match exactly!
-        other_old_bets_output_layer = build_model(
+        other_old_bets_output_layer, other_old_bets_input_layer, other_old_bets_layers = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
             HAND_TO_MATRIX_PAD_SIZE,
             32,
@@ -1042,35 +1049,42 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     # Add model, to players.
 
     # Player 1 plays the latest model... or a mixed bag of models, if provided.
+    # TODO: Perform massive cleanup, removing passing input, output layers for everything... just layers[0] and layers[-1] should suffice.
     player_one.output_layer = output_layer
+    player_one.input_layer = input_layer
     player_one.bets_output_layer = bets_output_layer
+    player_one.bets_input_layer = bets_input_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
     player_one.use_learning_action_model = True
     if USE_MIXED_MODEL_WHEN_AVAILABLE and (old_bets_output_layer or other_old_bets_output_layer):
         player_one.bets_output_array = []
-        player_one.bets_output_array.append(bets_output_layer) # lastest model
+        player_one.bets_output_array.append([bets_output_layer, bets_input_layer]) # lastest model
         if old_bets_output_layer:
-            player_one.bets_output_array.append(old_bets_output_layer)
+            player_one.bets_output_array.append([old_bets_output_layer, old_bets_input_layer])
         if other_old_bets_output_layer:
-            player_one.bets_output_array.append(other_old_bets_output_layer)
+            player_one.bets_output_array.append([other_old_bets_output_layer, other_old_bets_input_layer])
         print('loaded player_one with %d-mixed model!' % len(player_one.bets_output_array))
 
     # Player 2 plays the least late model... unless player 1 is playing a mixed bag.
     # NOTE: This sounds confusing, but is not. We need to test vs human (with mixed model, if given)
     # Otherwise, we want to test the latest model, against the mix. Or the latest model, against the oldest given.
     player_two.output_layer = output_layer
+    player_two.input_layer = input_layer
     player_two.bets_output_layer = bets_output_layer
+    player_two.bets_input_layer = bets_input_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
     player_two.use_learning_action_model = True
 
     # If we want to supply "old" model, for new CNN vs old CNN. 
     if (not human_player) and old_bets_output_layer and (not player_one.bets_output_array):
         player_two.bets_output_layer = old_bets_output_layer
+        player_two.bets_input_layer = old_bets_input_layer
         player_two.old_bets_output_model = True
 
     # Use the "other" "old" model, if provided
     if (not human_player) and other_old_bets_output_layer and (not player_one.bets_output_array):
         player_two.bets_output_layer = other_old_bets_output_layer
+        player_two.bets_input_layer = other_old_bets_input_layer
         player_two.other_old_bets_output_model = True
 
     # Run a bunch of individual hands.

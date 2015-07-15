@@ -30,8 +30,8 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of hum
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 110000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 10000
+MAX_INPUT_SIZE = 1000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 200
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -247,10 +247,14 @@ def build_model(input_width, input_height, output_dim,
     if INCLUDE_HAND_CONTEXT:
         num_input_cards += 17
 
+    # Track all layers created, and return the full stack
+    layers = []
+
     # Shape is [cards + bits] x height x width
     l_in = lasagne.layers.InputLayer(
         shape=(batch_size, num_input_cards, input_height, input_width),
         )
+    layers.append(l_in)
 
     print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
 
@@ -262,6 +266,7 @@ def build_model(input_width, input_height, output_dim,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
+    layers.append(l_conv1)
 
     print('convolution layer l_conv1. Shape %s' % str(l_conv1.output_shape))
 
@@ -275,9 +280,11 @@ def build_model(input_width, input_height, output_dim,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
+    layers.append(l_conv1_1)
     print('convolution layer l_conv1_1. Shape %s' % str(l_conv1_1.output_shape))
 
     l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, pool_size=(2, 2))
+    layers.append(l_pool1)
     # Try *not pooling* in the suit layer...
     #l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 1))
 
@@ -301,7 +308,7 @@ def build_model(input_width, input_height, output_dim,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
-
+    layers.append(l_conv2)
     print('convolution layer l_conv2. Shape %s' % str(l_conv2.output_shape))
 
     # Add 4th convolution layer...
@@ -314,12 +321,13 @@ def build_model(input_width, input_height, output_dim,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
-
+    layers.append(l_conv2_2)
     print('convolution layer l_conv2_2. Shape %s' % str(l_conv2_2.output_shape))
 
     # Question? No need for Max-pool for already narrow network... NO
     # Try *not pooling* in the suit layer...
     l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, pool_size=(2, 2))
+    layers.append(l_pool2)
     #l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 1))
 
     print('maxPool layer l_pool2. Shape %s' % str(l_pool2.output_shape))
@@ -340,10 +348,12 @@ def build_model(input_width, input_height, output_dim,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
+    layers.append(l_hidden1)
 
     print('hidden layer l_hidden1. Shape %s' % str(l_hidden1.output_shape))
 
     l_hidden1_dropout = lasagne.layers.DropoutLayer(l_hidden1, p=0.5)
+    layers.append(l_hidden1_dropout)
 
     print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.output_shape))
 
@@ -360,14 +370,18 @@ def build_model(input_width, input_height, output_dim,
         nonlinearity=lasagne.nonlinearities.rectify, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
         W=lasagne.init.GlorotUniform(),
         )
+    layers.append(l_out)
 
     print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.output_shape)))
+    print('produced network of %d layers. TODO: name \'em!' % len(layers))
 
-    return l_out
+    # Don't really need l_out... but easy to access that way
+    return (l_out, l_in, layers)
 
 
 # Adjust from the standard create_iter_functions, to deal with z_batch being vector of values.
 def create_iter_functions_full_output(dataset, output_layer,
+                                      input_layer = None, # optionally supply input layer, model execution w/o theano.shared()
                                       X_tensor_type=T.tensor4, # T.matrix,
                                       batch_size=BATCH_SIZE,
                                       learning_rate=LEARNING_RATE, momentum=MOMENTUM):
@@ -385,6 +399,7 @@ def create_iter_functions_full_output(dataset, output_layer,
     if TRAIN_MASKED_OBJECTIVE:
         m_batch = T.matrix('m') # mask for all values, if some are relevant, others are N/A or ?
 
+    # TODO: Replace the "batch index" input, with input of actual batch... (so data doesn't need to be stored in theano.shared())
     batch_slice = slice(batch_index * batch_size,
                         (batch_index + 1) * batch_size)
 
@@ -430,6 +445,7 @@ def create_iter_functions_full_output(dataset, output_layer,
             # Test this hack...
             masked_loss_function=value_action_error
 
+        # TODO: Get rid of lasagne.objectives? Or use one that allows supply of input layer...
         objective_mask = lasagne.objectives.MaskedObjective(output_layer, masked_loss_function)
                                                   
         # error is computed same as un-masked objective... but we also supply a mask for each output. 1 = output matters 0 = N/A or ?
@@ -451,6 +467,7 @@ def create_iter_functions_full_output(dataset, output_layer,
     # NOTE: If accuracy really supposed to be first 5... use [:,0:5] below [multiply by mask, before argmax]
     if TRAIN_MASKED_OBJECTIVE:
         # Apply [0:5] only mask, to consider accuracy (for bet values)
+        # TODO: Allow supply of input layer...
         pred = T.argmax(output_layer.get_output(X_batch, deterministic=True) * only_first_five_mask, axis=1)
     else:
         pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
@@ -551,11 +568,15 @@ def create_iter_functions_full_output(dataset, output_layer,
 # Now how do I return theano function to predict, from my given thing? Should be simple.
 # TODO: output second-best choice
 # TODO: show choices, alongside inputs
-def predict_model(output_layer, test_batch, format = 'deuce'):
+def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None):
     print('Computing predictions on test_batch: %s %s' % (type(test_batch), test_batch.shape))
     #pred = T.argmax(output_layer.get_output(test_batch, deterministic=True), axis=1)
     #pred_all = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True) # deprecated
-    pred_all = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
+    if input_layer:
+        #print('evaluating test_batch using explicit input_layer (no theano.shared())!')
+        pred_all = lasagne.layers.get_output(output_layer, deterministic=True)
+    else:
+        pred_all = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
     if format != 'deuce_events':
         pred = pred_all
     else:
@@ -572,7 +593,11 @@ def predict_model(output_layer, test_batch, format = 'deuce'):
     # TODO: For "deuce_events" format... show best action inside of events actions only.
 
     #print(tp.pprint(pred))
-    softmax_values = pred.eval()
+    if input_layer:
+        # Or is it {l_in.input_var: xx}
+        softmax_values = pred.eval({input_layer.input_var: lasagne.utils.floatX(test_batch)})
+    else:
+        softmax_values = pred.eval()
     print(softmax_values)
 
     pred_max = T.argmax(pred[:,0:5], axis=1)
@@ -580,7 +605,11 @@ def predict_model(output_layer, test_batch, format = 'deuce'):
     print('Maximums %s' % pred_max)
     #print(tp.pprint(pred_max))
 
-    softmax_choices = pred_max.eval()
+    if input_layer:
+        # Or is it {l_in.input_var: xx}
+        softmax_choices = pred_max.eval({input_layer.input_var: lasagne.utils.floatX(test_batch)})
+    else:
+        softmax_choices = pred_max.eval()
     print(softmax_choices)
 
     # now debug the softmax choices...
@@ -592,7 +621,7 @@ def predict_model(output_layer, test_batch, format = 'deuce'):
 
 
 # Get 0-BATCH_SIZE hands, evaluate, and return matrix of vectors
-def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUDE_HAND_CONTEXT): 
+def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUDE_HAND_CONTEXT, input_layer = None): 
     now = time.time()
     for i in range(BATCH_SIZE - len(test_cases)):
         test_cases.append(test_cases[0])
@@ -605,14 +634,20 @@ def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUD
 
     # print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
-
-    pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
+    if input_layer:
+        #print('evaluating batch with input layer, so no grow in theano.shared()!')
+        pred = lasagne.layers.get_output(output_layer, deterministic=True)
+    else:
+        pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
     # print('%.2fs to get_output' % (time.time() - now))
     now = time.time()
 
     #print('Prediciton: %s' % pred)
     #print(tp.pprint(pred))
-    softmax_values = pred.eval()
+    if input_layer:
+        softmax_values = pred.eval({input_layer.input_var: lasagne.utils.floatX(test_batch)})
+    else:
+        softmax_values = pred.eval()
     print('%.2fs to eval() output' % (time.time() - now))
     now = time.time()
 
@@ -622,24 +657,31 @@ def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUD
 # Return 32-point vector.
 # Make a batch, to evaluate single hand. Expensive!!
 def evaluate_single_hand(output_layer, hand_string_dealt, num_draws = 1, 
-                         include_hand_context = INCLUDE_HAND_CONTEXT):
+                         include_hand_context = INCLUDE_HAND_CONTEXT,
+                         input_layer = None):
     test_cases = [[hand_string_dealt, num_draws]]
-    softmax_values = evaluate_batch_hands(output_layer, test_cases, include_hand_context = include_hand_context)
+    softmax_values = evaluate_batch_hands(output_layer, test_cases, include_hand_context = include_hand_context, input_layer = input_layer)
     return softmax_values[0]
 
 # Just give us the bits... expect 26x17x17 matrix...
-def evaluate_single_event(output_layer, event_input):
+def evaluate_single_event(output_layer, event_input, input_layer = None):
     now = time.time()
     test_batch = np.array([event_input for i in range(BATCH_SIZE)], TRAINING_INPUT_TYPE)
     # print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
 
     #pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True) # deprecated...
-    pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
+    if input_layer:
+        #print('evaluating batch with input layer, so no grow in theano.shared()!')
+        pred = lasagne.layers.get_output(output_layer, deterministic=True)
+    else:
+        pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
     # print('%.2fs to get_output' % (time.time() - now))
     now = time.time()
-
-    softmax_values = pred.eval()
+    if input_layer:
+        softmax_values = pred.eval({input_layer.input_var: lasagne.utils.floatX(test_batch)})
+    else:
+        softmax_values = pred.eval()
     print('%.2fs to eval() output' % (time.time() - now))
     now = time.time()
 
@@ -665,7 +707,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
     print("Building model and compiling functions...")
     sys.stdout.flush() # Helps keep track of output live in re-directed out
-    output_layer = build_model(
+    output_layer, input_layer, layers = build_model(
         input_height=dataset['input_height'],
         input_width=dataset['input_width'],
         output_dim=dataset['output_dim'],
@@ -697,6 +739,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
         dataset,
         output_layer,
         X_tensor_type=T.tensor4,
+        input_layer = input_layer
         )
 
     print("Starting training...")
@@ -754,7 +797,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
         # TODO:  Add context, if made available...
         test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
         
-    predict_model(output_layer=output_layer, test_batch=test_batch, format = TRAINING_FORMAT)
+    predict_model(output_layer=output_layer, test_batch=test_batch, format = TRAINING_FORMAT, input_layer = input_layer)
 
     print('again, the test cases: \n%s' % test_cases)    
 
