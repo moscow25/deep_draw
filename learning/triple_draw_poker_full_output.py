@@ -30,8 +30,8 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of hum
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 1000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 200
+MAX_INPUT_SIZE = 115000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 15000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -66,6 +66,7 @@ DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch 
 
 # Helps speed up inputs?
 TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
+DETERMINISTIC_MODEL_RUN = False # True # Do we evaluate bet/raise/draw model in deterministic mode? (dropout, etc)
 
 # HACK linear error
 def linear_error(x, t):
@@ -403,22 +404,11 @@ def create_iter_functions_full_output(dataset, output_layer,
     batch_slice = slice(batch_index * batch_size,
                         (batch_index + 1) * batch_size)
 
-    
     # Also, attempt to multiply the 5 [bet, raise, check, call, fold] values 
     # by the 5 [bet, raise, check, call, fold] action percentages.
     # Can we do this with slicing?
     #vals_batch = T.matrix('vals') # 100x5 matrix of value estimates
     #actions_batch = T.matrix('actions') # 100x5 matric of value estimates
-
-
-
-    # Use categorical_crossentropy objective, if we want to just predict best class, and not class values.
-    #objective = lasagne.objectives.Objective(output_layer,
-    #    loss_function=lasagne.objectives.categorical_crossentropy)
-    #loss_train = objective.get_loss(X_batch, target=y_batch)
-    #loss_eval = objective.get_loss(X_batch, target=y_batch,
-    #                               deterministic=True)
-
 
     if not TRAIN_MASKED_OBJECTIVE:
         # compute loss on mean squared error
@@ -429,7 +419,7 @@ def create_iter_functions_full_output(dataset, output_layer,
         # error is comparing output to z-vector.
         loss_train_no_mask = objective_no_mask.get_loss(X_batch, target=z_batch)
         loss_eval_no_mask = objective_no_mask.get_loss(X_batch, target=z_batch,
-                                                       deterministic=True)
+                                                       deterministic=DETERMINISTIC_MODEL_RUN)
     else:
         # Alternatively, train only on some values! We do this by supplying a mask.
         # This means that some values matter, others do not. For example... 
@@ -451,7 +441,7 @@ def create_iter_functions_full_output(dataset, output_layer,
         # error is computed same as un-masked objective... but we also supply a mask for each output. 1 = output matters 0 = N/A or ?
         loss_train_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch)
         loss_eval_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch,
-                                                 deterministic=True)
+                                                 deterministic=DETERMINISTIC_MODEL_RUN)
 
     if TRAIN_MASKED_OBJECTIVE:
         print('--> We are told to use \'masked\' loss function. So training & validation loss will be computed on inputs with mask == 1 only')
@@ -468,9 +458,9 @@ def create_iter_functions_full_output(dataset, output_layer,
     if TRAIN_MASKED_OBJECTIVE:
         # Apply [0:5] only mask, to consider accuracy (for bet values)
         # TODO: Allow supply of input layer...
-        pred = T.argmax(output_layer.get_output(X_batch, deterministic=True) * only_first_five_mask, axis=1)
+        pred = T.argmax(output_layer.get_output(X_batch, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
     else:
-        pred = T.argmax(output_layer.get_output(X_batch, deterministic=True), axis=1)
+        pred = T.argmax(output_layer.get_output(X_batch, deterministic=DETERMINISTIC_MODEL_RUN), axis=1)
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
 
     all_params = lasagne.layers.get_all_params(output_layer)
@@ -570,13 +560,11 @@ def create_iter_functions_full_output(dataset, output_layer,
 # TODO: show choices, alongside inputs
 def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None):
     print('Computing predictions on test_batch: %s %s' % (type(test_batch), test_batch.shape))
-    #pred = T.argmax(output_layer.get_output(test_batch, deterministic=True), axis=1)
-    #pred_all = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True) # deprecated
     if input_layer:
         #print('evaluating test_batch using explicit input_layer (no theano.shared())!')
-        pred_all = lasagne.layers.get_output(output_layer, deterministic=True)
+        pred_all = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
     else:
-        pred_all = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
+        pred_all = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=DETERMINISTIC_MODEL_RUN)
     if format != 'deuce_events':
         pred = pred_all
     else:
@@ -636,9 +624,9 @@ def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUD
     now = time.time()
     if input_layer:
         #print('evaluating batch with input layer, so no grow in theano.shared()!')
-        pred = lasagne.layers.get_output(output_layer, deterministic=True)
+        pred = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
     else:
-        pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
+        pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=DETERMINISTIC_MODEL_RUN)
     # print('%.2fs to get_output' % (time.time() - now))
     now = time.time()
 
@@ -669,13 +657,11 @@ def evaluate_single_event(output_layer, event_input, input_layer = None):
     test_batch = np.array([event_input for i in range(BATCH_SIZE)], TRAINING_INPUT_TYPE)
     # print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     now = time.time()
-
-    #pred = output_layer.get_output(lasagne.utils.floatX(test_batch), deterministic=True) # deprecated...
     if input_layer:
         #print('evaluating batch with input layer, so no grow in theano.shared()!')
-        pred = lasagne.layers.get_output(output_layer, deterministic=True)
+        pred = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
     else:
-        pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=True)
+        pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=DETERMINISTIC_MODEL_RUN)
     # print('%.2fs to get_output' % (time.time() - now))
     now = time.time()
     if input_layer:

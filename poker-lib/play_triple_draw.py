@@ -71,7 +71,7 @@ PREDICTION_VALUE_NOISE_AVERAGE = (PREDICTION_VALUE_NOISE_HIGH + PREDICTION_VALUE
 # Alternatively, use a more sophisticated "tail distribution" from Gumbel
 # http://docs.scipy.org/doc/numpy/reference/generated/numpy.random.gumbel.html
 # mean = mu + 0.58821 * beta (centered around mu). So match above
-PREDICTION_VALUE_NOISE_BETA = 0.04 # 0.06 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
+PREDICTION_VALUE_NOISE_BETA = 0.03 # 0.04 # 0.06 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
 PREDICTION_VALUE_NOISE_MU = PREDICTION_VALUE_NOISE_AVERAGE - 0.58821 * PREDICTION_VALUE_NOISE_BETA
 
 # Don't boost aggressive actions so much... we want to see more calls, check, especially checks, attempted in spots that might be close.
