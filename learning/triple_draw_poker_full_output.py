@@ -66,7 +66,8 @@ DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch 
 
 # Helps speed up inputs?
 TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
-DETERMINISTIC_MODEL_RUN = False # True # Do we evaluate bet/raise/draw model in deterministic mode? (dropout, etc)
+# Question: does deterministic/not deterministic create errors with "RuntimeError: GpuCorrMM failed to allocate working memory of 234 x 225" after a while?
+DETERMINISTIC_MODEL_RUN = True # False # True # Do we evaluate bet/raise/draw model in deterministic mode? (dropout, etc)
 
 # HACK linear error
 def linear_error(x, t):
