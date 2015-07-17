@@ -1046,7 +1046,17 @@ def train(iter_funcs, dataset, batch_size=BATCH_SIZE, epoch_switch_adapt=10000):
             print('default train for epoch %d' % epoch)
             sys.stdout.flush()
             for b in range(num_batches_train):
-                batch_train_loss = iter_funcs['train'](b)
+                #print('computing batch, for batch index %d' % b)
+                batch_index = b
+                batch_slice = slice(batch_index * batch_size,
+                                    (batch_index + 1) * batch_size)
+                X_batch = dataset['X_train'][batch_slice] # input bits
+                z_batch = dataset['z_train'][batch_slice] # results
+                m_batch = dataset['m_train'][batch_slice] # m == mask. Which results bits are known (actions taken or can be implied)
+                print('batch has shape...')
+                # Runs a training cycle... by calling function 'train' with input b == batch #
+                # TODO: Actually supply the batch... or better yet, set that as input for the network!
+                batch_train_loss = iter_funcs['train'](X_batch, z_batch, m_batch)
                 batch_train_losses.append(batch_train_loss)
         else:
             print('adaptive training for epock %d' % epoch)
@@ -1057,21 +1067,26 @@ def train(iter_funcs, dataset, batch_size=BATCH_SIZE, epoch_switch_adapt=10000):
 
         avg_train_loss = np.mean(batch_train_losses)
 
+        """
         batch_valid_losses = []
         batch_valid_accuracies = []
         for b in range(num_batches_valid):
-            batch_valid_loss, batch_valid_accuracy = iter_funcs['valid'](b)
+            batch_slice = slice(batch_index * batch_size,
+                                    (batch_index + 1) * batch_size)
+            X_batch = dataset['X_valid'][batch_slice]
+            batch_valid_loss, batch_valid_accuracy = iter_funcs['valid'](b, X_batch)
             batch_valid_losses.append(batch_valid_loss)
             batch_valid_accuracies.append(batch_valid_accuracy)
 
         avg_valid_loss = np.mean(batch_valid_losses)
         avg_valid_accuracy = np.mean(batch_valid_accuracies)
+        """
 
         yield {
             'number': epoch,
             'train_loss': avg_train_loss,
-            'valid_loss': avg_valid_loss,
-            'valid_accuracy': avg_valid_accuracy,
+            #'valid_loss': avg_valid_loss,
+            #'valid_accuracy': avg_valid_accuracy,
         }
 
 

@@ -1138,7 +1138,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     sys.stdout.flush()
 
 if __name__ == '__main__':
-    samples = 5000 # number of hands to run
+    samples = 20000 # number of hands to run
     output_file_name = 'triple_draw_events_%d.csv' % samples
 
     # Input model filename if given
