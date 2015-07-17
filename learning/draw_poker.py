@@ -112,7 +112,7 @@ FUTURE_DISCOUNT = 0.9
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
-SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 
 # Use this to train only on results of intelligent players, if different versions available
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'man']) # learn only from better models, or man's actions
@@ -634,6 +634,9 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
 
     # Can't grow numpy arrays. So instead, be lazy and grow array to be turned into numpy arrays.
     X_train_not_np = [] # all input data (multi-dimension nparrays)
+    # use this to create empty numpy array of the right size... and then add each line as needed
+    # TODO: Fix hardcoding of input sizes...
+    X_train = np.empty((max_input, 26, 17, 17), dtype=TRAINING_INPUT_TYPE)
     y_train_not_np = [] # "best category" for each item
     z_train_not_np = [] # 32-length vectors for all weights
     m_train_not_np = [] # 32-length "mask" for which weights matter. 1 = yes 0 = N/A or ??
@@ -824,7 +827,15 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 # count class, if item chosen
                 y_count_by_bucket[output_class] += 1
 
-                X_train_not_np.append(hand_input)
+                # X_train_not_np.append(hand_input) # no longer needed...
+                X_train[hands,:,:,:] = hand_input # Add rown to final X_train numpy array directly.
+                """
+                if X_train == None:
+                    print('\n-->loading first hand. Input shape...')
+                    print(hand_input.shape)
+                    X_train = np.empty(hand_input.shape, dtype=TRAINING_INPUT_TYPE)
+                    """
+
                 y_train_not_np.append(output_class)
                 z_train_not_np.append(output_array)
                 m_train_not_np.append(output_mask)
@@ -844,12 +855,12 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             DRAW_VALUE_KEYS[action] = drawCategoryName[action]
     print('count ground truth for 32 categories:\n%s\n' % ('\n'.join([str([DRAW_VALUE_KEYS[i],y_count_by_bucket[i],'%.1f%%' % (y_count_by_bucket[i]*100.0/hands)]) for i in range(32)])))
 
-    X_train = np.array(X_train_not_np)
+    #X_train = np.array(X_train_not_np)
     y_train = np.array(y_train_not_np)
     z_train = np.array(z_train_not_np) # 32-length vectors
     m_train = np.array(m_train_not_np) # 32-length masks
 
-    print('Read %d data points. Shape below:' % len(X_train_not_np))
+    print('Read %d data points. Shape below:' % len(y_train_not_np))
     #print(X_train)
     #print(y_train)
     print('num_examples (train) %s' % X_train.shape[0])
@@ -859,7 +870,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     print('z_train object is type %s of shape %s' % (type(z_train), z_train.shape))
     print('m_train object is type %s of shape %s' % (type(m_train), m_train.shape))
 
-    return (X_train, y_train, z_train, m_train)
+    return (hands, X_train, y_train, z_train, m_train)
 
 def load_data():
     """Get data with labels, split into training, validation and test set."""
@@ -1053,7 +1064,6 @@ def train(iter_funcs, dataset, batch_size=BATCH_SIZE, epoch_switch_adapt=10000):
                 X_batch = dataset['X_train'][batch_slice] # input bits
                 z_batch = dataset['z_train'][batch_slice] # results
                 m_batch = dataset['m_train'][batch_slice] # m == mask. Which results bits are known (actions taken or can be implied)
-                print('batch has shape...')
                 # Runs a training cycle... by calling function 'train' with input b == batch #
                 # TODO: Actually supply the batch... or better yet, set that as input for the network!
                 batch_train_loss = iter_funcs['train'](X_batch, z_batch, m_batch)

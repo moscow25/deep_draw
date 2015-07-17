@@ -30,8 +30,8 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of hum
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 110000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 10000
+MAX_INPUT_SIZE = 250000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 25000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -154,11 +154,11 @@ def load_data():
     # 'deuce' has its own adjustments...
     data = _load_poker_csv(filename=DATA_FILENAME, max_input = MAX_INPUT_SIZE, keep_all_data=True, format=TRAINING_FORMAT, include_num_draws = INCLUDE_NUM_DRAWS, include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT)
 
-    # X = input, y = best cateogy, z = all categories, m = mask on all categories (if applicable)
-    X_all, y_all, z_all, m_all = data
+    # num_hands = total loaded, X = input, y = best cateogy, z = all categories, m = mask on all categories (if applicable)
+    num_hands, X_all, y_all, z_all, m_all = data
 
     # Split into train (remainder), valid (1000), test (1000)
-    X_split = np.split(X_all, [VALIDATION_SIZE, VALIDATION_SIZE + TEST_SIZE])
+    X_split = np.split(X_all[:num_hands], [VALIDATION_SIZE, VALIDATION_SIZE + TEST_SIZE])
     X_valid = X_split[0]
     X_test = X_split[1]
     X_train = X_split[2]
