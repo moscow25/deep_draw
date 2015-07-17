@@ -30,8 +30,8 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of hum
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 250000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 25000
+MAX_INPUT_SIZE = 500000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 30000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -214,10 +214,14 @@ def load_data():
         z_train=lasagne.utils.floatX(z_train),
         m_train=lasagne.utils.floatX(m_train),
 
-        X_valid=theano.shared(lasagne.utils.floatX(X_valid), borrow=True),
-        y_valid=T.cast(theano.shared(y_valid, borrow=True), 'int32'),
-        z_valid=theano.shared(lasagne.utils.floatX(z_valid), borrow=True),
-        m_valid=theano.shared(lasagne.utils.floatX(m_valid), borrow=True),
+        #X_valid=theano.shared(lasagne.utils.floatX(X_valid), borrow=True),
+        #y_valid=T.cast(theano.shared(y_valid, borrow=True), 'int32'),
+        #z_valid=theano.shared(lasagne.utils.floatX(z_valid), borrow=True),
+        #m_valid=theano.shared(lasagne.utils.floatX(m_valid), borrow=True),
+        X_valid=lasagne.utils.floatX(X_valid),
+        y_valid=y_valid.astype(np.int32),
+        z_valid=lasagne.utils.floatX(z_valid),
+        m_valid=lasagne.utils.floatX(m_valid),
 
         X_test=theano.shared(lasagne.utils.floatX(X_test), borrow=True),
         y_test=T.cast(theano.shared(y_test, borrow=True), 'int32'),
@@ -409,7 +413,7 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     batch_index = T.iscalar('batch_index')
     #if not input_var:
-    X_batch = X_tensor_type('x') # inputs to the network
+    #X_batch = X_tensor_type('x') # inputs to the network
     y_batch = T.ivector('y') # "best class" for the network
     z_batch = T.matrix('z') # all values for the network
     if TRAIN_MASKED_OBJECTIVE:
@@ -457,7 +461,7 @@ def create_iter_functions_full_output(dataset, output_layer,
         # NOTE: X_batch will be loaded into "shared". To not do this... do function.eval({input_layer.var_in: data})
         if input_layer:
             loss_train_mask = objective_mask.get_loss(target=z_batch, mask=m_batch)
-            loss_eval_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch,
+            loss_eval_mask = objective_mask.get_loss(target=z_batch, mask=m_batch,
                                                      deterministic=DETERMINISTIC_MODEL_RUN)
         else:
             loss_train_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch)
@@ -478,8 +482,7 @@ def create_iter_functions_full_output(dataset, output_layer,
     # NOTE: If accuracy really supposed to be first 5... use [:,0:5] below [multiply by mask, before argmax]
     if TRAIN_MASKED_OBJECTIVE:
         # Apply [0:5] only mask, to consider accuracy (for bet values)
-        # TODO: Allow supply of input layer...
-        # NOTE: X_batch will be loaded into "shared". To not do this... do function.eval({input_layer.var_in: data})
+        # TODO: Allow predictions to consider both cases with output == bet/raise and ouput == num_cards draw
         if input_layer:
             #pred = T.argmax(output_layer.get_output(deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
             pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
@@ -545,10 +548,10 @@ def create_iter_functions_full_output(dataset, output_layer,
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
         givens_valid = {
-            X_batch: dataset['X_valid'][batch_slice],
-            y_batch: dataset['y_valid'][batch_slice],
-            z_batch: dataset['z_valid'][batch_slice],
-            m_batch: dataset['m_valid'][batch_slice],
+            #X_batch: dataset['X_valid'][batch_slice],
+            #y_batch: dataset['y_valid'][batch_slice],
+            #z_batch: dataset['z_valid'][batch_slice],
+            #m_batch: dataset['m_valid'][batch_slice],
         }
     else:
         givens_valid = {
@@ -558,7 +561,7 @@ def create_iter_functions_full_output(dataset, output_layer,
             #m_batch: dataset['m_valid'][batch_slice],
         }
     iter_valid = theano.function(
-        [batch_index, input_layer.input_var], [loss_eval, accuracy],
+        [input_layer.input_var, y_batch, z_batch, m_batch], [loss_eval, accuracy],
         givens=givens_valid,
     )
 
@@ -783,9 +786,9 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
                 epoch['number'], num_epochs, time.time() - now))
             now = time.time()
             print("  training loss:\t\t{:.8f}".format(epoch['train_loss']))
-            #print("  validation loss:\t\t{:.8f}".format(epoch['valid_loss']))
-            #print("  validation accuracy:\t\t{:.2f} %%".format(
-            #    epoch['valid_accuracy'] * 100))
+            print("  validation loss:\t\t{:.8f}".format(epoch['valid_loss']))
+            print("  validation accuracy:\t\t{:.2f} %%".format(
+                    epoch['valid_accuracy'] * 100))
 
             # Save model, after every epoch.
             save_model(out_file=out_file, output_layer=output_layer)
