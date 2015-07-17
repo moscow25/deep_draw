@@ -3487,3 +3487,4 @@ hand,draws_left,best_draw,hand_after,bet_model,value_heuristic,position,num_card
 "[7s,2s,6c,9s,Qc]",2,"[7s,2s,6c,9s]","[7s,2s,6c,9s,Jc]",CNN_45,0.3906320240241975,1,0,0,draw,1000.0,0,0.0,500.0,,0101110,500.0,0.0,0.0,0.0,0,0,"[2d,5d,8c,7c,4c]",0.0
 "[2d,5d,8c,7c,4c]",1,,,man,0.3,0,5,4,bet_big,1000.0,200.0,5.0,500.0,,0101110,700.0,1200.0,200.0,1000.0,1000.0,0.0,"[7s,2s,6c,9s,Jc]",1.0
 "[7s,2s,6c,9s,Jc]",1,,,CNN_45,0.25869321500500347,1,4,5,FOLD,1200.0,0,0.0,500.0,1,01011101,500.0,0.0,0.0,0.0,0,0,"[2d,5d,8c,7c,4c]",0.0
+hand,draws_left,best_draw,hand_after,bet_model,value_heuristic,position,num_cards_kept,num_opponent_kept,action,pot_size,bet_size,pot_odds,bet_this_hand,actions_this_round,actions_full_hand,total_bet,result,margin_bet,margin_result,current_margin_result,future_margin_result,oppn_hand,current_hand_win

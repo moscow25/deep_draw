@@ -30,8 +30,8 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of hum
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 115000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 15000
+MAX_INPUT_SIZE = 110000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 10000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -204,10 +204,15 @@ def load_data():
     #X_test, y_test = data[2]
 
     return dict(
-        X_train=theano.shared(lasagne.utils.floatX(X_train), borrow=True),
-        y_train=T.cast(theano.shared(y_train, borrow=True), 'int32'),
-        z_train=theano.shared(lasagne.utils.floatX(z_train), borrow=True),
-        m_train=theano.shared(lasagne.utils.floatX(m_train), borrow=True),
+        # theano.shared() can't support huge amounts of data (more than 100k-300k examples (depending on size)
+        #X_train=theano.shared(lasagne.utils.floatX(X_train), borrow=True),
+        #y_train=T.cast(theano.shared(y_train, borrow=True), 'int32'),
+        #z_train=theano.shared(lasagne.utils.floatX(z_train), borrow=True),
+        #m_train=theano.shared(lasagne.utils.floatX(m_train), borrow=True),
+        X_train=lasagne.utils.floatX(X_train),
+        y_train=y_train,
+        z_train=lasagne.utils.floatX(z_train),
+        m_train=lasagne.utils.floatX(m_train),
 
         X_valid=theano.shared(lasagne.utils.floatX(X_valid), borrow=True),
         y_valid=T.cast(theano.shared(y_valid, borrow=True), 'int32'),
@@ -228,8 +233,9 @@ def load_data():
         output_dim=32, # output cases
     )
 
+# Need to explicitly pass input_var... if we want to feed input into the network, without putting that input into "shared"
 def build_model(input_width, input_height, output_dim,
-                batch_size=BATCH_SIZE):
+                batch_size=BATCH_SIZE, input_var = None):
     print('building model, layer by layer...')
 
     # Our input consists of 5 cards, strictly in order... and other inputs.
@@ -253,9 +259,15 @@ def build_model(input_width, input_height, output_dim,
     layers = []
 
     # Shape is [cards + bits] x height x width
-    l_in = lasagne.layers.InputLayer(
-        shape=(batch_size, num_input_cards, input_height, input_width),
-        )
+    if input_var:
+        l_in = lasagne.layers.InputLayer(
+            shape=(batch_size, num_input_cards, input_height, input_width),
+            input_var = input_var,
+            )
+    else:
+        l_in = lasagne.layers.InputLayer(
+            shape=(batch_size, num_input_cards, input_height, input_width),
+            )
     layers.append(l_in)
 
     print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
@@ -383,7 +395,8 @@ def build_model(input_width, input_height, output_dim,
 
 # Adjust from the standard create_iter_functions, to deal with z_batch being vector of values.
 def create_iter_functions_full_output(dataset, output_layer,
-                                      input_layer = None, # optionally supply input layer, model execution w/o theano.shared()
+                                      input_var = None, # optionally supply input layer, model execution w/o theano.shared()
+                                      input_layer = None,
                                       X_tensor_type=T.tensor4, # T.matrix,
                                       batch_size=BATCH_SIZE,
                                       learning_rate=LEARNING_RATE, momentum=MOMENTUM):
@@ -392,9 +405,10 @@ def create_iter_functions_full_output(dataset, output_layer,
     """
     print('creating iter funtions')
 
-    print('input dataset %s' % dataset)
+    #print('input dataset %s' % dataset)
 
     batch_index = T.iscalar('batch_index')
+    #if not input_var:
     X_batch = X_tensor_type('x') # inputs to the network
     y_batch = T.ivector('y') # "best class" for the network
     z_batch = T.matrix('z') # all values for the network
@@ -440,9 +454,15 @@ def create_iter_functions_full_output(dataset, output_layer,
         objective_mask = lasagne.objectives.MaskedObjective(output_layer, masked_loss_function)
                                                   
         # error is computed same as un-masked objective... but we also supply a mask for each output. 1 = output matters 0 = N/A or ?
-        loss_train_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch)
-        loss_eval_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch,
-                                                 deterministic=DETERMINISTIC_MODEL_RUN)
+        # NOTE: X_batch will be loaded into "shared". To not do this... do function.eval({input_layer.var_in: data})
+        if input_layer:
+            loss_train_mask = objective_mask.get_loss(target=z_batch, mask=m_batch)
+            loss_eval_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch,
+                                                     deterministic=DETERMINISTIC_MODEL_RUN)
+        else:
+            loss_train_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch)
+            loss_eval_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch,
+                                                     deterministic=DETERMINISTIC_MODEL_RUN)
 
     if TRAIN_MASKED_OBJECTIVE:
         print('--> We are told to use \'masked\' loss function. So training & validation loss will be computed on inputs with mask == 1 only')
@@ -459,7 +479,12 @@ def create_iter_functions_full_output(dataset, output_layer,
     if TRAIN_MASKED_OBJECTIVE:
         # Apply [0:5] only mask, to consider accuracy (for bet values)
         # TODO: Allow supply of input layer...
-        pred = T.argmax(output_layer.get_output(X_batch, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
+        # NOTE: X_batch will be loaded into "shared". To not do this... do function.eval({input_layer.var_in: data})
+        if input_layer:
+            #pred = T.argmax(output_layer.get_output(deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
+            pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
+        else:
+            pred = T.argmax(lasagne.layers.get_output(output_layer, X_batch, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
     else:
         pred = T.argmax(output_layer.get_output(X_batch, deterministic=DETERMINISTIC_MODEL_RUN), axis=1)
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
@@ -470,17 +495,24 @@ def create_iter_functions_full_output(dataset, output_layer,
     updates_nesterov = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
 
     # "AdaDelta" by Matt Zeiler -- no learning rate or momentum...
-    print('Using AdaDelta adaptive learning after %d epochs, with epsilon %s, learning rate %.2f!' % (EPOCH_SWITCH_ADAPT, str(ADA_DELTA_EPSILON), ADA_LEARNING_RATE))
-    updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=ADA_LEARNING_RATE, epsilon=ADA_DELTA_EPSILON) #learning_rate=learning_rate)
+    #print('Using AdaDelta adaptive learning after %d epochs, with epsilon %s, learning rate %.2f!' % (EPOCH_SWITCH_ADAPT, str(ADA_DELTA_EPSILON), ADA_LEARNING_RATE))
+    #updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=ADA_LEARNING_RATE, epsilon=ADA_DELTA_EPSILON) #learning_rate=learning_rate)
+
+    # Compile a function performing a training step on a mini-batch (by giving
+    # the updates dictionary) and returning the corresponding training loss:
+    #train_fn = theano.function([X_batch, z_batch], loss_train, updates=updates_nesterov)
+
+    # Compile a second function computing the validation loss and accuracy:
+    #val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
 
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
         givens_train = {
-            X_batch: dataset['X_train'][batch_slice],
+            #X_batch: dataset['X_train'][batch_slice],
             # Not computing 'accuracy' on training... [though we should]
             #y_batch: dataset['y_train'][batch_slice],
-            z_batch: dataset['z_train'][batch_slice],
-            m_batch: dataset['m_train'][batch_slice],
+            #z_batch: dataset['z_train'][batch_slice],
+            #m_batch: dataset['m_train'][batch_slice],
             }
     else:
          givens_train = {
@@ -493,7 +525,7 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     # Function to train with nesterov momentum...
     iter_train_nesterov = theano.function(
-        [batch_index], loss_train,
+        [input_layer.input_var, z_batch, m_batch], loss_train,
         updates=updates_nesterov,
         givens=givens_train,
         )
@@ -501,12 +533,14 @@ def create_iter_functions_full_output(dataset, output_layer,
     # Still the default training function
     iter_train = iter_train_nesterov
 
+    """
     # Try training with AdaDelta (adaptive training)
     iter_train_ada_delta= theano.function(
-        [batch_index], loss_train,
+        [batch_index, input_layer.input_var], loss_train,
         updates=updates_ada_delta,
         givens=givens_train,
         )
+        """
 
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
@@ -524,10 +558,11 @@ def create_iter_functions_full_output(dataset, output_layer,
             #m_batch: dataset['m_valid'][batch_slice],
         }
     iter_valid = theano.function(
-        [batch_index], [loss_eval, accuracy],
+        [batch_index, input_layer.input_var], [loss_eval, accuracy],
         givens=givens_valid,
     )
 
+    """
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
         givens_test = {
@@ -547,13 +582,14 @@ def create_iter_functions_full_output(dataset, output_layer,
         [batch_index], [loss_eval, accuracy],
         givens=givens_test,
     )
+    """
 
     return dict(
         train=iter_train,
         train_nesterov=iter_train_nesterov,
-        train_ada_delta=iter_train_ada_delta,
+        #train_ada_delta=iter_train_ada_delta,
         valid=iter_valid,
-        test=iter_test,
+        #test=iter_test,
     )
 
 # Now how do I return theano function to predict, from my given thing? Should be simple.
@@ -694,10 +730,14 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
     print("Building model and compiling functions...")
     sys.stdout.flush() # Helps keep track of output live in re-directed out
+
+    # Pass this reference, to compute theano graph
+    input_var = T.tensor4('inputs')
     output_layer, input_layer, layers = build_model(
         input_height=dataset['input_height'],
         input_width=dataset['input_width'],
         output_dim=dataset['output_dim'],
+        input_var = input_var,
         )
 
     # Optionally, load in previous model parameters, from pickle!
@@ -725,8 +765,9 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     iter_funcs = create_iter_functions_full_output(
         dataset,
         output_layer,
+        input_layer = input_layer,
         X_tensor_type=T.tensor4,
-        input_layer = input_layer
+        input_var = input_var
         )
 
     print("Starting training...")
@@ -742,9 +783,9 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
                 epoch['number'], num_epochs, time.time() - now))
             now = time.time()
             print("  training loss:\t\t{:.8f}".format(epoch['train_loss']))
-            print("  validation loss:\t\t{:.8f}".format(epoch['valid_loss']))
-            print("  validation accuracy:\t\t{:.2f} %%".format(
-                epoch['valid_accuracy'] * 100))
+            #print("  validation loss:\t\t{:.8f}".format(epoch['valid_loss']))
+            #print("  validation accuracy:\t\t{:.2f} %%".format(
+            #    epoch['valid_accuracy'] * 100))
 
             # Save model, after every epoch.
             save_model(out_file=out_file, output_layer=output_layer)
