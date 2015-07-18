@@ -112,7 +112,8 @@ FUTURE_DISCOUNT = 0.9
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
-SAMPLE_RATE_DEUCE_EVENTS = 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+# With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
+SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 
 # Use this to train only on results of intelligent players, if different versions available
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'man']) # learn only from better models, or man's actions
