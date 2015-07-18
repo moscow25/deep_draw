@@ -1060,6 +1060,7 @@ def train(iter_funcs, dataset, batch_size=BATCH_SIZE, epoch_switch_adapt=10000):
                 #print('computing batch, for batch index %d' % b)
                 if b % 100 == 0:
                     sys.stdout.write('.')
+                    sys.stdout.flush()
                 batch_index = b
                 batch_slice = slice(batch_index * batch_size,
                                     (batch_index + 1) * batch_size)
