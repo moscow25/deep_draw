@@ -65,25 +65,25 @@ RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %
 # NOTE: Does *not* apply to folds. Don't tweak thos.
 # NOTE: Lets us break out of a rut of similar actions, etc.
 PREDICTION_VALUE_NOISE_HIGH = 0.06
-PREDICTION_VALUE_NOISE_LOW = -0.03 # Do decrease it sometimes... so that we don't massively inflate value of actions
+PREDICTION_VALUE_NOISE_LOW = -0.05 # Do decrease it sometimes... so that we don't massively inflate value of actions
 PREDICTION_VALUE_NOISE_AVERAGE = (PREDICTION_VALUE_NOISE_HIGH + PREDICTION_VALUE_NOISE_LOW)/2.0 
 
 # Alternatively, use a more sophisticated "tail distribution" from Gumbel
 # http://docs.scipy.org/doc/numpy/reference/generated/numpy.random.gumbel.html
 # mean = mu + 0.58821 * beta (centered around mu). So match above
-PREDICTION_VALUE_NOISE_BETA = 0.03 # 0.04 # 0.06 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
+PREDICTION_VALUE_NOISE_BETA = 0.02 # 0.03 # 0.04 # 0.06 # vast majority of change within +- 0.05 value, but can stray quite a bit further. Helps make random-ish moves
 PREDICTION_VALUE_NOISE_MU = PREDICTION_VALUE_NOISE_AVERAGE - 0.58821 * PREDICTION_VALUE_NOISE_BETA
 
 # Don't boost aggressive actions so much... we want to see more calls, check, especially checks, attempted in spots that might be close.
 AGGRESSIVE_ACTION_NOISE_FACTOR = 1.0 # 1.0 # 0.5
 BOOST_AGGRESSIVE_ACTION_NOISE = True # training only(?), increase value of aggressive actions (don't let them go negative)
-MULTIPLE_MODELS_NOISE_FACTOR = 0.4 # Reduce noise... by a lot... if using multiple models already (noise that way)
+MULTIPLE_MODELS_NOISE_FACTOR = 0.5 # Reduce noise... if using multiple models already (noise that way)
 BOOST_PAT_BET_ACTION_NOISE = True # Do we explicitly support betting after standing pat? Yes. Even if hand is weak (snowed, etc).
 
 # Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
 USE_NUM_DRAW_MODEL = True
 # Use a num_draw model... and tend to do so more later in the hand. For example, 30% first draw, 60% 2nd draw, 90% 3rd draw.
-NUM_DRAW_MODEL_RATE = 0.9 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+NUM_DRAW_MODEL_RATE = 0.8 # 0.9 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
 NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW = 0.3 # Use model on the final draw, but perhaps less on previous draws...
 NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a little. 
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
@@ -145,6 +145,19 @@ def best_five_draws(hand_draws_vector):
     # 5-card draw
     best_draws.append(31)
     return best_draws
+
+# Stochastic, but always positive boost, for "best_draw" from 0-32 model, in num_draw model.
+def best_draw_value_boost():
+    # 5 x max(0, noise)
+    noise = 1.0 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
+    # 3 x noise_average
+    noise += PREDICTION_VALUE_NOISE_AVERAGE * 3.0
+    return noise
+
+# Actually a demotion. Supress 'pat' draw, as model learns to suggest it way too often.
+# NOTE: Especially useful to let other alternatives to 'best_draw' thrive.
+def pat_draw_value_boost():
+    return -0.5 * best_draw_value_boost()
 
 # Should inherit from more general player... when we need one. (For example, manual player who chooses his own moves and own draws)
 class TripleDrawAIPlayer():
@@ -231,14 +244,18 @@ class TripleDrawAIPlayer():
                 default_num_kept = best_draw_num_kept # 0-5
                 for prediction in draw_recommendations:
                     action = prediction[1]
-                    # Boost the value by fixed amount... and also noise (but only on the upside)
+                    # Boost the value by fixed positive but noisy amount (noise only on the upside)
                     # This will reduce randomly choosing an inferior draw. But not every time. And *much better* draw action wins easily.
                     if drawCategoryNumCardsKept[action] == default_num_kept:
-                        noise = 1.5 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA))) / 4.0
-                        noise += PREDICTION_VALUE_NOISE_AVERAGE * 4.0
+                        noise = best_draw_value_boost()
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted %d-card draw by %.3f' % (5-default_num_kept, noise))
+                    if action == KEEP_5_CARDS:
+                        noise = pat_draw_value_boost()
+                        prediction[0] += noise
+                        if debug:
+                            print('\tBoosted pat draw by %.3f' % (noise))
                 # Re-sort results, of course.
                 draw_recommendations.sort(reverse=True)
 
