@@ -65,7 +65,7 @@ RE_CHOOSE_FOLD_DELTA = 0.50 # If "random action" chooses a FOLD... re-consider %
 # NOTE: Does *not* apply to folds. Don't tweak thos.
 # NOTE: Lets us break out of a rut of similar actions, etc.
 PREDICTION_VALUE_NOISE_HIGH = 0.06
-PREDICTION_VALUE_NOISE_LOW = -0.05 # Do decrease it sometimes... so that we don't massively inflate value of actions
+PREDICTION_VALUE_NOISE_LOW = -0.04 # Do decrease it sometimes... so that we don't massively inflate value of actions
 PREDICTION_VALUE_NOISE_AVERAGE = (PREDICTION_VALUE_NOISE_HIGH + PREDICTION_VALUE_NOISE_LOW)/2.0 
 
 # Alternatively, use a more sophisticated "tail distribution" from Gumbel
@@ -90,7 +90,7 @@ FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
-SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
+SHOW_MACHINE_DEBUG_AGAINST_HUMAN = True # False # True, to see machine logic when playing (will reveal hand)
 USE_MIXED_MODEL_WHEN_AVAILABLE = True # When possible, including against human, use 2 or 3 models, and choose randomly which one decides actions.
 RETRY_FOLD_ACTION = True # If we get a model that says fold preflop... try again. But just once. We should avoid raise/fold pre
 
@@ -971,6 +971,8 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
                                                    include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
 
     # If model file provided, unpack model, and create intelligent agent.
+    # TODO: 0.0-fill parameters for model, if size doesn't match (26 vs 31, etc)
+    # TODO: model loading should be a function!
     output_layer = None
     if draw_model_filename and os.path.isfile(draw_model_filename):
         print('\nExisting model in file %s. Attempt to load it!\n' % draw_model_filename)

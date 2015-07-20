@@ -30,7 +30,7 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of hum
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 500000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 25000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
@@ -47,6 +47,9 @@ ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
 # Here, we get into growing input information, beyond the 5-card hand.
 INCLUDE_NUM_DRAWS = True # 3 "cards" to encode number of draws left. ex. 2 draws: [0], [1], [1]
 INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a single matrix [Good for detecting str8, pair, etc]
+
+CONTEXT_LENGTH = 2 + 5 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBetting]
+FULL_INPUT_LENGTH = 5 + 1 + 3 + CONTEXT_LENGTH
 
 # Train on masked objective? 
 # NOTE: load_data needs to be already producing such masks.
@@ -242,6 +245,7 @@ def build_model(input_width, input_height, output_dim,
                 batch_size=BATCH_SIZE, input_var = None):
     print('building model, layer by layer...')
 
+    """
     # Our input consists of 5 cards, strictly in order... and other inputs.
     # For inspiration to this approach, consider DeepMind's GO CNN. http://arxiv.org/abs/1412.6564v1
     # They use multiple fake "boards" to encode player strength, in 7 'bits'
@@ -255,9 +259,11 @@ def build_model(input_width, input_height, output_dim,
     if INCLUDE_NUM_DRAWS:
         num_input_cards += 3
 
-    # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept] -- or just 0's...
+    # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBets] -- or just 0's...
     if INCLUDE_HAND_CONTEXT:
-        num_input_cards += 17
+        num_input_cards += 22
+        """
+    num_input_cards = FULL_INPUT_LENGTH
 
     # Track all layers created, and return the full stack
     layers = []
@@ -720,7 +726,21 @@ def save_model(out_file=None, output_layer=None):
     if out_file and output_layer:
         # Get all param values (for fixed network)
         all_param_values = lasagne.layers.get_all_param_values(output_layer)
-        #print('all param values: %d' % len(all_param_values))
+        """
+        print('all param values: %d' % len(all_param_values))
+        for layer_param in all_param_values:
+            #print(layer_param)
+            print(layer_param.shape)
+            print('---------------')
+        # show sample input (per bit)
+        first_layer_params = all_param_values[0]
+        first_layer_shape = first_layer_params.shape
+        input_len = first_layer_shape[1]
+        params_per_input = first_layer_params[:,np.random.randint(input_len),:,:]
+        print(params_per_input.shape)
+        print(params_per_input)
+        print('---------------')
+        """
 
         # save values to output file!
         print('pickling model %d param values to %s' % (len(all_param_values), out_file))
@@ -752,6 +772,34 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
         for value in all_param_values_from_file:
             all_param_values_from_file_with_type.append(lasagne.utils.floatX(value))
         print('Loaded values %d' % len(all_param_values_from_file_with_type))
+        for layer_param in all_param_values_from_file_with_type:
+            #print(layer_param)
+            print(layer_param.shape)
+            print('---------------')
+
+        # HACK: If input size doesn't match... pad the input (first) layer with random noise from working layers of the model.
+        # NOTE: This should warn, and crash. Very hacky. But also necessary if we grow (or shrink) the model and don't want to lose knowledge.
+        all_param_values = all_param_values_from_file_with_type
+        first_layer_params = all_param_values[0]
+        first_layer_shape = first_layer_params.shape
+        input_len = first_layer_shape[1]
+        if input_len < FULL_INPUT_LENGTH:
+            print('too few inputs in model from disk! %d < %d' % (input_len, FULL_INPUT_LENGTH))
+            fill_len = FULL_INPUT_LENGTH - input_len
+            for i in range(fill_len):
+                # Take a slice for random existing input
+                random_row = np.random.randint(input_len)
+                params_per_input = first_layer_params[:,random_row:random_row+1,:,:]
+                print(params_per_input.shape)
+                #print(params_per_input)
+                print('adding input row...')
+                # Append it, to serve as noise for missing input in model
+                first_layer_params = np.concatenate((first_layer_params, params_per_input), axis = 1)
+                print(first_layer_params.shape)
+        all_param_values[0] = first_layer_params
+        print(all_param_values[0].shape)
+
+        #print(all_param_values_from_file_with_type)
         lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file_with_type)
         print('Successfully initialized model with previous saved params!')
     else:

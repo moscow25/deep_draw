@@ -90,7 +90,8 @@ DATA_SAMPLING_REDUCE_KEEP_TWO_FOCUS_FLUSHES = [0.50] + [0.25] * 5 + [0.25] * 10 
 # TODO: Move these into a "Default" class in separate file. Like here: https://github.com/spragunr/deep_q_rl/blob/lasagne_nature/deep_q_rl/run_nature.py
 NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape... but always zero. For initialization, etc.
 PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
-CONTEXT_LENGTH = 2 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
+CONTEXT_LENGTH = 2 + 5 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBetting]
+FULL_INPUT_LENGTH = 5 + 1 + 3 + CONTEXT_LENGTH
 CONTEXT_ALL_ZERO = False # True # Set true, to map "xPos, xPot, ..." to x0 of same length. Useful for getting baseline for hands, values first
 CARDS_INPUT_ALL_ZERO = False # True # Set true, to map xCards to x0. Why? To train a decision baseline that has to focus on betting & pot odds for a minute.
 
@@ -236,21 +237,77 @@ def bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
     #print(output_array)
     return output_array
 
+# Given an input like '1010001' or '11010111101', return the *previous round*. Check against current round.
+# How? Simple. Track bets from the beginning, and determine ends of rounds. Round ends if:
+# A. Player bets '1', followed by raises '1', then a player calls '0'
+# B. Player checks '0', and other player checks '0'.
+def get_previous_round_string(all_round_string, current_round_bets_string = ''):
+    # first, produce array of rounds of betting (chop the string)
+    index_start = 0
+    index_end = 0
+    current_action = -1
+    current_string = ''
+    all_rounds = []
+    #print (all_round_string)
+    for i in range(len(all_round_string)):
+        c = all_round_string[i]
+        #print(c)
+        index_end = i
+        current_string += c
+        # start of new round. define the action
+        if current_action == -1:
+            index_start = i
+            current_action = c
+            continue
+
+        # After first check/bet... '1' continues the action, while '0' ends the round.
+        current_action = c
+        if c == '1':
+            continue
+        elif c == '0':
+            all_rounds.append(current_string)
+            current_string = ''
+            current_action = -1
+        else:
+            assert False, 'Unknown bet string |%s|' % c
+    # End current round, if in progress.
+    if current_string and current_action:
+        all_rounds.append(current_string)
+    
+    #print(all_rounds)
+    previous_round = ''
+    if current_round_bets_string:
+        if len(all_rounds) > 1:
+            previous_round = all_rounds[-2]
+    else:
+        # If current round string '' or missing, then take last element
+        if len(all_rounds) > 0:
+            previous_round = all_rounds[-1]
+    #print('Current round |%s| and previous round |%s|' % (current_round_bets_string, previous_round))
+    return previous_round
+
 # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
-def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0, opponent_cards_kept=0, pad_to_fit = PAD_INPUT):
+def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0, opponent_cards_kept=0, pad_to_fit = PAD_INPUT, all_rounds_bets_string=None):
 
     position_input = card_to_matrix_fill(position, pad_to_fit = pad_to_fit)
     pot_size_input = pot_to_array(pot_size, pad_to_fit = pad_to_fit) # saved to single "card"
     bets_string_input = bets_string_to_array(bets_string, pad_to_fit = pad_to_fit) # length 5
     cards_kept_input = integer_to_card_array(cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
     opponent_cards_kept_input = integer_to_card_array(opponent_cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
+    # If present...
+    # NOTE: This will extend context array. Flag to enable it. And change all 26-length dependencies!
+    #print('Attempting to dig up \'previous rounds bets\' from %s' % all_rounds_bets_string)
+    previous_round_bets_string = get_previous_round_string(all_rounds_bets_string, current_round_bets_string=bets_string)
+    #print('-->%s' % previous_round_bets_string)
+    previous_bets_string_input = bets_string_to_array(previous_round_bets_string, pad_to_fit = pad_to_fit) # Also, 5 bits
 
     # Put it all together...
     # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
     hand_context_input = np.array([position_input, pot_size_input, 
                                    bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
                                    cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
-                                   opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4]], TRAINING_INPUT_TYPE)
+                                   opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4],
+                                   previous_bets_string_input[0], previous_bets_string_input[1], previous_bets_string_input[2], previous_bets_string_input[3], previous_bets_string_input[4]], TRAINING_INPUT_TYPE)
     return hand_context_input
 
 # Encode pot (0 to 3000 or so) into array... by faking a hand.
@@ -451,6 +508,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         if (not bets_string) and actions_this_round:
             #print('replacing actions_this_round string with %s' % actions_this_round)
             bets_string = actions_this_round # replace, but only if empty
+        all_rounds_bets_string = data_array[csv_key_map['actions_full_hand']] # All rounds of betting. Something like '010100110'
         cards_kept = int(data_array[csv_key_map['num_cards_kept']]) # 0-5
         #if cards_kept == 0:
         #    print(['us', cards_kept, (num_draw_in_position if position else num_draw_out_position)])
@@ -460,9 +518,9 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         #    print(['them', opponent_cards_kept, (num_draw_in_position if not position else num_draw_out_position)])
         opponent_cards_kept = max(opponent_cards_kept, (num_draw_in_position if not position else num_draw_out_position)) # update from outside, if better info)
         #print('Context: %s' % [num_draws, position, pot_size, bets_string, cards_kept, opponent_cards_kept])
-
         hand_context_input = hand_input_from_context(position=position, pot_size=pot_size, bets_string=bets_string,
-                                                     cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
+                                                     cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
+                                                     all_rounds_bets_string=all_rounds_bets_string)
 
         full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
     else:
@@ -637,7 +695,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     X_train_not_np = [] # all input data (multi-dimension nparrays)
     # use this to create empty numpy array of the right size... and then add each line as needed
     # TODO: Fix hardcoding of input sizes...
-    X_train = np.empty((max_input, 26, 17, 17), dtype=TRAINING_INPUT_TYPE)
+    X_train = np.empty((max_input, FULL_INPUT_LENGTH, 17, 17), dtype=TRAINING_INPUT_TYPE)
     y_train_not_np = [] # "best category" for each item
     z_train_not_np = [] # 32-length vectors for all weights
     m_train_not_np = [] # 32-length "mask" for which weights matter. 1 = yes 0 = N/A or ??
