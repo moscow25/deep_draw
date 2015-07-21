@@ -21,7 +21,8 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of human play, and CNN vs CNN, for CNN3,4,5 and 45 (mix of CNN3, CNN4, CNN5)
+DATA_FILENAME = '/Users/kolya/Desktop/poker/triple_draw/code/hands_sample_skew_low_100k.csv' # 0-32 draw results, skewed toward low card hands
+# '../data/100k_hands_triple_draw_events.csv' # 100k hands, of human play, and CNN vs CNN, for CNN3,4,5 and 45 (mix of CNN3, CNN4, CNN5)
 # '../poker-lib/CNN6_mixed-test.csv' # Testing, with data for counter-factual on the river...
 # '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot more events) from man vs CNN, CNN vs sim, and sim vs sim [need more CNN vs CNN]
 # '../data/60k_triple_draw_events.csv' # 60k 'event's from a few thousand full hands.
@@ -40,6 +41,7 @@ NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.02 # 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
 MOMENTUM = 0.9
+# Fix and test, before epoch switch...
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
 ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
@@ -51,21 +53,23 @@ INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a sin
 CONTEXT_LENGTH = 2 + 5 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBetting]
 FULL_INPUT_LENGTH = 5 + 1 + 3 + CONTEXT_LENGTH
 
-# Train on masked objective? 
-# NOTE: load_data needs to be already producing such masks.
-# NOTE: Default mask isn't all 1's... it's best_output == 1, others == 0
-# WARINING: Theano will complain if we pass a mask and don't use it!
-TRAIN_MASKED_OBJECTIVE = True # False # True # False # True 
-
 # Do we use linear loss? Why? If cases uncertain or small sample, might be better to approximate the average...
 LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True # False # True
 
 # If we are trainging on poker events (bets, raises and folds) instead of draw value,
 # input and output shape will be the same. But the way it's uses is totally different. 
 # NOTE: We keep shape the same... so we can use the really good "draw value" model as initialization.
-TRAINING_FORMAT = 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT =  'deuce' # 'deuce_events' # 'deuce' # 'video'
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch to adaptive training?
+
+# Train on masked objective? 
+# NOTE: load_data needs to be already producing such masks.
+# NOTE: Default mask isn't all 1's... it's best_output == 1, others == 0
+# WARINING: Theano will complain if we pass a mask and don't use it!
+TRAIN_MASKED_OBJECTIVE = True
+if not(TRAINING_FORMAT == 'deuce_events'):
+    TRAIN_MASKED_OBJECTIVE = False
 
 # Helps speed up inputs?
 TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
@@ -422,8 +426,8 @@ def create_iter_functions_full_output(dataset, output_layer,
     #X_batch = X_tensor_type('x') # inputs to the network
     y_batch = T.ivector('y') # "best class" for the network
     z_batch = T.matrix('z') # all values for the network
-    if TRAIN_MASKED_OBJECTIVE:
-        m_batch = T.matrix('m') # mask for all values, if some are relevant, others are N/A or ?
+    #if TRAIN_MASKED_OBJECTIVE:
+    m_batch = T.matrix('m') # mask for all values, if some are relevant, others are N/A or ?
 
     # TODO: Replace the "batch index" input, with input of actual batch... (so data doesn't need to be stored in theano.shared())
     batch_slice = slice(batch_index * batch_size,
@@ -442,9 +446,8 @@ def create_iter_functions_full_output(dataset, output_layer,
                                                          loss_function=lasagne.objectives.mse)
 
         # error is comparing output to z-vector.
-        loss_train_no_mask = objective_no_mask.get_loss(X_batch, target=z_batch)
-        loss_eval_no_mask = objective_no_mask.get_loss(X_batch, target=z_batch,
-                                                       deterministic=DETERMINISTIC_MODEL_RUN)
+        loss_train_no_mask = objective_no_mask.get_loss(target=z_batch)
+        loss_eval_no_mask = objective_no_mask.get_loss(target=z_batch, deterministic=DETERMINISTIC_MODEL_RUN)
     else:
         # Alternatively, train only on some values! We do this by supplying a mask.
         # This means that some values matter, others do not. For example... 
@@ -495,7 +498,7 @@ def create_iter_functions_full_output(dataset, output_layer,
         else:
             pred = T.argmax(lasagne.layers.get_output(output_layer, X_batch, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
     else:
-        pred = T.argmax(output_layer.get_output(X_batch, deterministic=DETERMINISTIC_MODEL_RUN), axis=1)
+        pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN), axis=1)
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
 
     all_params = lasagne.layers.get_all_params(output_layer)
@@ -525,10 +528,10 @@ def create_iter_functions_full_output(dataset, output_layer,
             }
     else:
          givens_train = {
-            X_batch: dataset['X_train'][batch_slice],
+            #X_batch: dataset['X_train'][batch_slice],
             # Not computing 'accuracy' on training... [though we should]
             #y_batch: dataset['y_train'][batch_slice],
-            z_batch: dataset['z_train'][batch_slice],
+            #z_batch: dataset['z_train'][batch_slice],
             #m_batch: dataset['m_train'][batch_slice],
             }
 
@@ -537,6 +540,7 @@ def create_iter_functions_full_output(dataset, output_layer,
         [input_layer.input_var, z_batch, m_batch], loss_train,
         updates=updates_nesterov,
         givens=givens_train,
+        on_unused_input='warn', # We might not need "m_batch" if unmasked input... but pain to deal with conditional compiling
         )
 
     # Still the default training function
@@ -561,14 +565,15 @@ def create_iter_functions_full_output(dataset, output_layer,
         }
     else:
         givens_valid = {
-            X_batch: dataset['X_valid'][batch_slice],
-            y_batch: dataset['y_valid'][batch_slice],
-            z_batch: dataset['z_valid'][batch_slice],
+            #X_batch: dataset['X_valid'][batch_slice],
+            #y_batch: dataset['y_valid'][batch_slice],
+            #z_batch: dataset['z_valid'][batch_slice],
             #m_batch: dataset['m_valid'][batch_slice],
         }
     iter_valid = theano.function(
         [input_layer.input_var, y_batch, z_batch, m_batch], [loss_eval, accuracy],
         givens=givens_valid,
+        on_unused_input='warn', # We might not need "m_batch" if unmasked input... but pain to deal with conditional compiling
     )
 
     """
@@ -634,7 +639,10 @@ def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None
         softmax_values = pred.eval()
     print(softmax_values)
 
-    pred_max = T.argmax(pred[:,0:5], axis=1)
+    if format != 'deuce_events':
+        pred_max = T.argmax(pred, axis=1)
+    else:
+        pred_max = T.argmax(pred[:,0:5], axis=1)
 
     print('Maximums %s' % pred_max)
     #print(tp.pprint(pred_max))
@@ -832,6 +840,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     try:
         # When do we switch to adaptive training? Problems with adapative training and events, so disable that.
         switch_adaptive_after = EPOCH_SWITCH_ADAPT
+        switch_adaptive_after = 10000 # never
         if TRAINING_FORMAT == 'deuce_events' and DISABLE_EVENTS_EPOCH_SWITCH:
             switch_adaptive_after = 10000 # never
         for epoch in train(iter_funcs, dataset, epoch_switch_adapt=switch_adaptive_after):

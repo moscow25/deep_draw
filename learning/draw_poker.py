@@ -1130,12 +1130,14 @@ def train(iter_funcs, dataset, batch_size=BATCH_SIZE, epoch_switch_adapt=10000):
                 # TODO: Actually supply the batch... or better yet, set that as input for the network!
                 batch_train_loss = iter_funcs['train'](X_batch, z_batch, m_batch)
                 batch_train_losses.append(batch_train_loss)
+                """
         else:
             print('adaptive training for epock %d' % epoch)
             sys.stdout.flush()
             for b in range(num_batches_train):
                 batch_train_loss = iter_funcs['train_ada_delta'](b)
                 batch_train_losses.append(batch_train_loss)
+                """
 
         avg_train_loss = np.mean(batch_train_losses)
 
