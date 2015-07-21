@@ -24,6 +24,7 @@ from triple_draw_poker_full_output import build_model
 from triple_draw_poker_full_output import predict_model # outputs result for [BATCH x data]
 from triple_draw_poker_full_output import evaluate_single_hand # single hand... returns 32-point vector
 from triple_draw_poker_full_output import evaluate_single_event # just give it the 26x17x17 bits... and get a vector back
+from triple_draw_poker_full_output import expand_parameters_input_to_match # expand older models, to work on larger input (just zero-fill layer)
 # from triple_draw_poker_full_output import evaluate_batch_hands # much faster to evaluate a batch of hands
 
 print('parsing command line args %s' % sys.argv)
@@ -83,14 +84,14 @@ BOOST_PAT_BET_ACTION_NOISE = True # Do we explicitly support betting after stand
 # Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
 USE_NUM_DRAW_MODEL = True
 # Use a num_draw model... and tend to do so more later in the hand. For example, 30% first draw, 60% 2nd draw, 90% 3rd draw.
-NUM_DRAW_MODEL_RATE = 0.8 # 0.9 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+NUM_DRAW_MODEL_RATE = 0.9 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
 NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW = 0.3 # Use model on the final draw, but perhaps less on previous draws...
 NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a little. 
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
-SHOW_MACHINE_DEBUG_AGAINST_HUMAN = True # False # True, to see machine logic when playing (will reveal hand)
+SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
 USE_MIXED_MODEL_WHEN_AVAILABLE = True # When possible, including against human, use 2 or 3 models, and choose randomly which one decides actions.
 RETRY_FOLD_ACTION = True # If we get a model that says fold preflop... try again. But just once. We should avoid raise/fold pre
 
@@ -148,16 +149,21 @@ def best_five_draws(hand_draws_vector):
 
 # Stochastic, but always positive boost, for "best_draw" from 0-32 model, in num_draw model.
 def best_draw_value_boost():
-    # 5 x max(0, noise)
-    noise = 1.0 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
+    # 2/3 * (5 x max(0, noise))
+    noise = 0.7 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
     # 3 x noise_average
     noise += PREDICTION_VALUE_NOISE_AVERAGE * 3.0
     return noise
 
-# Actually a demotion. Supress 'pat' draw, as model learns to suggest it way too often.
+# Actually a demotion. Suppress 'pat' draw, as model learns to suggest it way too often.
 # NOTE: Especially useful to let other alternatives to 'best_draw' thrive.
 def pat_draw_value_boost():
-    return -0.5 * best_draw_value_boost()
+    return -0.33 * best_draw_value_boost()
+
+# Similarly, demote 3 & 4 card draws, late in the hand. Reason is the same.
+# These trigger when normal draw is bad. But still... taking 3 or 4 cards late isn't the answer. Consider alternatives.
+def draw_many_value_boost():
+    return -0.33 * best_draw_value_boost()
 
 # Should inherit from more general player... when we need one. (For example, manual player who chooses his own moves and own draws)
 class TripleDrawAIPlayer():
@@ -193,13 +199,13 @@ class TripleDrawAIPlayer():
             # Backward-compatibility hack, to allow support for "old" model used for NIPS paper (CNN)
             # NOTE: Will be deprecated...
             if self.bets_output_array and len(self.bets_output_array) > 0:
-                return 'CNN_45' # we sample from multiple models!
+                return 'CNN_76' # we sample from multiple models!
             if self.other_old_bets_output_model:
-                return 'CNN_4'
-            elif self.old_bets_output_model:
                 return 'CNN_5'
-            else:
+            elif self.old_bets_output_model:
                 return 'CNN_6'
+            else:
+                return 'CNN_7'
         else:
             return 'sim'
 
@@ -251,11 +257,18 @@ class TripleDrawAIPlayer():
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted %d-card draw by %.3f' % (5-default_num_kept, noise))
+                    # Demote pat draw somewhat. This is especially useful if we need alternatives. As pat represents itself well.
                     if action == KEEP_5_CARDS:
                         noise = pat_draw_value_boost()
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted pat draw by %.3f' % (noise))
+                    # Also demote 3,4,5 card draws after the first draw. Look for other alteratives, even in a tough spot.
+                    if (num_draws < 3) and (action == KEEP_0_CARDS or action == KEEP_1_CARDS or action == KEEP_2_CARDS):
+                        noise = draw_many_value_boost()
+                        prediction[0] += noise
+                        if debug:
+                            print('\tBoosted %d-draw by %.3f' % (5-drawCategoryNumCardsKept[action], noise))
                 # Re-sort results, of course.
                 draw_recommendations.sort(reverse=True)
 
@@ -340,7 +353,8 @@ class TripleDrawAIPlayer():
 
     # Apply current model, based on known information, to draw 0-5 cards from the deck.
     def draw(self, deck, num_draws = 1, bets_this_round = 0, 
-             has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0, 
+             has_button = True, pot_size=0, actions_this_round=[], actions_whole_hand=[],
+             cards_kept=0, opponent_cards_kept=0, 
              debug = True, retry = False):
         # Reduce debug, if opponent is human, and could see.
         if (self.opponent and self.opponent.is_human and (not SHOW_MACHINE_DEBUG_AGAINST_HUMAN)) or self.is_human:
@@ -374,13 +388,42 @@ class TripleDrawAIPlayer():
                 else:
                     # Don't encode non-bets
                     continue
+
+            # Repeat the same for 'whole game' bets string
+            # TODO: Use a util function!
+            all_rounds_bets_string = ''
+            for action in actions_whole_hand:
+                if action.type in ALL_BETS_SET:
+                    all_rounds_bets_string += '1'
+                elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
+                    all_rounds_bets_string += '0'
+                else:
+                    # Don't encode non-bets
+                    continue
             
             # Now hand context
             if debug:
                 print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept]))
             hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
-                                                         cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
+                                                         cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
+                                                         all_rounds_bets_string=all_rounds_bets_string)
             full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
+            
+            """
+            # What do input bits look like?
+            if debug:
+                opt = np.get_printoptions()
+                np.set_printoptions(threshold='nan')
+
+                # Get all bits for input... excluding padding bits that go to 17x17
+                debug_input = full_input[:,6:10,2:15]
+                print(debug_input)
+                print(debug_input.shape)
+
+                # Return options to previous settings...
+                np.set_printoptions(**opt)
+                """
+
             # TODO: Rewrite with input and output layer... so that we can avoid putting all this data into Theano.shared()
             bets_vector = evaluate_single_event(bets_layer, full_input, input_layer = bets_input_layer)
 
@@ -432,7 +475,8 @@ class TripleDrawAIPlayer():
 
     # This should choose an action policy... based on things we know, randomness, CNN output, RL, etc
     def choose_action(self, actions, round, bets_this_round = 0, 
-                      has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0, 
+                      has_button = True, pot_size=0, actions_this_round=[], actions_whole_hand=[],
+                      cards_kept=0, opponent_cards_kept=0, 
                       debug = True, retry = False):
         # Reduce debug, if opponent is human, and could see.
         if self.opponent and self.opponent.is_human and (not SHOW_MACHINE_DEBUG_AGAINST_HUMAN):
@@ -487,13 +531,41 @@ class TripleDrawAIPlayer():
                 else:
                     # Don't encode non-bets
                     continue
+
+            # Repeat the same for 'whole game' bets string
+            # TODO: Use a util function!
+            all_rounds_bets_string = ''
+            for action in actions_whole_hand:
+                if action.type in ALL_BETS_SET:
+                    all_rounds_bets_string += '1'
+                elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
+                    all_rounds_bets_string += '0'
+                else:
+                    # Don't encode non-bets
+                    continue
             
             # Now hand context
             if debug:
-                print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept]))
+                print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
             hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
-                                                         cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept)
+                                                         cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
+                                                         all_rounds_bets_string=all_rounds_bets_string)
             full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
+
+            """
+            # What do input bits look like?
+            if debug:
+                opt = np.get_printoptions()
+                np.set_printoptions(threshold='nan')
+
+                # Get all bits for input... excluding padding bits that go to 17x17
+                debug_input = full_input[:,6:10,2:15]
+                print(debug_input)
+                print(debug_input.shape)
+
+                # Return options to previous settings...
+                np.set_printoptions(**opt)
+                """
 
             # TODO: Rewrite with input and output layer... so that we can avoid putting all this data into Theano.shared()
             bets_vector = evaluate_single_event(bets_layer, full_input, input_layer = bets_input_layer)
@@ -582,7 +654,7 @@ class TripleDrawAIPlayer():
                 return self.choose_action(actions=actions, round=round, bets_this_round = bets_this_round, 
                                           has_button = has_button, pot_size=pot_size, actions_this_round=actions_this_round,
                                           cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept, 
-                                          debug = debug, retry = True)
+                                          debug = debug, retry = True, actions_whole_hand=actions_whole_hand)
 
             # Purely for debug
             if debug:
@@ -758,7 +830,8 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
         self.is_human = True
 
     def choose_action(self, actions, round, bets_this_round = 0, 
-                      has_button = True, pot_size=0, actions_this_round=[], cards_kept=0, opponent_cards_kept=0):
+                      has_button = True, pot_size=0, actions_this_round=[], actions_whole_hand=[],
+                      cards_kept=0, opponent_cards_kept=0, ):
         print('Choosing among actions %s for round %s' % ([actionName[action] for action in actions], round))
         if SHOW_HUMAN_DEBUG:
             # First show the context for this hand.
@@ -969,6 +1042,8 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
                                                    include_num_draws=True, num_draws=case[1],
                                                    include_full_hand = True, 
                                                    include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
+    print('Test batch dimension')
+    print(test_batch.shape)
 
     # If model file provided, unpack model, and create intelligent agent.
     # TODO: 0.0-fill parameters for model, if size doesn't match (26 vs 31, etc)
@@ -977,13 +1052,15 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     if draw_model_filename and os.path.isfile(draw_model_filename):
         print('\nExisting model in file %s. Attempt to load it!\n' % draw_model_filename)
         all_param_values_from_file = np.load(draw_model_filename)
-        
+        expand_parameters_input_to_match(all_param_values_from_file, zero_fill = True)
+
         # Size must match exactly!
         output_layer, input_layer, layers  = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
             HAND_TO_MATRIX_PAD_SIZE,
             32,
         )
+
         print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
         lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file)
         predict_model(output_layer=output_layer, test_batch=test_batch)
@@ -997,6 +1074,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     if bets_model_filename and os.path.isfile(bets_model_filename):
         print('\nExisting *bets* model in file %s. Attempt to load it!\n' % bets_model_filename)
         bets_all_param_values_from_file = np.load(bets_model_filename)
+        expand_parameters_input_to_match(bets_all_param_values_from_file, zero_fill = True)
 
         # Size must match exactly!
         bets_output_layer, bets_input_layer, bets_layers  = build_model(
@@ -1017,6 +1095,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     if old_bets_model_filename and os.path.isfile(old_bets_model_filename):
         print('\nExisting *old bets* model in file %s. Attempt to load it!\n' % old_bets_model_filename)
         old_bets_all_param_values_from_file = np.load(old_bets_model_filename)
+        expand_parameters_input_to_match(old_bets_all_param_values_from_file, zero_fill = True)
 
         # Size must match exactly!
         old_bets_output_layer, old_bets_input_layer, old_bets_layers = build_model(
@@ -1037,6 +1116,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     if other_old_bets_model_filename and os.path.isfile(other_old_bets_model_filename):
         print('\nExisting *old bets* model in file %s. Attempt to load it!\n' % other_old_bets_model_filename)
         other_old_bets_all_param_values_from_file = np.load(other_old_bets_model_filename)
+        expand_parameters_input_to_match(other_old_bets_all_param_values_from_file, zero_fill = True)
 
         # Size must match exactly!
         other_old_bets_output_layer, other_old_bets_input_layer, other_old_bets_layers = build_model(

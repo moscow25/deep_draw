@@ -30,8 +30,8 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 100k hands, of hum
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 500000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 25000
+MAX_INPUT_SIZE = 600000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 30000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -747,6 +747,33 @@ def save_model(out_file=None, output_layer=None):
         with open(out_file, 'wb') as f:
             pickle.dump(all_param_values, f, -1)
 
+# If input is < expected input... fill remaining rows with noise (for training)... or with zeros (production)
+def expand_parameters_input_to_match(all_param_values, zero_fill = False):
+    # HACK: If input size doesn't match... pad the input (first) layer with random noise from working layers of the model.
+    # NOTE: This should warn, and crash. Very hacky. But also necessary if we grow (or shrink) the model and don't want to lose knowledge.
+    first_layer_params = all_param_values[0]
+    first_layer_shape = first_layer_params.shape
+    input_len = first_layer_shape[1]
+    if input_len < FULL_INPUT_LENGTH:
+        print('too few inputs in model from disk! %d < %d' % (input_len, FULL_INPUT_LENGTH))
+        fill_len = FULL_INPUT_LENGTH - input_len
+        for i in range(fill_len):
+            # Take a slice for random existing input
+            # TODO: In executing model... should fill with zeros!
+            # TODO: all of this in function!
+            random_row = np.random.randint(input_len)
+            params_per_input = first_layer_params[:,random_row:random_row+1,:,:]
+            # Use this to fill with zeros! Instead of random noise from which to train on...
+            if zero_fill:
+                params_per_input = np.zeros_like(params_per_input, dtype=TRAINING_INPUT_TYPE)
+            print(params_per_input.shape)
+            print('adding input row...')
+            # Append it, to serve as noise for missing input in model
+            first_layer_params = np.concatenate((first_layer_params, params_per_input), axis = 1)
+            print(first_layer_params.shape)
+        all_param_values[0] = first_layer_params
+        print(all_param_values[0].shape)
+
 def main(num_epochs=NUM_EPOCHS, out_file=None):
     print("Loading data...")
     dataset = load_data()
@@ -776,28 +803,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
             #print(layer_param)
             print(layer_param.shape)
             print('---------------')
-
-        # HACK: If input size doesn't match... pad the input (first) layer with random noise from working layers of the model.
-        # NOTE: This should warn, and crash. Very hacky. But also necessary if we grow (or shrink) the model and don't want to lose knowledge.
-        all_param_values = all_param_values_from_file_with_type
-        first_layer_params = all_param_values[0]
-        first_layer_shape = first_layer_params.shape
-        input_len = first_layer_shape[1]
-        if input_len < FULL_INPUT_LENGTH:
-            print('too few inputs in model from disk! %d < %d' % (input_len, FULL_INPUT_LENGTH))
-            fill_len = FULL_INPUT_LENGTH - input_len
-            for i in range(fill_len):
-                # Take a slice for random existing input
-                random_row = np.random.randint(input_len)
-                params_per_input = first_layer_params[:,random_row:random_row+1,:,:]
-                print(params_per_input.shape)
-                #print(params_per_input)
-                print('adding input row...')
-                # Append it, to serve as noise for missing input in model
-                first_layer_params = np.concatenate((first_layer_params, params_per_input), axis = 1)
-                print(first_layer_params.shape)
-        all_param_values[0] = first_layer_params
-        print(all_param_values[0].shape)
+        expand_parameters_input_to_match(all_param_values_from_file_with_type, zero_fill=False)
 
         #print(all_param_values_from_file_with_type)
         lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file_with_type)
