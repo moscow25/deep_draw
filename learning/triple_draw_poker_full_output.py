@@ -21,7 +21,8 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '/Users/kolya/Desktop/poker/triple_draw/code/hands_sample_skew_low_100k.csv' # 0-32 draw results, skewed toward low card hands
+DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 3M hands, of the latest model (and some human play)
+# '/Users/kolya/Desktop/poker/triple_draw/code/hands_sample_skew_low_100k.csv' # 0-32 draw results, skewed toward low card hands
 # '../data/100k_hands_triple_draw_events.csv' # 100k hands, of human play, and CNN vs CNN, for CNN3,4,5 and 45 (mix of CNN3, CNN4, CNN5)
 # '../poker-lib/CNN6_mixed-test.csv' # Testing, with data for counter-factual on the river...
 # '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot more events) from man vs CNN, CNN vs sim, and sim vs sim [need more CNN vs CNN]
@@ -31,8 +32,8 @@ DATA_FILENAME = '/Users/kolya/Desktop/poker/triple_draw/code/hands_sample_skew_l
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 600000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 30000
+MAX_INPUT_SIZE = 20000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 3000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -59,7 +60,7 @@ LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True # False # True
 # If we are trainging on poker events (bets, raises and folds) instead of draw value,
 # input and output shape will be the same. But the way it's uses is totally different. 
 # NOTE: We keep shape the same... so we can use the really good "draw value" model as initialization.
-TRAINING_FORMAT =  'deuce' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT =  'deuce_events' # 'deuce' # 'video'
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch to adaptive training?
 

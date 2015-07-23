@@ -158,12 +158,12 @@ def best_draw_value_boost():
 # Actually a demotion. Suppress 'pat' draw, as model learns to suggest it way too often.
 # NOTE: Especially useful to let other alternatives to 'best_draw' thrive.
 def pat_draw_value_boost():
-    return -0.33 * best_draw_value_boost()
+    return -0.5 * best_draw_value_boost()
 
 # Similarly, demote 3 & 4 card draws, late in the hand. Reason is the same.
 # These trigger when normal draw is bad. But still... taking 3 or 4 cards late isn't the answer. Consider alternatives.
 def draw_many_value_boost():
-    return -0.33 * best_draw_value_boost()
+    return -0.5 * best_draw_value_boost()
 
 # Should inherit from more general player... when we need one. (For example, manual player who chooses his own moves and own draws)
 class TripleDrawAIPlayer():
@@ -263,7 +263,7 @@ class TripleDrawAIPlayer():
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted pat draw by %.3f' % (noise))
-                    # Also demote 3,4,5 card draws after the first draw. Look for other alteratives, even in a tough spot.
+                    # Also demote 3,4,5 card draws. Look for other alteratives, even in a tough spot. Especially late in the hand.
                     if (num_draws < 3) and (action == KEEP_0_CARDS or action == KEEP_1_CARDS or action == KEEP_2_CARDS):
                         noise = draw_many_value_boost()
                         prediction[0] += noise
