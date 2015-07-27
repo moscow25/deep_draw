@@ -90,11 +90,17 @@ def linear_error(x, t):
 
 first_five_vector = np.zeros(32)
 only_first_five_vector = np.zeros(32)
+only_first_five_with_actions_vector = np.zeros(32) # First five, and action%
+only_second_five_vector = np.zeros(32) # only draws
 for i in ALL_ACTION_CATEGORY_SET: 
     first_five_vector[i] = 1.0
     only_first_five_vector[i] = 1.0
+    only_first_five_with_actions_vector[i] = 1.0
+for i in ALL_ACTION_PERCENT_CATEGORY_SET:
+    only_first_five_with_actions_vector[i] = 1.0
 for i in DRAW_CATEGORY_SET:
     first_five_vector[i] = 1.0
+    only_second_five_vector[i] = 1.0
 first_five_matrix = [first_five_vector for i in xrange(BATCH_SIZE)]
 first_five_mask = np.array(first_five_matrix)
 only_first_five_matrix = [only_first_five_vector for i in xrange(BATCH_SIZE)]
@@ -103,21 +109,83 @@ only_first_five_mask = np.array(only_first_five_matrix)
 print('first_five_mask:')
 print(first_five_mask)
 
+# Automatically computes the correct mask, from target matrix (see what values exist for data)
+def set_mask_at_row_from_target(row_num, output_matrix, target_matrix):
+    zeros = T.zeros_like(output_matrix)
+    zeros_subtensor = zeros[row_num[0],:] # row in 2D matrix
+    # Do we have any (target) values for bets?
+    target_bets_row_sum = (target_matrix[row_num[0],:] * only_first_five_vector).sum()
+    # If so, choose "first_five" vector. Otherwise, "second_five" will do nicely, thank you.
+    #row_value = T.switch(T.gt(target_bets_row_sum, 0.0), only_first_five_vector, only_second_five_vector)
+    row_value = T.switch(T.gt(target_bets_row_sum, 0.0), only_first_five_with_actions_vector, only_second_five_vector)
+    return T.set_subtensor(zeros_subtensor, row_value) 
+
+# From target matrix (x batches, rows of 32-length outputs), return mask that focues on first-five if value, and draws-five if draws)
+# NOTE: This is for testing only, as need actual inputs on which to run this function. If building expression, use theano.scan() directly.
+def mask_for_bets_and_draws(real_target_matrix):
+    #if not real_target_matrix:
+    #    real_target_matrix = target_matrix_sample
+
+    row_num = T.imatrix("row_num")
+    row_value = T.matrix("row_value")
+    output_matrix = T.matrix("output_matrix") # the correct mask, for given target matrix
+    target_matrix = T.matrix("target_matrix") # real values, based on which to compute correct logical mask
+    
+    result, updates = theano.scan(fn=set_mask_at_row_from_target,
+                                  outputs_info=None,
+                                  sequences=[row_num],
+                                  non_sequences=[output_matrix, target_matrix])
+
+    assign_values_at_positions = theano.function(inputs=[row_num, output_matrix, target_matrix], outputs=result)
+
+
+    # test
+    #test_locations = numpy.asarray([[1, 1], [2, 3]], dtype=numpy.int32)
+    #test_values = numpy.asarray([42, 50], dtype=numpy.float32)
+    #test_output_model = numpy.zeros((5, 5), dtype=numpy.float32)
+
+    # TODO: second item.... choice of which array mask to choose
+    test_row_nums = np.asarray([[index, 0] for index in range(BATCH_SIZE)] , dtype=np.int32)
+    # TODO: Get rid of array of values. Look at num_rows[1] instead, to choose which mask row to look from
+    #test_row_values = np.asarray([only_first_five_vector, only_second_five_vector, only_first_five_vector, only_first_five_vector], dtype=np.float32)
+    test_output_matrix = np.zeros((BATCH_SIZE,32), dtype=np.float32)
+    #vector_arrays = assign_values_at_positions(test_row_nums, test_row_values, test_output_matrix)
+
+    # This will return the rows we want... in an otherwise zero-padded matrix (matrix for each row)
+    vector_arrays = assign_values_at_positions(test_row_nums, test_output_matrix, real_target_matrix)
+    #print vector_arrays
+    vector_array_sums = vector_arrays.sum(axis=1) # NOTE: will eliminate non-zero rows!
+    #print("now sums!")
+    #print vector_array_sums
+    return vector_array_sums
+    
+
+
+
 # Can we at least use outside mask??
 def value_action_error(output_matrix, target_matrix):
+    # Compute a mask... which per-row takes 5 bits of values, if target matrix has values,
+    # and the five (six) bits of draws if target matrix is all about draws. 
+    # Why? We don't want to action% model (for bets) on inputs to num_draws output.
+    category_mask_results, mask_updates = theano.scan(fn=set_mask_at_row_from_target,
+                                                      outputs_info=None,
+                                                      sequences=[np.asarray([[index, 0] for index in range(BATCH_SIZE)] , dtype=np.int32)],
+                                                      non_sequences=[np.zeros((BATCH_SIZE,32), dtype=np.float32), target_matrix])
+    output_category_mask = category_mask_results.sum(axis=1)
+
     # Apply mask to values that matter.
     output_matrix_masked = output_matrix * first_five_mask 
-
     
     # Now, use matrix manipulation to tease out the current action vector, and current value vector
     action_matrix = output_matrix[:,5:10] # Always output matrix. It's all we got!
-    value_matrix_output = output_matrix[:,0:5] # implied from the current model.
+    value_matrix_output = theano.gradient.disconnected_grad(output_matrix[:,0:5]) # disconnect gradient -- so values aren't changed by action% model
     value_matrix_target = target_matrix[:,0:5] # directly from observation
-    #value_matrix = theano.gradient.disconnected_grad(value_matrix_output) # Try to learn values from the network. 
-    value_matrix = value_matrix_target # Use real values. And reduce/remove pressure to tweak values, which is bad.
+    
+    value_matrix = value_matrix_output # Try to learn values from the network. 
+    #value_matrix = value_matrix_target # Use real values. And reduce/remove pressure to tweak values, which is bad.
 
     # create a mask, for non-zero values in the observed (values) space
-    value_matrix_mask = T.ceil(0.1 * value_matrix) # Ends up with reasonable (available) values --> 1.0, zero values --> 0.0
+    value_matrix_mask = T.ceil(0.05 * value_matrix) # Ends up with reasonable (available) values --> 1.0, zero values --> 0.0
 
     # This is the action-weighted sum of the values. Don't worry, we normalize by action sum.
     # A mask is needed, so that we ignore the unknown values inherent. 
@@ -141,15 +209,16 @@ def value_action_error(output_matrix, target_matrix):
     #probabilities_square_vector = 0.05 * (action_matrix ** 2).sum(axis=1) 
     
     # not sure if this is correct, but try it... 
-    #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_vector)
-    values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,10], values_sum_inverse_vector)
-    probability_sum_output_matrix_masked = T.set_subtensor(values_output_matrix_masked[:,11], probabilities_sum_vector)
+    #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,BET_ACTIONS_VALUE_CATEGORY], values_sum_vector)
+    values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,BET_ACTIONS_VALUE_CATEGORY], values_sum_inverse_vector)
+    probability_sum_output_matrix_masked = T.set_subtensor(values_output_matrix_masked[:,BET_ACTIONS_SUM_CATEGORY], probabilities_sum_vector)
     new_output_matrix_masked = probability_sum_output_matrix_masked
-    #new_output_matrix_masked = T.set_subtensor(probability_sum_output_matrix_masked[:,12], probabilities_square_vector)
+    #new_output_matrix_masked = T.set_subtensor(probability_sum_output_matrix_masked[:,BET_ACTIONS_SUM_VARIETY_CATEGORY], probabilities_square_vector)
 
-    # Values that can't be controlled... won't be.
-    #simple_error = output_matrix_masked - target_matrix
-    simple_error = new_output_matrix_masked - target_matrix
+    # Apply mask, so that we only consider:
+    # A. for bets, bet values + bet-action values
+    # B. for draws, draw values only
+    simple_error = (new_output_matrix_masked - target_matrix) * output_category_mask
 
     return simple_error ** 2
     #return new_simple_error ** 2
@@ -491,13 +560,24 @@ def create_iter_functions_full_output(dataset, output_layer,
     # Prediction actually stays the same! Since we still want biggest value in the array... and compare to Y
     # NOTE: If accuracy really supposed to be first 5... use [:,0:5] below [multiply by mask, before argmax]
     if TRAIN_MASKED_OBJECTIVE:
-        # Apply [0:5] only mask, to consider accuracy (for bet values)
+        # Apply [0:5] only mask, to consider accuracy (for bet alues)
         # TODO: Allow predictions to consider both cases with output == bet/raise and ouput == num_cards draw
+
+        # Builds a mask, row by row, of either 1 == bets or 1 == draws, depending on the output category. 
+        # TODO: Put this in a function... but not a theano.function. 
+        category_mask_results, mask_updates = theano.scan(fn=set_mask_at_row_from_target,
+                                                          outputs_info=None,
+                                                          sequences=[np.asarray([[index, 0] for index in range(BATCH_SIZE)] , dtype=np.int32)],
+                                                          non_sequences=[np.zeros((BATCH_SIZE,32), dtype=np.float32), z_batch])
+        output_category_mask = category_mask_results.sum(axis=1)
+
         if input_layer:
             #pred = T.argmax(output_layer.get_output(deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
-            pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
+            #pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
+            pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * output_category_mask, axis=1)
         else:
-            pred = T.argmax(lasagne.layers.get_output(output_layer, X_batch, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
+            #pred = T.argmax(lasagne.layers.get_output(output_layer, X_batch, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
+            pred = T.argmax(lasagne.layers.get_output(output_layer, X_batch, deterministic=DETERMINISTIC_MODEL_RUN) * output_category_mask, axis=1)
     else:
         pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN), axis=1)
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
