@@ -112,8 +112,8 @@ DISCOUNT_FUTURE_RESULTS = True # We want to encourage going after the current po
 FUTURE_DISCOUNT = 0.9 
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
-# TODO: Pre-compute numpy arrays, and train on more data. Not all in "shared," etc.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
+# NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
 SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 
 # Use this to train only on results of intelligent players, if different versions available
@@ -546,6 +546,9 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
 
         # Which place in the 32-vector array does this action map to?
         output_category = category_from_event_action(action_taken)
+        
+        # TODO: Add option to quit early, if we only want draw actions (no bet actions)
+        # raise AssertionError()
     elif action_taken == DRAW_ACTION:
         cards_kept = hand_string_to_array(data_array[csv_key_map['best_draw']])
         #print('draw action with %d cards kept' % len(cards_kept))
@@ -553,6 +556,9 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
 
         # Which place in the 32-vector array does this action map to?
         output_category = category_from_event_action(action_taken, cards_kept = len(cards_kept))
+
+        # TODO: Add option to quit early, if we only want bet actions (no draw actions)
+        # raise AssertionError()
     else:
         #print('action not useful for poker event training %s' % action_taken)
         raise AssertionError()
