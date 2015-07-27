@@ -156,6 +156,21 @@ FOLD_CATEGORY = 4
 ALL_ACTION_CATEGORY_SET = set([BET_CATEGORY, RAISE_CATEGORY, CHECK_CATEGORY, CALL_CATEGORY, FOLD_CATEGORY]) 
 eventCategoryName = {BET_CATEGORY: 'bet', RAISE_CATEGORY: 'raise', CHECK_CATEGORY: 'check',
                      CALL_CATEGORY: 'call', FOLD_CATEGORY: 'fold'}
+
+# Percentages we are trying to learn for betting actions.
+BET_ACTION_CATEGORY = 5
+RAISE_ACTION_CATEGORY = 6
+CHECK_ACTION_CATEGORY = 7
+CALL_ACTION_CATEGORY = 8
+FOLD_ACTION_CATEGORY = 9
+ALL_BET_ACTION_CATEGOY_SET = set([BET_ACTION_CATEGORY, RAISE_ACTION_CATEGORY, CHECK_ACTION_CATEGORY, CALL_ACTION_CATEGORY, FOLD_ACTION_CATEGORY])
+
+# Encode action% here: 
+BET_ACTIONS_VALUE_CATEGORY = 10 # actually the inverse. Minimize value to maximize action-weighted sum
+BET_ACTIONS_SUM_CATEGORY = 11 # sum of all actions for the hand. Try to get sum to add up to 1.0 (100%)
+BET_ACTIONS_SUM_VARIETY_CATEGORY = 12 # optionally, spread some weight amongst the values 
+ALL_ACTION_PERCENT_CATEGORY_SET = set([BET_ACTIONS_VALUE_CATEGORY, BET_ACTIONS_SUM_CATEGORY, BET_ACTIONS_SUM_VARIETY_CATEGORY])
+
 # Similarly, we can encode decision to keep {0,1,2,3,4,5} cards.
 # NOTE: We enocode this further down in the output array. Why? Separation, room for action% for bets.
 KEEP_0_CARDS = 15
