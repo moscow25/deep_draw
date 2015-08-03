@@ -206,7 +206,6 @@ def value_action_error(output_matrix, target_matrix):
     # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
     # Therefore, dampen the value. But also make sure that this matches the target.
     probabilities_sum_vector = 0.10 * action_matrix.sum(axis=1) 
-    #probabilities_square_vector = 0.05 * (action_matrix ** 2).sum(axis=1) 
     
     # not sure if this is correct, but try it... 
     #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,BET_ACTIONS_VALUE_CATEGORY], values_sum_vector)

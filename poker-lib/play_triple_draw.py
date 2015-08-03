@@ -90,6 +90,9 @@ NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a littl
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
+USE_ACTION_PERCENTAGE = True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
+ACTION_PERCENTAGE_CHOICE_RATE = 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
+
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
 SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
 USE_MIXED_MODEL_WHEN_AVAILABLE = True # When possible, including against human, use 2 or 3 models, and choose randomly which one decides actions.
@@ -150,7 +153,7 @@ def best_five_draws(hand_draws_vector):
 # Stochastic, but always positive boost, for "best_draw" from 0-32 model, in num_draw model.
 def best_draw_value_boost():
     # 2/3 * (5 x max(0, noise))
-    noise = 0.7 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
+    noise = 1.0 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
     # 3 x noise_average
     noise += PREDICTION_VALUE_NOISE_AVERAGE * 3.0
     return noise
@@ -403,7 +406,7 @@ class TripleDrawAIPlayer():
             
             # Now hand context
             if debug:
-                print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept]))
+                print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept, all_rounds_bets_string]))
             hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
                                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
                                                          all_rounds_bets_string=all_rounds_bets_string)
@@ -428,10 +431,11 @@ class TripleDrawAIPlayer():
             bets_vector = evaluate_single_event(bets_layer, full_input, input_layer = bets_input_layer)
 
             # Show the values for all draws [0, 5] cards kept.
+            # For action %... normalize the vector to show action %%.
             if debug:
-                print('vals\t%s' % ([val - 2.0 for val in bets_vector[:5]]))
+                print('vals\t%s' % ([(val - 2.0) for val in bets_vector[:5]]))
                 print('acts\t%s' % ([val for val in bets_vector[5:10]]))
-                print('drws\t%s' % ([val - 2.0 for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]))
+                print('drws\t%s' % ([(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]))
             #value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
             value_predictions = [[(bets_vector[action] - 2.0), action, '%s: %.3f' % (drawCategoryName[action], bets_vector[action] - 2.0)] for action in DRAW_CATEGORY_SET]
             value_predictions.sort(reverse=True)
@@ -579,23 +583,40 @@ class TripleDrawAIPlayer():
                     """
 
             # Show all the raw returns from training. [0:5] -> values of actions [5:10] -> probabilities recommended
-            # NOTE: Actions are exploratory, and wrong. But see how it goes...
+            # NOTE: Actions are good, and useful, and disconnected from values... but starting with CNN7 only!
+            # For action %... normalize the vector to show action %%.
             if debug:
-                print('vals\t%s' % ([val - 2.0 for val in bets_vector[:5]]))
+                print('vals\t%s' % ([(val - 2.0) for val in bets_vector[:5]]))
                 print('acts\t%s' % ([val for val in bets_vector[5:10]]))
-                print('drws\t%s' % ([val - 2.0 for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]))
+                print('drws\t%s' % ([(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]))
             value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
             value_predictions.sort(reverse=True)
             
             if debug:
                 print(value_predictions)
 
-            best_action_no_noise = value_predictions[0][1]
+            # Now we have a choice.
+            # A. Add noise to action values, and take action with highest post-noise value. This is a good option. Directly from RL
+            # B. If good action% model... just take the action based on %
+            best_action = None
+            if USE_ACTION_PERCENTAGE and np.random.rand() <= ACTION_PERCENTAGE_CHOICE_RATE:
+                action_percentge = [[bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01), action, '%s: (%.1f%%)' % (actionName[action], bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01) * 100.0)] for action in actions]
+                action_percentge.sort(reverse=True)
+                if debug:
+                    print action_percentge
+
+                # Sampled choice, from available actions, based on action% from neural net output.
+                choice = np.random.choice([action_tuple[1] for action_tuple in action_percentge], 
+                                          p=[action_tuple[0] for action_tuple in action_percentge])
+                best_action = choice
+                print('\n%s\n' % actionName[best_action])
+                return best_action
 
             # Now apply noise to action values, if requested.
             # Why? If actions are close, don't be vulnerable to small differences that lock us into action.
             # NOTE: We do *not* want more folds, so only increase values of non-fold actions. Clear folds still fold.
-            if PREDICTION_VALUE_NOISE_HIGH:
+            best_action_no_noise = value_predictions[0][1]
+            if PREDICTION_VALUE_NOISE_HIGH and not best_action:
                 for prediction in value_predictions:
                     action = prediction[1]
                     noise = 0.0
