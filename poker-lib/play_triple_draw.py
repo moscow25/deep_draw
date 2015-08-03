@@ -606,9 +606,9 @@ class TripleDrawAIPlayer():
                     print action_percentge
 
                 # Sampled choice, from available actions, based on action% from neural net output.
-                probabilities = [action_tuple[0] for action_tuple in action_percentge]
+                probabilities = np.asarray([action_tuple[0] for action_tuple in action_percentge])
                 # Defensively, fix possible issues with sum(prob) != 1.0
-                remainder = 1.0 - np.asarray(probabilities).sum()
+                remainder = 1.0 - probabilities.sum()
                 probabilities[0] += remainder
                 choice = np.random.choice([action_tuple[1] for action_tuple in action_percentge], 
                                           p=probabilities)
