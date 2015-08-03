@@ -603,11 +603,13 @@ class TripleDrawAIPlayer():
                 action_percentge = [[bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01), action, '%s: (%.1f%%)' % (actionName[action], bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01) * 100.0)] for action in actions]
                 action_percentge.sort(reverse=True)
                 if debug:
-                    print action_percentge
+                    print(action_percentge)
 
                 # Sampled choice, from available actions, based on action% from neural net output.
-                probabilities = np.array([action_tuple[0] for action_tuple in action_percentge])
-                probabilities /= probabilities.sum() # to avoid nasty numpy errors for sums != 1.0, etc
+                # NOTE: Need to explicitly round... to avoid annoying numpy/float32 issues
+                probabilities = np.around([action_tuple[0] for action_tuple in action_percentge], decimals=4)
+                remainder = 1.0 - probabilities.sum()
+                probabilities[0] += remainder
                 choice = np.random.choice([action_tuple[1] for action_tuple in action_percentge], 
                                           p=probabilities)
                 best_action = choice
