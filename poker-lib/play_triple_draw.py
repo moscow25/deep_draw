@@ -607,9 +607,15 @@ class TripleDrawAIPlayer():
 
                 # Sampled choice, from available actions, based on action% from neural net output.
                 # NOTE: Need to explicitly round... to avoid annoying numpy/float32 issues
-                probabilities = np.around([action_tuple[0] for action_tuple in action_percentge], decimals=4)
+                #probabilities = np.around([action_tuple[0] for action_tuple in action_percentge], decimals=4)
+                probabilities = np.array([int(action_tuple[0] * 100000) / 100000.0 for action_tuple in action_percentge])
+                if debug:
+                    print(probabilities)
+                #probabilities = np.array([action_tuple[0] * 1000
                 remainder = 1.0 - probabilities.sum()
                 probabilities[0] += remainder
+                if debug:
+                    print(probabilities)
                 choice = np.random.choice([action_tuple[1] for action_tuple in action_percentge], 
                                           p=probabilities)
                 best_action = choice
