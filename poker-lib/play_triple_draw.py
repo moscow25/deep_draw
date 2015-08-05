@@ -184,6 +184,7 @@ class TripleDrawAIPlayer():
         self.old_bets_output_model = False # "old" model used for NIPS... should be set from the outside
         self.other_old_bets_output_model = False # the "other" old bets model [CNN3 vs CNN5, etc]
         self.bets_output_array = [] # if we use *multiple* models, and choose randomly between them
+        self.use_action_percent_model = False # Make moves from CNN action-values (with noise added), or from action percentages from CNN?
         self.is_human = False
 
         # Current 0-1000 value, based on cards held, and approximation of value from draw model.
@@ -202,13 +203,18 @@ class TripleDrawAIPlayer():
             # Backward-compatibility hack, to allow support for "old" model used for NIPS paper (CNN)
             # NOTE: Will be deprecated...
             if self.bets_output_array and len(self.bets_output_array) > 0:
-                return 'CNN_76' # we sample from multiple models!
-            if self.other_old_bets_output_model:
-                return 'CNN_5'
+                name = 'CNN_76' # we sample from multiple models!
+            elif self.other_old_bets_output_model:
+                name = 'CNN_5'
             elif self.old_bets_output_model:
-                return 'CNN_6'
+                name = 'CNN_6'
             else:
-                return 'CNN_7'
+                name = 'CNN_7'
+
+            # To help remember
+            if self.use_action_percent_model:
+                name = name + '_per'
+            return name
         else:
             return 'sim'
 
@@ -599,7 +605,7 @@ class TripleDrawAIPlayer():
             # A. Add noise to action values, and take action with highest post-noise value. This is a good option. Directly from RL
             # B. If good action% model... just take the action based on %
             best_action = None
-            if USE_ACTION_PERCENTAGE and np.random.rand() <= ACTION_PERCENTAGE_CHOICE_RATE:
+            if USE_ACTION_PERCENTAGE and self.use_action_percent_model and np.random.rand() <= ACTION_PERCENTAGE_CHOICE_RATE:
                 action_percentge = [[bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01), action, '%s: (%.1f%%)' % (actionName[action], bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01) * 100.0)] for action in actions]
                 action_percentge.sort(reverse=True)
                 if debug:
@@ -607,15 +613,9 @@ class TripleDrawAIPlayer():
 
                 # Sampled choice, from available actions, based on action% from neural net output.
                 # NOTE: Need to explicitly round... to avoid annoying numpy/float32 issues
-                #probabilities = np.around([action_tuple[0] for action_tuple in action_percentge], decimals=4)
                 probabilities = np.array([int(action_tuple[0] * 100000) / 100000.0 for action_tuple in action_percentge])
-                if debug:
-                    print(probabilities)
-                #probabilities = np.array([action_tuple[0] * 1000
                 remainder = 1.0 - probabilities.sum()
                 probabilities[0] += remainder
-                if debug:
-                    print(probabilities)
                 choice = np.random.choice([action_tuple[1] for action_tuple in action_percentge], 
                                           p=probabilities)
                 best_action = choice
@@ -1186,6 +1186,10 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     player_one.bets_input_layer = bets_input_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
     player_one.use_learning_action_model = True
+
+    # Use action% for opponent... but only against human player. Confusing... but not really.
+    if (human_player) and USE_ACTION_PERCENTAGE:
+        player_one.use_action_percent_model = True
     if USE_MIXED_MODEL_WHEN_AVAILABLE and (old_bets_output_layer or other_old_bets_output_layer):
         player_one.bets_output_array = []
         player_one.bets_output_array.append([bets_output_layer, bets_input_layer]) # lastest model
@@ -1204,6 +1208,12 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     player_two.bets_input_layer = bets_input_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
     player_two.use_learning_action_model = True
+
+    # Use action percent model to choose actions.... but only for 2nd player (latest model)
+    # NOTE: Can thus test value-action model vs action% model. 
+    # TODO: If this is an issue, use command line flag. 
+    if USE_ACTION_PERCENTAGE and (not human_player):
+        player_two.use_action_percent_model = True
 
     # If we want to supply "old" model, for new CNN vs old CNN. 
     if (not human_player) and old_bets_output_layer and (not player_one.bets_output_array):
