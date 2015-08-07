@@ -116,8 +116,13 @@ FUTURE_DISCOUNT = 0.9
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
 SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 
+# Are the some cases that are important, and should always be selected?
+LOW_STRAIGHTS_ARE_IMPORTANT = True
+PAT_DRAWS_ARE_IMPORTANT = True
+RIVER_CALLS_ARE_IMPORTANT = True
+
 # Use this to train only on results of intelligent players, if different versions available
-PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'man']) # learn only from better models, or man's actions
+PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'man']) # learn only from better models, or man's actions
 # set(['CNN', 'CNN_2', 'CNN_3', 'man', 'sim']) # Incude 'sim' and ''?
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
@@ -536,6 +541,19 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     action_taken = actionNameToAction[action_name]
     #print(action_taken)
 
+    # HACK/side output: Flag important cases. This can be useful for making sure we train on this, over-riding choice%, etc
+    important_training_case = False
+
+    # Important case: hand is a low straight. We get these bets (and draws) wrong a lot. Need to focus on it.
+    if LOW_STRAIGHTS_ARE_IMPORTANT:
+        cards_array = [card_from_string(s) for s in hand_string_to_array(data_array[csv_key_map['hand']])]
+        rank = hand_rank_five_card(cards_array)
+        high_category = hand_category(rank)
+        if high_category == STRAIGHT or high_category == FLUSH:
+            important_training_case = True
+            #print('found a straight or flush in the hand!')
+            #print(data_array)
+
     # We can handle bets (bet, raise, check, call fold) and draws (how many?).
     # Other valid action (posting blinds, etc) don't do much for us.
     # TODO: Control with a constant, which valid action groups to train on...
@@ -556,6 +574,10 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
 
         # Which place in the 32-vector array does this action map to?
         output_category = category_from_event_action(action_taken, cards_kept = len(cards_kept))
+
+        # Important case: all "pat" draws.
+        if PAT_DRAWS_ARE_IMPORTANT and len(cards_kept) == 5:
+            important_training_case = True
 
         # TODO: Add option to quit early, if we only want bet actions (no draw actions)
         # raise AssertionError()
@@ -645,12 +667,17 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         elif action_taken in ALL_BETS_SET:
             #print('consider counter-factual of check/call instead of bet/raise...')
             if output_category == BET_CATEGORY and not position:
+                # NOTE: This is not technically accurate, so we are excluding from training.
+                # Check-fold is also possible, as is opponent betting a hand that we can beat, etc.
+                """
                 #print('We bet first to act... so counter-factual is check/call')
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
                 # opponent will bet if ahead, check if behind. And we always call
                 # NOTE: This is the the counter-factual to cases where we *already* bet out
                 if check_call_result == 0.0:
                     check_call_result = -1.0 * BIG_BET_SIZE
+                    """
+                check_call_result = -1
             elif output_category == BET_CATEGORY:
                 #print('We bet, when could have checked behind')
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
@@ -660,15 +687,23 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
                 if check_call_result == 0.0:
                     check_call_result = -1.0 * BIG_BET_SIZE
             #print('we would win %.1f by check/calling... ' % check_call_result)
-            check_call_margin_value = adjust_float_value(check_call_result, mode=adjust_floats)
-            if output_category == BET_CATEGORY:
-                output_array[CHECK_CATEGORY] = check_call_margin_value
-                output_mask_classes[CHECK_CATEGORY] = 1.0
-            else:
-                output_array[CALL_CATEGORY] = check_call_margin_value
-                output_mask_classes[CALL_CATEGORY] = 1.0
+            if check_call_result >= 0.0:
+                check_call_margin_value = adjust_float_value(check_call_result, mode=adjust_floats)
+                if output_category == BET_CATEGORY:
+                    output_array[CHECK_CATEGORY] = check_call_margin_value
+                    output_mask_classes[CHECK_CATEGORY] = 1.0
+                else:
+                    output_array[CALL_CATEGORY] = check_call_margin_value
+                    output_mask_classes[CALL_CATEGORY] = 1.0
+            #else:
+                #print('since we bet out and could have checked, no counter-factual information')
+        elif output_category == CALL_CATEGORY:
+            if RIVER_CALLS_ARE_IMPORTANT:
+                #print('including river call as significant action for training')
+                important_training_case = True
         #else:
             #print('no possible counter-factual to action taken |%s|... yet' % action_taken)
+            
 
     #print(output_array)
     #print(output_mask_classes)
@@ -683,12 +718,14 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
             """
 
     # print('output mask: %s' % output_mask_classes)
+    #if important_training_case:
+    #    print(data_array)
 
     # Do we return just the hand, or also 17 "bits" of context?
     if include_hand_context:
-        return (full_input, output_category, output_array, output_mask_classes)
+        return (full_input, output_category, output_array, output_mask_classes, important_training_case)
     else:
-        return (cards_input, output_category, output_array, output_mask_classes)
+        return (cards_input, output_category, output_array, output_mask_classes, important_training_case)
     
 # Read CSV lines, create giant numpy arrays of the input & output values.
 def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_best_class=True, keep_all_data=False, format='video', include_num_draws = False, include_full_hand = False, sample_by_hold_value = SAMPLE_BY_HOLD_VALUE, include_hand_context = False):
@@ -708,6 +745,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     hands = 0
     last_hands_print = -1
     lines = 0
+    important_training_cases = 0 # How many cases do we include, ignoring sampling, since worth training focus (pat hands, etc)
 
     # Sample down even harder, if outputting equivalent hands by permuted suit (fewer examples for flushes)
     # NOTE: This samples by "best class" [32]
@@ -751,7 +789,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # For less confusion, if input data is "events" ie bets, checks, etc... 
                     # Data gets zipped into the same training format, trained with same shape, but just initialize it differently
                     # (re-use sub functions for encoding a hand, etc, whereever possible)
-                    hand_input, output_class, output_array, output_mask_classes = read_poker_event_line(line, csv_key_map, adjust_floats = format, include_hand_context = include_hand_context, num_draw_out_position = num_draw_out_position, num_draw_in_position = num_draw_in_position, actions_this_round = actions_this_round)
+                    hand_input, output_class, output_array, output_mask_classes, important_training_case = read_poker_event_line(line, csv_key_map, adjust_floats = format, include_hand_context = include_hand_context, num_draw_out_position = num_draw_out_position, num_draw_in_position = num_draw_in_position, actions_this_round = actions_this_round)
 
                     # Now, after line processed, upate # of cards drawn, if applicable
                     if line and line[csv_key_map['action']]:
@@ -822,9 +860,11 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # TODO: Control this by flag, or pre-compute data before choosing sample policy
                     # TODO: Sample differently by "sim", "man", "cnn" actors...
                     sample_rate = SAMPLE_RATE_DEUCE_EVENTS
-                    if random.random() > sample_rate:
+                    if not important_training_case and random.random() > sample_rate:
                         #print('\nskipping form sample %s\n' % sample_rate)
                         continue
+                    elif important_training_case:
+                        important_training_cases += 1
 
                 # We can also add output "mask" for which of the "output_array" values matter.
                 # As default, for testing, etc, try applying mask for "output_class" == 1
@@ -854,7 +894,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     output_mask[output_class] = 1.0
                 
                 if (hands % 2500 == 1) and hands != last_hands_print:
-                    print('\nLoaded %d hands...\n' % hands)
+                    print('\nLoaded %d hands... (of these %d are important cases)\n' % (hands, important_training_cases))
                     print(line)
                     #print(hand_input)
                     print(hand_input.shape)
@@ -881,6 +921,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     if format != 'deuce_events':
                         print('hold value %s' % hold_value)
                     print(output_array)
+                    print('\nLoaded %d hands... (of these %d are important cases)\n' % (hands, important_training_cases))
                     print('------------')
                     last_hands_print = hands
 
@@ -890,14 +931,9 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 y_count_by_bucket[output_class] += 1
 
                 # X_train_not_np.append(hand_input) # no longer needed...
-                X_train[hands,:,:,:] = hand_input # Add rown to final X_train numpy array directly.
-                """
-                if X_train == None:
-                    print('\n-->loading first hand. Input shape...')
-                    print(hand_input.shape)
-                    X_train = np.empty(hand_input.shape, dtype=TRAINING_INPUT_TYPE)
-                    """
+                X_train[hands,:,:,:] = hand_input # Add row to final X_train numpy array directly.
 
+                # TODO: Put the other data into numpy directly also. Will save just a little memory, but still.
                 y_train_not_np.append(output_class)
                 z_train_not_np.append(output_array)
                 m_train_not_np.append(output_mask)

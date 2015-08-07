@@ -32,10 +32,10 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 3M hands, of the l
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 550000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 50000
+MAX_INPUT_SIZE = 330000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 30000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 50 # 100 # 500 # 500 # 20 # 20 # 100
+NUM_EPOCHS = 20 # 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -120,47 +120,21 @@ def set_mask_at_row_from_target(row_num, output_matrix, target_matrix):
     row_value = T.switch(T.gt(target_bets_row_sum, 0.0), only_first_five_with_actions_vector, only_second_five_vector)
     return T.set_subtensor(zeros_subtensor, row_value) 
 
-# From target matrix (x batches, rows of 32-length outputs), return mask that focues on first-five if value, and draws-five if draws)
-# NOTE: This is for testing only, as need actual inputs on which to run this function. If building expression, use theano.scan() directly.
-def mask_for_bets_and_draws(real_target_matrix):
-    #if not real_target_matrix:
-    #    real_target_matrix = target_matrix_sample
-
-    row_num = T.imatrix("row_num")
-    row_value = T.matrix("row_value")
-    output_matrix = T.matrix("output_matrix") # the correct mask, for given target matrix
-    target_matrix = T.matrix("target_matrix") # real values, based on which to compute correct logical mask
+# For row with output value and (sparse) matrix values, combine (output) + X (real value) [X is a learning rate]
+# NOTE: Would be better to connect this to true RL, and then can increase observation significantly.
+TARGET_ACTION_LEARNING_RATE = 0.1 # 0.05
+def set_values_at_row_from_target(row_num, output_rows, target_rows):
+    zeros = T.zeros_like(target_rows)
+    zeros_subtensor = zeros[row_num[0],:] # row in 2D matrix
+    output_row = output_rows[row_num[0]]
+    target_row = target_rows[row_num[0]]
+    target_mask = T.ceil(0.05 * target_row)
+    output_mask = T.ones_like(target_mask) - target_mask
     
-    result, updates = theano.scan(fn=set_mask_at_row_from_target,
-                                  outputs_info=None,
-                                  sequences=[row_num],
-                                  non_sequences=[output_matrix, target_matrix])
-
-    assign_values_at_positions = theano.function(inputs=[row_num, output_matrix, target_matrix], outputs=result)
-
-
-    # test
-    #test_locations = numpy.asarray([[1, 1], [2, 3]], dtype=numpy.int32)
-    #test_values = numpy.asarray([42, 50], dtype=numpy.float32)
-    #test_output_model = numpy.zeros((5, 5), dtype=numpy.float32)
-
-    # TODO: second item.... choice of which array mask to choose
-    test_row_nums = np.asarray([[index, 0] for index in range(BATCH_SIZE)] , dtype=np.int32)
-    # TODO: Get rid of array of values. Look at num_rows[1] instead, to choose which mask row to look from
-    #test_row_values = np.asarray([only_first_five_vector, only_second_five_vector, only_first_five_vector, only_first_five_vector], dtype=np.float32)
-    test_output_matrix = np.zeros((BATCH_SIZE,32), dtype=np.float32)
-    #vector_arrays = assign_values_at_positions(test_row_nums, test_row_values, test_output_matrix)
-
-    # This will return the rows we want... in an otherwise zero-padded matrix (matrix for each row)
-    vector_arrays = assign_values_at_positions(test_row_nums, test_output_matrix, real_target_matrix)
-    #print vector_arrays
-    vector_array_sums = vector_arrays.sum(axis=1) # NOTE: will eliminate non-zero rows!
-    #print("now sums!")
-    #print vector_array_sums
-    return vector_array_sums
-    
-
-
+    # Learning rate should be 0.05? 0.1? No point making it too low, since cases we care about 
+    # are typically -200 (big bet) for bad call. Even at 0.1 rate, that's 0.02 change in underlying value...
+    average_row = (1.0 - TARGET_ACTION_LEARNING_RATE) * output_row + (TARGET_ACTION_LEARNING_RATE) * (target_row * target_mask  + output_row * output_mask)
+    return T.set_subtensor(zeros_subtensor, average_row)
 
 # Can we at least use outside mask??
 def value_action_error(output_matrix, target_matrix):
@@ -181,8 +155,16 @@ def value_action_error(output_matrix, target_matrix):
     value_matrix_output = theano.gradient.disconnected_grad(output_matrix[:,0:5]) # disconnect gradient -- so values aren't changed by action% model
     value_matrix_target = target_matrix[:,0:5] # directly from observation
     
-    value_matrix = value_matrix_output # Try to learn values from the network. 
-    #value_matrix = value_matrix_target # Use real values. And reduce/remove pressure to tweak values, which is bad.
+    #value_matrix = value_matrix_output # Try to learn values from the network. 
+    #value_matrix = value_matrix_target # Use real values. Doesn't work, since too much bouncing around. Learns conservative moves (folds alot)
+
+    # Alternatively, learn a mix of network values, and real results (with a learning rate)
+    # This will push the action % a little bit into adapting from real values, but not enough that we over-write predicted values, which are good
+    average_value_matrix_results, average_value_updates = theano.scan(fn=set_values_at_row_from_target,
+                                                                      outputs_info=None,
+                                                                      sequences=[np.asarray([[index, 0] for index in range(BATCH_SIZE)] , dtype=np.int32)],
+                                                                      non_sequences=[value_matrix_output, value_matrix_target])
+    value_matrix = average_value_matrix_results.sum(axis=1)
 
     # create a mask, for non-zero values in the observed (values) space
     value_matrix_mask = T.ceil(0.05 * value_matrix) # Ends up with reasonable (available) values --> 1.0, zero values --> 0.0
