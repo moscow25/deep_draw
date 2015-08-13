@@ -32,8 +32,8 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 3M hands, of the l
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 330000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 30000
+MAX_INPUT_SIZE = 15000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 3000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 20 # 50 # 100 # 500 # 500 # 20 # 20 # 100
 BATCH_SIZE = 100 # 50 #100
@@ -519,14 +519,25 @@ def create_iter_functions_full_output(dataset, output_layer,
             masked_loss_function=value_action_error
 
         # TODO: Get rid of lasagne.objectives? Or use one that allows supply of input layer...
-        objective_mask = lasagne.objectives.MaskedObjective(output_layer, masked_loss_function)
+        #objective_mask = lasagne.objectives.MaskedObjective(output_layer, masked_loss_function)
                                                   
         # error is computed same as un-masked objective... but we also supply a mask for each output. 1 = output matters 0 = N/A or ?
         # NOTE: X_batch will be loaded into "shared". To not do this... do function.eval({input_layer.var_in: data})
         if input_layer:
-            loss_train_mask = objective_mask.get_loss(target=z_batch, mask=m_batch)
-            loss_eval_mask = objective_mask.get_loss(target=z_batch, mask=m_batch,
-                                                     deterministic=DETERMINISTIC_MODEL_RUN)
+            #loss_train_mask = objective_mask.get_loss(target=z_batch, mask=m_batch)
+            #loss_eval_mask = objective_mask.get_loss(target=z_batch, mask=m_batch,
+            #                                         deterministic=DETERMINISTIC_MODEL_RUN)
+
+            # For training, not determinisitc
+            output_batch = lasagne.layers.get_output(output_layer) # , deterministic=DETERMINISTIC_MODEL_RUN)
+            loss_train_mask = value_action_error(output_batch, z_batch) * m_batch
+            loss_train_mask = loss_train_mask.mean()
+
+            # For eval, deterministic!
+            output_batch_eval = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
+            loss_eval_mask = value_action_error(output_batch_eval, z_batch) * m_batch
+            loss_eval_mask = loss_eval_mask.mean()
+
         else:
             loss_train_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch)
             loss_eval_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch,
@@ -534,11 +545,11 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     if TRAIN_MASKED_OBJECTIVE:
         print('--> We are told to use \'masked\' loss function. So training & validation loss will be computed on inputs with mask == 1 only')
-        objective = objective_mask
+        #objective = objective_mask
         loss_train = loss_train_mask
         loss_eval = loss_eval_mask
     else:
-        objective = objective_no_mask
+        #objective = objective_no_mask
         loss_train = loss_train_no_mask
         loss_eval = loss_eval_no_mask
     
