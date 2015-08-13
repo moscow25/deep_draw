@@ -14,9 +14,16 @@ DEEP_DRAW_PATH="/home/ubuntu/deep_draw"
 DRAW_MODEL="$DEEP_DRAW_PATH/learning/deuce_triple_draw_conv_24_filter_xCards_xNumDraws_x0_53_percent_baseline_low_hands_good.pickle"
 
 # Multiple models outputting {action, value} for hands. Also suggests {num_draws, value} on draw rounds.
-LATEST_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_prev_betting_context_500k.pickle"
-OLDER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_6_mixed_draws_model_700k.pickle"
-OTHER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_6_draws_model_300k.pickle"
+
+# Original model that played vs Rep. Not good at action model at all, so not really usable going forward
+#LATEST_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_prev_betting_context_500k.pickle"
+#OLDER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_6_mixed_draws_model_700k.pickle"
+#OTHER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_6_draws_model_300k.pickle"
+
+# Three similar versions of model with disconnecte gradient actions. A bit passive, and pays off river too much. But plays good, and snows sometimes.
+LATEST_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_disconnect_grad_bet_percent_full_run_500k.pickle"
+OLDER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_disconnect_grad_bet_percent_500k.pickle"
+OTHER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_over_trained_500k.pickle"
 
 # Grep user's name. Pass it to the play_triple_draw.py for recording into CSV
 USER_NAME=$USER
