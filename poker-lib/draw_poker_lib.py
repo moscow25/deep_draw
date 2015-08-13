@@ -99,10 +99,16 @@ class PokerAction:
     def add_context(self, hand, draws_left, position, 
                     actions_this_round, actions_full_hand, 
                     value = RANDOM_HAND_HEURISTIC_BASELINE, bet_this_hand = 0,
-                    num_cards_kept = 0, num_opponent_kept = 0, bet_model = '', oppn_hand = None):
+                    num_cards_kept = 0, num_opponent_kept = 0, bet_model = '', oppn_hand = None,
+                    bet_val_vector=[], act_val_vector=[], num_draw_vector=[]):
         self.hand = list(hand) # makes copy of 5-card array
         self.oppn_hand = list(oppn_hand) # copy of opponent's current hand
         self.current_hand_win = self.current_win_percentage() # where are we at, right now? [Current hands comparison]
+
+        # Save vectors from the for our debug pleasure
+        self.bet_val_vector = bet_val_vector
+        self.act_val_vector = act_val_vector
+        self.num_draw_vector = num_draw_vector
 
         self.draws_left = draws_left
         self.value = value # heuristic estimation
@@ -140,7 +146,7 @@ class PokerAction:
 
     # After hand is over... add information about wins & losses
     # Winners: {'name': chips} to handle split pots, etc
-    def update_result(self, winners, final_bets):
+    def update_result(self, winners, final_bets, hand_num, running_average):
         # How much we won
         result = 0.0
         if winners.has_key(self.actor_name):
@@ -175,6 +181,11 @@ class PokerAction:
         else:
             self.current_margin_result = -1 * self.bet_size
             self.future_margin_result = margin_result - self.current_margin_result
+
+        # Details for debug
+        self.hand_num = hand_num
+        self.running_average = running_average # NOTE: A step behind, but.... that's ok.
+        
         
     # Consise summary, of the action taken.
     def __str__(self):
@@ -195,7 +206,7 @@ class PokerAction:
 
         if hasattr(self, 'draws_left'):
             output_map['draws_left'] = self.draws_left
-        output_map['value_heuristic'] = self.value
+        output_map['value_heuristic'] = int(self.value * 100000) / 100000.0 # round for better readability
         if hasattr(self, 'position'):
             output_map['position'] = self.position
         if hasattr(self, 'num_cards_kept'):
@@ -229,8 +240,19 @@ class PokerAction:
         if hasattr(self, 'oppn_hand'):
             output_map['oppn_hand'] = hand_string(self.oppn_hand)
             output_map['current_hand_win'] = self.current_hand_win
+
+        # TODO: Info & debug
+        # ['hand_num', 'running_average', 'bet_val_debug', 'act_val_debug', 'num_draw_debug']
+        if hasattr(self, 'hand_num'):
+            output_map['hand_num'] = self.hand_num
+        if hasattr(self, 'running_average'):
+            output_map['running_average'] = self.running_average
+        if hasattr(self, 'bet_val_vector'):
+            output_map['bet_val_vector'] = self.bet_val_vector
+            output_map['act_val_vector'] = self.act_val_vector
+            output_map['num_draw_vector'] = self.num_draw_vector
         
-        # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result', 'current_margin_result', 'future_margin_result', 'oppn_hand', 'current_hand_win']
+        # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result', 'current_margin_result', 'future_margin_result', 'oppn_hand', 'current_hand_win', 'hand_num', 'running_average', 'bet_val_vector', 'act_val_vector', 'num_draw_vector']
         output_row = VectorFromKeysAndSparseMap(keys=header_map, sparse_data_map=output_map, default_value = '')
         return output_row
 
@@ -526,7 +548,10 @@ class TripleDrawDealer():
                                num_cards_kept = self.action_on.num_cards_kept, 
                                num_opponent_kept = self.action_off.num_cards_kept,
                                bet_model = self.action_on.player_tag(),
-                               oppn_hand = (self.action_off.draw_hand.dealt_cards if round < DRAW_3_BET_ROUND else self.action_off.draw_hand.final_hand))
+                               oppn_hand = (self.action_off.draw_hand.dealt_cards if round < DRAW_3_BET_ROUND else self.action_off.draw_hand.final_hand),
+                               bet_val_vector = self.action_on.bet_val_vector,
+                               act_val_vector = self.action_on.act_val_vector,
+                               num_draw_vector = self.action_on.num_draw_vector)
 
             self.process_action(action, pass_control = True)
             if keep_betting:
@@ -631,7 +656,10 @@ class TripleDrawDealer():
                                     value = self.player_blind.heuristic_value,
                                     bet_this_hand = self.player_blind.bet_this_hand,
                                     bet_model = self.player_blind.player_tag(),
-                                    oppn_hand = (self.player_button.draw_hand.dealt_cards))
+                                    oppn_hand = (self.player_button.draw_hand.dealt_cards),
+                                    bet_val_vector = self.player_blind.bet_val_vector,
+                                    act_val_vector = self.player_blind.act_val_vector,
+                                    num_draw_vector = self.player_blind.num_draw_vector)
             self.hand_history.append(draw_action)
             
             draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
@@ -646,7 +674,10 @@ class TripleDrawDealer():
                                     value = self.player_button.heuristic_value,
                                     bet_this_hand = self.player_button.bet_this_hand,
                                     bet_model = self.player_button.player_tag(),
-                                    oppn_hand = (self.player_blind.draw_hand.final_hand)) # use hand we are already up against!
+                                    oppn_hand = (self.player_blind.draw_hand.final_hand),                              
+                                    bet_val_vector = self.player_button.bet_val_vector,
+                                    act_val_vector = self.player_button.act_val_vector,
+                                    num_draw_vector = self.player_button.num_draw_vector) # use hand we are already up against!
             self.hand_history.append(draw_action)
 
         # TODO: Switch to pre-draw & evaluate heuristics in a function?
@@ -715,7 +746,10 @@ class TripleDrawDealer():
                                     value = self.player_blind.heuristic_value,
                                     bet_this_hand = self.player_blind.bet_this_hand,
                                     bet_model = self.player_blind.player_tag(),
-                                    oppn_hand = (self.player_button.draw_hand.dealt_cards))
+                                    oppn_hand = (self.player_button.draw_hand.dealt_cards),
+                                    bet_val_vector = self.player_blind.bet_val_vector,
+                                    act_val_vector = self.player_blind.act_val_vector,
+                                    num_draw_vector = self.player_blind.num_draw_vector)
             self.hand_history.append(draw_action)
             draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
                                      hand_before = self.player_button.draw_hand.dealt_cards, 
@@ -729,7 +763,10 @@ class TripleDrawDealer():
                                     value = self.player_button.heuristic_value,
                                     bet_this_hand = self.player_button.bet_this_hand,
                                     bet_model = self.player_button.player_tag(),
-                                    oppn_hand = (self.player_blind.draw_hand.final_hand)) # use hand that we are already up against
+                                    oppn_hand = (self.player_blind.draw_hand.final_hand),
+                                    bet_val_vector = self.player_button.bet_val_vector,
+                                    act_val_vector = self.player_button.act_val_vector,
+                                    num_draw_vector = self.player_button.num_draw_vector) # use hand that we are already up against
             self.hand_history.append(draw_action)
 
         # TODO: Switch to pre-draw & evaluate heuristics in a function?
@@ -798,7 +835,10 @@ class TripleDrawDealer():
                                     value = self.player_blind.heuristic_value,
                                     bet_this_hand = self.player_blind.bet_this_hand,
                                     bet_model = self.player_blind.player_tag(),
-                                    oppn_hand = (self.player_button.draw_hand.dealt_cards))
+                                    oppn_hand = (self.player_button.draw_hand.dealt_cards),
+                                    bet_val_vector = self.player_blind.bet_val_vector,
+                                    act_val_vector = self.player_blind.act_val_vector,
+                                    num_draw_vector = self.player_blind.num_draw_vector)
             self.hand_history.append(draw_action)
             draw_action = DrawAction(actor_name = self.player_button.name, pot_size = self.pot_size, 
                                      hand_before = self.player_button.draw_hand.dealt_cards, 
@@ -812,7 +852,10 @@ class TripleDrawDealer():
                                     value = self.player_button.heuristic_value,
                                     bet_this_hand = self.player_button.bet_this_hand,
                                     bet_model = self.player_button.player_tag(),
-                                    oppn_hand = (self.player_blind.draw_hand.final_hand)) # last draw on last hand = against opponent's final hand!
+                                    oppn_hand = (self.player_blind.draw_hand.final_hand),
+                                    bet_val_vector = self.player_button.bet_val_vector,
+                                    act_val_vector = self.player_button.act_val_vector,
+                                    num_draw_vector = self.player_button.num_draw_vector) # last draw on last hand = against opponent's final hand!
             self.hand_history.append(draw_action)
 
         # Next round. We bet again, then draw again

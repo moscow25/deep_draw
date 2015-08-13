@@ -57,7 +57,8 @@ TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
                             'actions_this_round', 'actions_full_hand', 
                             'total_bet', 'result', 'margin_bet', 'margin_result',
                             'current_margin_result', 'future_margin_result',
-                            'oppn_hand', 'current_hand_win']
+                            'oppn_hand', 'current_hand_win',
+                            'hand_num', 'running_average', 'bet_val_vector', 'act_val_vector', 'num_draw_vector']
 
 BATCH_SIZE = 100 # Across all cases
 
@@ -153,7 +154,7 @@ def best_five_draws(hand_draws_vector):
 # Stochastic, but always positive boost, for "best_draw" from 0-32 model, in num_draw model.
 def best_draw_value_boost():
     # 2/3 * (5 x max(0, noise))
-    noise = 1.0 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
+    noise = 0.7 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
     # 3 x noise_average
     noise += PREDICTION_VALUE_NOISE_AVERAGE * 3.0
     return noise
@@ -192,6 +193,11 @@ class TripleDrawAIPlayer():
         self.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
         self.num_cards_kept = 0 # how many cards did we keep... with out last draw?
         self.cards = [] # Display purposes only... easy way to see current hand as last evaluated
+
+        # For further debug... latest debug vectors for various thing values we get back from AI model
+        self.bet_val_vector = []
+        self.act_val_vector = []
+        self.num_draw_vector = []
 
         # TODO: Use this to track number of cards discarded, etc. Obviously, don't look at opponent's cards.
         self.opponent = None
@@ -446,6 +452,11 @@ class TripleDrawAIPlayer():
             value_predictions = [[(bets_vector[action] - 2.0), action, '%s: %.3f' % (drawCategoryName[action], bets_vector[action] - 2.0)] for action in DRAW_CATEGORY_SET]
             value_predictions.sort(reverse=True)
             
+            # Save for debug
+            self.bet_val_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[:5]]]
+            self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/np.sum([val for val in bets_vector[5:10]]) for val in bets_vector[5:10]]]
+            self.num_draw_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]]
+
             if debug:
                 print(value_predictions)
 
@@ -597,20 +608,26 @@ class TripleDrawAIPlayer():
                 print('drws\t%s' % ([(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]))
             value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
             value_predictions.sort(reverse=True)
+
+            # Same for action%
+            action_percentge = [[bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01), action, '%s: (%.1f%%)' % (actionName[action], bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01) * 100.0)] for action in actions]
+            action_percentge.sort(reverse=True)
+            if debug:
+                print(action_percentge)
             
             if debug:
                 print(value_predictions)
+
+            # Save for debug
+            self.bet_val_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[:5]]]
+            self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/np.sum([val for val in bets_vector[5:10]]) for val in bets_vector[5:10]]]
+            self.num_draw_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]]
 
             # Now we have a choice.
             # A. Add noise to action values, and take action with highest post-noise value. This is a good option. Directly from RL
             # B. If good action% model... just take the action based on %
             best_action = None
             if USE_ACTION_PERCENTAGE and self.use_action_percent_model and np.random.rand() <= ACTION_PERCENTAGE_CHOICE_RATE:
-                action_percentge = [[bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01), action, '%s: (%.1f%%)' % (actionName[action], bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01) * 100.0)] for action in actions]
-                action_percentge.sort(reverse=True)
-                if debug:
-                    print(action_percentge)
-
                 # Sampled choice, from available actions, based on action% from neural net output.
                 # NOTE: Need to explicitly round... to avoid annoying numpy/float32 issues
                 probabilities = np.array([int(action_tuple[0] * 100000) / 100000.0 for action_tuple in action_percentge])
@@ -937,6 +954,11 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
                     continue
                 user_action = user_actions[0]
 
+        # Unless we check what AI does here, don't put in the vector values
+        self.bet_val_vector = []
+        self.act_val_vector = []
+        self.num_draw_vector = []
+
         # Single move, that user selected!
         return user_action
         
@@ -990,7 +1012,8 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
 # deck -- dumb deck, shuffled once, asked for next cards
 # dealer -- runs the game. Tracks pot, propts players for actions. Decides when hand ends.
 # players -- acts directly on a poker hand. Makes draw and betting decisions... when propted by the dealer
-def game_round(round, cashier, player_button=None, player_blind=None, csv_writer=None, csv_header_map=None):
+def game_round(round, cashier, player_button=None, player_blind=None, csv_writer=None, csv_header_map=None,
+               player_button_average=0.0, player_blind_average=0.0):
     print '\n-- New Round %d --\n' % round
     # Performance suffers... a lot, over time. Can we improve this with garbage collection?
     # NOTE: Not really, but doesn't hurt. If you want to improve performance, need to purge the theano-cache
@@ -1024,8 +1047,16 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
     # This information is the most important. Number of draws by opponent matters also, as well as previous bets...
     print('\nFull hand history...')
     for event in dealer.hand_history:
+        # Also, pass running average, to the update (average is per-player). 
+        # NOTE: It's a hack, but good to see running stats for that player so far.
+        if event.position:
+            running_average = player_button_average
+        else:
+            running_average = player_blind_average
+        running_average
+
         # Back-update hand result, and decision result for all moves made
-        event.update_result(winners, final_bets)
+        event.update_result(winners, final_bets, hand_num=round, running_average=running_average)
         print(event)
         if csv_header_map:
             event_line = event.csv_output(csv_header_map)
@@ -1242,12 +1273,16 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
             # Switches button, every other hand. Relevant, if one of the players uses a different moves model.
             if round % 2:
                 (bb_result, sb_result) = game_round(round, cashier, player_button=player_one, player_blind=player_two, 
-                                                     csv_writer=csv_writer, csv_header_map=csv_header_map)
+                                                    csv_writer=csv_writer, csv_header_map=csv_header_map,
+                                                    player_button_average = np.mean(player_one_results),
+                                                    player_blind_average = np.mean(player_two_results))
                 player_one_result = sb_result
                 player_two_result = bb_result
             else:
                 (bb_result, sb_result) = game_round(round, cashier, player_button=player_two, player_blind=player_one, 
-                                                     csv_writer=csv_writer, csv_header_map=csv_header_map)
+                                                    csv_writer=csv_writer, csv_header_map=csv_header_map,
+                                                    player_button_average = np.mean(player_two_results),
+                                                    player_blind_average = np.mean(player_one_results))
                 player_two_result = sb_result
                 player_one_result = bb_result
 
