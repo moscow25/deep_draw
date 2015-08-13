@@ -153,10 +153,10 @@ def best_five_draws(hand_draws_vector):
 
 # Stochastic, but always positive boost, for "best_draw" from 0-32 model, in num_draw model.
 def best_draw_value_boost():
-    # 2/3 * (5 x max(0, noise))
-    noise = 0.7 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
-    # 3 x noise_average
-    noise += PREDICTION_VALUE_NOISE_AVERAGE * 3.0
+    # 0.5 * (5 x max(0, noise))
+    noise = 0.5 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
+    # 1 x noise_average
+    noise += PREDICTION_VALUE_NOISE_AVERAGE * 1.0
     return noise
 
 # Actually a demotion. Suppress 'pat' draw, as model learns to suggest it way too often.
