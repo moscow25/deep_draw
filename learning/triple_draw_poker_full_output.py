@@ -341,7 +341,8 @@ def build_model(input_width, input_height, output_dim,
         l_in,
         num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-        border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        pad=BORDER_SHAPE,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
@@ -355,7 +356,8 @@ def build_model(input_width, input_height, output_dim,
         l_conv1,
         num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-        border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        pad=BORDER_SHAPE,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
@@ -383,7 +385,8 @@ def build_model(input_width, input_height, output_dim,
         l_pool1,
         num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
-        border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        pad=BORDER_SHAPE,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
@@ -396,7 +399,8 @@ def build_model(input_width, input_height, output_dim,
         l_conv2,
         num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
-        border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
+        pad=BORDER_SHAPE,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )

@@ -1123,7 +1123,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
             32,
         )
 
-        print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
+        #print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
         lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file)
         predict_model(output_layer=output_layer, test_batch=test_batch)
         print('Cases again %s' % str(test_cases))
@@ -1144,7 +1144,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
             HAND_TO_MATRIX_PAD_SIZE,
             32,
         )
-        print('filling model with shape %s, with %d params' % (str(bets_output_layer.get_output_shape()), len(bets_all_param_values_from_file)))
+        #print('filling model with shape %s, with %d params' % (str(bets_output_layer.get_output_shape()), len(bets_all_param_values_from_file)))
         lasagne.layers.set_all_param_values(bets_output_layer, bets_all_param_values_from_file)
         predict_model(output_layer=bets_output_layer, test_batch=test_batch)
         print('Cases again %s' % str(test_cases))
@@ -1165,7 +1165,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
             HAND_TO_MATRIX_PAD_SIZE,
             32,
         )
-        print('filling model with shape %s, with %d params' % (str(old_bets_output_layer.get_output_shape()), len(old_bets_all_param_values_from_file)))
+        #print('filling model with shape %s, with %d params' % (str(old_bets_output_layer.get_output_shape()), len(old_bets_all_param_values_from_file)))
         lasagne.layers.set_all_param_values(old_bets_output_layer, old_bets_all_param_values_from_file)
         predict_model(output_layer=old_bets_output_layer, test_batch=test_batch)
         print('Cases again %s' % str(test_cases))
@@ -1186,7 +1186,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
             HAND_TO_MATRIX_PAD_SIZE,
             32,
         )
-        print('filling model with shape %s, with %d params' % (str(other_old_bets_output_layer.get_output_shape()), len(other_old_bets_all_param_values_from_file)))
+        #print('filling model with shape %s, with %d params' % (str(other_old_bets_output_layer.get_output_shape()), len(other_old_bets_all_param_values_from_file)))
         lasagne.layers.set_all_param_values(other_old_bets_output_layer, other_old_bets_all_param_values_from_file)
         predict_model(output_layer=other_old_bets_output_layer, test_batch=test_batch)
         print('Cases again %s' % str(test_cases))
