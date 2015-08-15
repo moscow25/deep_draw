@@ -61,6 +61,12 @@ JACKS_OR_BETTER = 77 # useful category, for Jacks-or-better payout structure
 ONE_PAIR	= 8
 HIGH_CARD	= 9
 
+# High hand categories for indexing (if we want to store/learn odds of specific hand)
+HIGH_HAND_CATEGORIES = [ROYAL_FLUSH, STRAIGHT_FLUSH, FOUR_OF_A_KIND, FULL_HOUSE,
+                        FLUSH, STRAIGHT, THREE_OF_A_KIND, TWO_PAIR, 
+                        JACKS_OR_BETTER, ONE_PAIR, HIGH_CARD] 
+high_hand_categories_index = {x:HIGH_HAND_CATEGORIES.index(x) for x in HIGH_HAND_CATEGORIES}
+
 # Lowball hands
 DEUCE_WHEEL     = 101
 DEUCE_SEVEN     = 102
@@ -278,7 +284,7 @@ all_draw_patterns = [ set([]),
                       set([0,1,2,3]), set([0,1,2,4]), set([0,1,3,4]), set([0,2,3,4]), set([1,2,3,4]),
                       set([0,1,2,3,4]) ]
 
-print all_draw_patterns
+#print all_draw_patterns
 
 
 # There are X ways to scramble the suits in a hand. Note that any mapping still results in same output.
@@ -286,7 +292,7 @@ print all_draw_patterns
 all_suit_scrambles_array = itertools.permutations([CLUB, DIAMOND, HEART, SPADE])
 all_suit_scrambles_maps = [{CLUB: permutation[0], DIAMOND: permutation[1], HEART: permutation[2], SPADE: permutation[3]} for permutation in all_suit_scrambles_array]
 
-print all_suit_scrambles_maps
+#print all_suit_scrambles_maps
 
 
 # stuff for simulation, 32 categories of output (above)
@@ -303,7 +309,7 @@ for draw_pattern in all_draw_patterns:
     draw_to_string = '[%s]' % ','.join([str(i) for i in list(draw_pattern)])
     DRAW_VALUE_KEYS.append('%s_value' % draw_to_string)
 
-print(['%d: %s' % (i, all_draw_patterns[i]) for i in range(len(all_draw_patterns))])
+#print(['%d: %s' % (i, all_draw_patterns[i]) for i in range(len(all_draw_patterns))])
 
 #///////////////////////////////////////////////////////////////////////////////
 #//   Card object encoding into an integer. This is #standard for poker evaluation.
@@ -890,9 +896,9 @@ class PokerHand(object):
                                                                                       ','.join([str(card) for card in self.final_hand]),
                                                                                       self.rank, self.category_name,
                                                                                       self.deuce_category_name, self.deuce_heuristic)
-            
-        
 
+
+# Wrapper around a poker deck. Supports dealing and shuffling.
 class PokerDeck(object):
     def __init__(self, shuffle=True):
         self.cards = []
@@ -956,3 +962,6 @@ class PokerDeck(object):
         for card in discards:
             self.discard_cards.append(card)
 
+    # Shuffle cards remaining in the deck.
+    def shuffle(self):
+        random.shuffle(self.cards)

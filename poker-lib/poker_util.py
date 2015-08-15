@@ -30,6 +30,8 @@ def CreateMapFromCSVKey(csv_play):
 
 # Used a lot. [card, crd] -> [Ks,2d]
 def hand_string(cards_array):
+    if not cards_array:
+        return '[]'
     return '[%s]' % ','.join([str(card) for card in cards_array])
 
 # And the other way. [Ks,2d] -> ['Ks', '2d']
