@@ -186,7 +186,7 @@ def generated_cases(sample_size, tries_per_draw, output_file_name):
 
 if __name__ == '__main__':
     # TODO: Set from command line
-    samples = 10000
+    samples = 100000
     tries_per_draw = 2000
 
     # default 
