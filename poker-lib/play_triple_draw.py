@@ -92,7 +92,7 @@ FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 USE_ACTION_PERCENTAGE = True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
-ACTION_PERCENTAGE_CHOICE_RATE = 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
+ACTION_PERCENTAGE_CHOICE_RATE = 0.3 #  0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
 SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
