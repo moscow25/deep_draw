@@ -359,6 +359,9 @@ class Card(object):
 
 # card from string Ks
 def card_from_string(card_str):
+    #print('card_from_string(%s)' % card_str)
+    if not card_str:
+        return None
     try:
         return Card(suit=suitFromChar[card_str[1]], value=valueFromChar[card_str[0]])
     except KeyError:

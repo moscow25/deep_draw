@@ -10,8 +10,10 @@ import os.path # checking file existence, etc
 import numpy as np
 
 from poker_lib import *
+from holdem_lib import *
 from draw_poker import _load_poker_csv
 from draw_poker import cards_input_from_string
+from draw_poker import holdem_cards_input_from_string
 from draw_poker import create_iter_functions
 from draw_poker import train
 
@@ -21,7 +23,9 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 3M hands, of the latest model (and some human play)
+DATA_FILENAME = '../data/holdem/500k_holdem_values.csv' # 500k holdem hand values. Cards, possible flop, turn and river.
+# '../data/holdem/100k_holdem_values.csv' # 100k holdem hand values. Cards, possible flop, turn and river. Odds vs random hand, and odds to make hand categories.
+# '../data/100k_hands_triple_draw_events.csv' # 4M hands, of the latest model (and some human play)
 # '/Users/kolya/Desktop/poker/triple_draw/code/hands_sample_skew_low_100k.csv' # 0-32 draw results, skewed toward low card hands
 # '../data/100k_hands_triple_draw_events.csv' # 100k hands, of human play, and CNN vs CNN, for CNN3,4,5 and 45 (mix of CNN3, CNN4, CNN5)
 # '../poker-lib/CNN6_mixed-test.csv' # Testing, with data for counter-factual on the river...
@@ -32,15 +36,15 @@ DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 3M hands, of the l
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 530000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 330000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 30000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 20 # 50 # 100 # 500 # 500 # 20 # 20 # 100
+NUM_EPOCHS = 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
-LEARNING_RATE = 0.02 # 0.1 # 0.1 #  0.05 # 0.01 # 0.02 # 0.01
+LEARNING_RATE = 0.1 # 0.02 # 0.1 # 0.05
 MOMENTUM = 0.9
 # Fix and test, before epoch switch...
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
@@ -60,7 +64,7 @@ LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True # False # True
 # If we are trainging on poker events (bets, raises and folds) instead of draw value,
 # input and output shape will be the same. But the way it's uses is totally different. 
 # NOTE: We keep shape the same... so we can use the really good "draw value" model as initialization.
-TRAINING_FORMAT =  'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT =  'holdem' # 'deuce_events' # 'deuce' # 'video'
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch to adaptive training?
 
@@ -92,6 +96,7 @@ first_five_vector = np.zeros(32)
 only_first_five_vector = np.zeros(32)
 only_first_five_with_actions_vector = np.zeros(32) # First five, and action%
 only_second_five_vector = np.zeros(32) # only draws
+only_holdem_category_vector = np.zeros(32) # only valid categories for holdem hands
 for i in ALL_ACTION_CATEGORY_SET: 
     first_five_vector[i] = 1.0
     only_first_five_vector[i] = 1.0
@@ -101,13 +106,26 @@ for i in ALL_ACTION_PERCENT_CATEGORY_SET:
 for i in DRAW_CATEGORY_SET:
     first_five_vector[i] = 1.0
     only_second_five_vector[i] = 1.0
+for i in range(1, len(HOLDEM_VALUE_KEYS)):
+    only_holdem_category_vector[i] = 1.0
 first_five_matrix = [first_five_vector for i in xrange(BATCH_SIZE)]
 first_five_mask = np.array(first_five_matrix)
 only_first_five_matrix = [only_first_five_vector for i in xrange(BATCH_SIZE)]
 only_first_five_mask = np.array(only_first_five_matrix)
+only_holdem_category_matrix = [only_holdem_category_vector for i in xrange(BATCH_SIZE)]
+only_holdem_category_mask =  np.array(only_holdem_category_matrix)
 
 print('first_five_mask:')
 print(first_five_mask)
+
+# Depending on your game type, default mask where 1 = category that matters (for prediction debug) 0 = non-category
+if TRAINING_FORMAT == 'deuce_events':
+    OUTPUT_CATEGORY_DEFAULT_MASK = first_five_mask
+elif TRAINING_FORMAT == 'holdem':
+    OUTPUT_CATEGORY_DEFAULT_MASK = only_holdem_category_mask
+else:
+    OUTPUT_CATEGORY_DEFAULT_MASK = np.ones((32,100))
+
 
 # Automatically computes the correct mask, from target matrix (see what values exist for data)
 def set_mask_at_row_from_target(row_num, output_matrix, target_matrix):
@@ -299,25 +317,6 @@ def load_data():
 def build_model(input_width, input_height, output_dim,
                 batch_size=BATCH_SIZE, input_var = None):
     print('building model, layer by layer...')
-
-    """
-    # Our input consists of 5 cards, strictly in order... and other inputs.
-    # For inspiration to this approach, consider DeepMind's GO CNN. http://arxiv.org/abs/1412.6564v1
-    # They use multiple fake "boards" to encode player strength, in 7 'bits'
-    # Perhaps not efficient.... but easy to understand.
-    # TODO: How to you encode entire hand history? Or even opponent draws & bets?
-    num_input_cards = 5 
-    # One "card" with all five card matrix
-    if INCLUDE_FULL_HAND:
-        num_input_cards += 1
-    # 3 "bits" to encode where we are in the hand, in terms of number of draws.
-    if INCLUDE_NUM_DRAWS:
-        num_input_cards += 3
-
-    # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBets] -- or just 0's...
-    if INCLUDE_HAND_CONTEXT:
-        num_input_cards += 22
-        """
     num_input_cards = FULL_INPUT_LENGTH
 
     # Track all layers created, and return the full stack
@@ -488,60 +487,29 @@ def create_iter_functions_full_output(dataset, output_layer,
     batch_slice = slice(batch_index * batch_size,
                         (batch_index + 1) * batch_size)
 
-    # Also, attempt to multiply the 5 [bet, raise, check, call, fold] values 
-    # by the 5 [bet, raise, check, call, fold] action percentages.
-    # Can we do this with slicing?
-    #vals_batch = T.matrix('vals') # 100x5 matrix of value estimates
-    #actions_batch = T.matrix('actions') # 100x5 matric of value estimates
-
     if not TRAIN_MASKED_OBJECTIVE:
-        # compute loss on mean squared error
-        objective_no_mask = lasagne.objectives.Objective(output_layer,
-                                                         #loss_function=linear_error) # just not as good...
-                                                         loss_function=lasagne.objectives.mse)
+        # For training, not determinisitc
+        output_batch = lasagne.layers.get_output(output_layer) # , deterministic=DETERMINISTIC_MODEL_RUN)
+        loss_train_mask = lasagne.objectives.squared_error(output_batch, z_batch)
+        loss_train_no_mask = loss_train_mask.mean()
 
-        # error is comparing output to z-vector.
-        loss_train_no_mask = objective_no_mask.get_loss(target=z_batch)
-        loss_eval_no_mask = objective_no_mask.get_loss(target=z_batch, deterministic=DETERMINISTIC_MODEL_RUN)
-    else:
-        # Alternatively, train only on some values! We do this by supplying a mask.
-        # This means that some values matter, others do not. For example... 
-        # A. Train on "best value" for 32-draws only (or random value, etc)
-        # B. If we get records of actual hands played, train only on moves actually made (but output_layer produces value for all moves)
-        if LINEAR_LOSS_FOR_MASKED_OBJECTIVE:
-            # Use this, if cases highly random, and better to optimize for the average...
-            masked_loss_function = linear_error
-        else:
-            # Use this, if results correct, or mostly correct, and we need this well reflected.
-            #masked_loss_function = lasagne.objectives.mse
-
-            # Test this hack...
-            masked_loss_function=value_action_error
-
-        # TODO: Get rid of lasagne.objectives? Or use one that allows supply of input layer...
-        #objective_mask = lasagne.objectives.MaskedObjective(output_layer, masked_loss_function)
-                                                  
+        # For eval, deterministic!
+        output_batch_eval = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
+        loss_eval_mask = lasagne.objectives.squared_error(output_batch, z_batch)
+        loss_eval_no_mask = loss_eval_mask.mean()
+    else:                              
         # error is computed same as un-masked objective... but we also supply a mask for each output. 1 = output matters 0 = N/A or ?
         # NOTE: X_batch will be loaded into "shared". To not do this... do function.eval({input_layer.var_in: data})
-        if input_layer:
-            #loss_train_mask = objective_mask.get_loss(target=z_batch, mask=m_batch)
-            #loss_eval_mask = objective_mask.get_loss(target=z_batch, mask=m_batch,
-            #                                         deterministic=DETERMINISTIC_MODEL_RUN)
 
-            # For training, not determinisitc
-            output_batch = lasagne.layers.get_output(output_layer) # , deterministic=DETERMINISTIC_MODEL_RUN)
-            loss_train_mask = value_action_error(output_batch, z_batch) * m_batch
-            loss_train_mask = loss_train_mask.mean()
+        # For training, not determinisitc
+        output_batch = lasagne.layers.get_output(output_layer) # , deterministic=DETERMINISTIC_MODEL_RUN)
+        loss_train_mask = value_action_error(output_batch, z_batch) * m_batch
+        loss_train_mask = loss_train_mask.mean()
 
-            # For eval, deterministic!
-            output_batch_eval = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
-            loss_eval_mask = value_action_error(output_batch_eval, z_batch) * m_batch
-            loss_eval_mask = loss_eval_mask.mean()
-
-        else:
-            loss_train_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch)
-            loss_eval_mask = objective_mask.get_loss(X_batch, target=z_batch, mask=m_batch,
-                                                     deterministic=DETERMINISTIC_MODEL_RUN)
+        # For eval, deterministic!
+        output_batch_eval = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
+        loss_eval_mask = value_action_error(output_batch_eval, z_batch) * m_batch
+        loss_eval_mask = loss_eval_mask.mean()
 
     if TRAIN_MASKED_OBJECTIVE:
         print('--> We are told to use \'masked\' loss function. So training & validation loss will be computed on inputs with mask == 1 only')
@@ -567,15 +535,11 @@ def create_iter_functions_full_output(dataset, output_layer,
                                                           non_sequences=[np.zeros((BATCH_SIZE,32), dtype=np.float32), z_batch])
         output_category_mask = category_mask_results.sum(axis=1)
 
-        if input_layer:
-            #pred = T.argmax(output_layer.get_output(deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
-            #pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
-            pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * output_category_mask, axis=1)
-        else:
-            #pred = T.argmax(lasagne.layers.get_output(output_layer, X_batch, deterministic=DETERMINISTIC_MODEL_RUN) * only_first_five_mask, axis=1)
-            pred = T.argmax(lasagne.layers.get_output(output_layer, X_batch, deterministic=DETERMINISTIC_MODEL_RUN) * output_category_mask, axis=1)
+
+        pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * output_category_mask, axis=1)
     else:
-        pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN), axis=1)
+        # If not masked output... then just mask which categories matter for this input class (outside constant)
+        pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * OUTPUT_CATEGORY_DEFAULT_MASK, axis=1)
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
 
     all_params = lasagne.layers.get_all_params(output_layer)
@@ -653,28 +617,6 @@ def create_iter_functions_full_output(dataset, output_layer,
         on_unused_input='warn', # We might not need "m_batch" if unmasked input... but pain to deal with conditional compiling
     )
 
-    """
-    # Be careful not to include in givens, what won't be used. Theano will complain!
-    if TRAIN_MASKED_OBJECTIVE:
-        givens_test = {
-            X_batch: dataset['X_test'][batch_slice],
-            y_batch: dataset['y_test'][batch_slice],
-            z_batch: dataset['z_test'][batch_slice],
-            m_batch: dataset['m_test'][batch_slice],
-        }
-    else:
-        givens_test = {
-            X_batch: dataset['X_test'][batch_slice],
-            y_batch: dataset['y_test'][batch_slice],
-            z_batch: dataset['z_test'][batch_slice],
-            #m_batch: dataset['m_test'][batch_slice],
-        }
-    iter_test = theano.function(
-        [batch_index], [loss_eval, accuracy],
-        givens=givens_test,
-    )
-    """
-
     return dict(
         train=iter_train,
         train_nesterov=iter_train_nesterov,
@@ -693,11 +635,15 @@ def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None
         pred_all = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
     else:
         pred_all = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=DETERMINISTIC_MODEL_RUN)
-    if format != 'deuce_events':
-        pred = pred_all
-    else:
+
+    if format == 'deuce_events':
         # Slice it, so only relevant rows are looked at
         pred = pred_all[:17,:10] # pred_all[:17,:5] # hack: show first 17 examples only
+    elif format == 'holdem':
+        print(HOLDEM_VALUE_KEYS)
+        pred = pred_all[:17,:len(HOLDEM_VALUE_KEYS)] # show first 17 examples only
+    else:
+        pred = pred_all        
 
     # Print out entire predictions array
     opt = np.get_printoptions()
@@ -716,10 +662,19 @@ def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None
         softmax_values = pred.eval()
     print(softmax_values)
 
-    if format != 'deuce_events':
-        pred_max = T.argmax(pred, axis=1)
+    if format == 'deuce_events':
+        pred_max = T.argmax(pred[:,0:5], axis=1) # 0-5 bets
+    elif format == 'holdem':
+        # TODO: Ignore first element... (overall value)
+        """
+        #pred[:,0] = 0.0 # zero out first row, which is "best_value" column
+        zeros = T.zeros_like(pred)
+        zeros_subtensor = zeros[:,0:1]
+        pred_values = T.set_subtensor(zeros_subtensor, pred)
+        """
+        pred_max = T.argmax(pred[:,0:len(HOLDEM_VALUE_KEYS)], axis=1) # values of actions
     else:
-        pred_max = T.argmax(pred[:,0:5], axis=1)
+        pred_max = T.argmax(pred, axis=1)
 
     print('Maximums %s' % pred_max)
     #print(tp.pprint(pred_max))
@@ -811,21 +766,6 @@ def save_model(out_file=None, output_layer=None):
     if out_file and output_layer:
         # Get all param values (for fixed network)
         all_param_values = lasagne.layers.get_all_param_values(output_layer)
-        """
-        print('all param values: %d' % len(all_param_values))
-        for layer_param in all_param_values:
-            #print(layer_param)
-            print(layer_param.shape)
-            print('---------------')
-        # show sample input (per bit)
-        first_layer_params = all_param_values[0]
-        first_layer_shape = first_layer_params.shape
-        input_len = first_layer_shape[1]
-        params_per_input = first_layer_params[:,np.random.randint(input_len),:,:]
-        print(params_per_input.shape)
-        print(params_per_input)
-        print('---------------')
-        """
 
         # save values to output file!
         print('pickling model %d param values to %s' % (len(all_param_values), out_file))
@@ -896,13 +836,6 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     else:
         print('No existing model file (or skipping intialization) %s' % out_file)
 
-
-    #iter_funcs = create_iter_functions(
-    #    dataset,
-    #    output_layer,
-    #    X_tensor_type=T.tensor4,
-    #    )
-
     # Define iter functions differently. Since we now want to predict the entire vector. 
     iter_funcs = create_iter_functions_full_output(
         dataset,
@@ -944,33 +877,51 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
     # Test cases -- for Deuce. Can it keep good hands, break pairs, etc? 
     # NOTE: These cases, and entire training... do *not* include number of draw rounds left. Add that!
-    test_cases = [['3h,3s,3d,5c,6d', 3], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 0],
-                  ['3h,3s,3d,5c,6d', 0], ['2h,3s,4d,6c,5s', 2], ['3s,2h,4d,8c,5s', 3],
-                  ['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,4s,3d,5c,6d', 2],
-                  ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1], 
-                  ['7c,8c,Tc,Js,Qh', 3], ['2c,8s,5h,8d,2s', 2],
-                  ['[8s,9c,8c,Kd,7h]', 2], ['[Qh,3h,6c,5s,4s]', 1], ['[Jh,Td,9s,Ks,5s]', 1],
-                  ['[6c,4d,Ts,Jc,6s]', 3], ['[4h,8h,2c,7d,3h]', 2], ['[2c,Ac,Tc,6d,3d]', 1], 
-                  ['[Ad,3c,Tc,4d,5d]', 1], ['3d,Jc,7d,Ac,6s', 2],
-                  ['7h,Kc,5s,2d,Tc', 3], ['5c,6h,Jc,7h,2d', 1], ['Ts,As,3s,2d,4h', 3]] 
+    test_cases_draw = [['3h,3s,3d,5c,6d', 3], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 0],
+                       ['3h,3s,3d,5c,6d', 0], ['2h,3s,4d,6c,5s', 2], ['3s,2h,4d,8c,5s', 3],
+                       ['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,4s,3d,5c,6d', 2],
+                       ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1], 
+                       ['7c,8c,Tc,Js,Qh', 3], ['2c,8s,5h,8d,2s', 2],
+                       ['[8s,9c,8c,Kd,7h]', 2], ['[Qh,3h,6c,5s,4s]', 1], ['[Jh,Td,9s,Ks,5s]', 1],
+                       ['[6c,4d,Ts,Jc,6s]', 3], ['[4h,8h,2c,7d,3h]', 2], ['[2c,Ac,Tc,6d,3d]', 1], 
+                       ['[Ad,3c,Tc,4d,5d]', 1], ['3d,Jc,7d,Ac,6s', 2],
+                       ['7h,Kc,5s,2d,Tc', 3], ['5c,6h,Jc,7h,2d', 1], ['Ts,As,3s,2d,4h', 3]] 
 
+    # hand (2 cards), flop (0 or 3), turn (0 or 1), river (0 or 1). All we need.
+    test_cases_holdem = [['Ad,Ac', '[]', '', ''], # AA preflop
+                         ['[8d,5h]','[Qh,9d,3d]','[Ad]','[7c]'], # missed draw
+                         ['4d,5d', '[6d,7d,3c]', 'Ad', ''], # made flush
+                         ['7c,9h', '[8s,6c,Qh]', '', ''], # open ended straight draw
+                         ['Ad,Qd', '[Kd,Td,2s]', '3s', ''], # big draw
+                         ['7s,2h', '', '', ''], # weak hand preflop
+                         ['Ts,Th', '', '', ''], # good hand preflop
+                         ['9s,Qh', '', '', ''], # average hand preflop
+                         ]
+                         
+    if TRAINING_FORMAT == 'holdem':
+        test_cases = test_cases_holdem
+    else:
+        test_cases = test_cases_draw
+    test_cases_size = len(test_cases)
+                         
     print('looking at some test cases: %s' % test_cases)
 
     # Fill in test cases to get to batch size?
     for i in range(BATCH_SIZE - len(test_cases)):
-        test_cases.append(test_cases[1])
+        test_cases.append(test_cases[0])
     # Test_batch... 5 cards, no 3-card "round" encoding.
     # test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
     if TRAINING_FORMAT == 'video' or TRAINING_FORMAT == 'deuce':
         test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
-    
     elif TRAINING_FORMAT == 'deuce_events':
         # TODO:  Add context, if made available...
         test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
+    elif TRAINING_FORMAT == 'holdem':
+        test_batch = np.array([holdem_cards_input_from_string(case[0], case[1], case[2], case[3]) for case in test_cases], np.int32)
         
     predict_model(output_layer=output_layer, test_batch=test_batch, format = TRAINING_FORMAT, input_layer = input_layer)
 
-    print('again, the test cases: \n%s' % test_cases)    
+    print('again, the test cases: \n%s' % test_cases[:test_cases_size])    
 
     return output_layer
 
@@ -983,5 +934,8 @@ if __name__ == '__main__':
     if INCLUDE_HAND_CONTEXT:
         extra_flags += '_hand_context'
 
-    output_layer_filename = '%striple_draw_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_%s_border_%d_num_draws%s_model.pickle' % (TRAINING_FORMAT, LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS, BORDER_SHAPE, INCLUDE_NUM_DRAWS, extra_flags)
+    if TRAINING_FORMAT != 'holdem':
+        output_layer_filename = '%striple_draw_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_%s_border_%d_num_draws%s_model.pickle' % (TRAINING_FORMAT, LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS, BORDER_SHAPE, INCLUDE_NUM_DRAWS, extra_flags)
+    else:
+        output_layer_filename = '%s_conv_%.2f_learn_rate_%d_epoch_adaptive_%d_filters_%s_border_%d_num_draws%s_model.pickle' % (TRAINING_FORMAT, LEARNING_RATE, EPOCH_SWITCH_ADAPT, NUM_FILTERS, BORDER_SHAPE, INCLUDE_NUM_DRAWS, extra_flags)
     main(out_file=output_layer_filename)
