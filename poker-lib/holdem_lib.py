@@ -29,6 +29,10 @@ RIVER_ROUND = 4
 holdemRoundsLeft = {PREFLOP_ROUND:3, FLOP_ROUND: 2, TURN_ROUND: 1, RIVER_ROUND:0}
 HOLDEM_ROUNDS_SET = set([PREFLOP_ROUND, FLOP_ROUND, TURN_ROUND, RIVER_ROUND])
 
+# Holdem equivalent for DRAW_VALUE_KEYS. [0.0, 1.0] values trained for simulated holdem hands below.
+# TODO: Make this an easier lookup, etc.
+HOLDEM_VALUE_KEYS = ['best_value'] + [categoryName[category] for category in HIGH_HAND_CATEGORIES]
+
 # Evaluate a 2-card hold'em hand, with 3+ community cards
 # NOTE: Can use 0-2 from dealt_cards and the rest from community.
 # TODO: Add game type (or new function) to support Omaha when we get there (needs two cards exclusively)

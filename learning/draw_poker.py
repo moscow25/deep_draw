@@ -42,6 +42,7 @@ import time
 import math
 import csv
 from poker_lib import *
+from holdem_lib import *
 from poker_util import *
 
 PY2 = sys.version_info[0] == 2
@@ -220,6 +221,46 @@ def integer_to_card_array(number, max_integer, pad_to_fit = PAD_INPUT):
             output_array[index] = card_to_matrix_fill(1, pad_to_fit = pad_to_fit)
     return output_array
 
+# Similarly to the 5-card draw example above, encode holdem hand into bits array, padded out to maximum size.
+# NOTE: Unless needed, just assume variables like yes, we want to inlude "num draws" == betting rounds left. Etc.
+# NOTE: Return one input matrix. None of this invariances bullshit (like switching suits).
+def holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string, pad_to_fit = PAD_INPUT):
+    #print('attempting to read hand from %s' % [cards_string, flop_string, turn_string, river_string])
+
+    # Turn cards strings inta arrays of cards.
+    cards_array = [card_from_string(card_str) for card_str in hand_string_to_array(cards_string)]
+    flop_array = [card_from_string(card_str) for card_str in hand_string_to_array(flop_string)]
+    turn_array = [card_from_string(card_str) for card_str in hand_string_to_array(turn_string)]
+    river_array = [card_from_string(card_str) for card_str in hand_string_to_array(river_string)]
+
+    # All cards array (with community and private cards) makes sense for Holdem. Not really for Omaha. So do both.
+    all_community_cards_array = flop_array + turn_array + river_array
+    all_cards_array = cards_array + flop_array + turn_array + river_array
+    
+    # Verify that the hand is legit
+    community = HoldemCommunityHand(flop = flop_array, turn = turn_array, river = river_array)
+    hand = HoldemHand(cards = cards_array, community = community)
+    
+    # Turn cards into bits
+    cards_bits = hand_to_matrix(cards_array, pad_to_fit=pad_to_fit)
+    flop_bits = hand_to_matrix(flop_array, pad_to_fit=pad_to_fit)
+    turn_bits = hand_to_matrix(turn_array, pad_to_fit=pad_to_fit)
+    river_bits = hand_to_matrix(river_array, pad_to_fit=pad_to_fit)
+    all_community_cards_bits = hand_to_matrix(all_community_cards_array, pad_to_fit=pad_to_fit)
+    all_cards_bits = hand_to_matrix(all_cards_array, pad_to_fit=pad_to_fit)
+
+    # Turn "number for draws left" into bits (number of streets with new cards)
+    num_draws_input = num_draws_input_from_string(holdemRoundsLeft[community.round], pad_to_fit=pad_to_fit)
+    assert len(num_draws_input) == 3, 'Incorrect length of input for number of draws %s!' % num_draws_input
+    
+    # Now, combine all of these bits into 6 bits for cards, and 3 bits for number of draws left.
+    cards_input = np.array([cards_bits, flop_bits, turn_bits, river_bits, all_community_cards_bits, all_cards_bits, num_draws_input[0], num_draws_input[1], num_draws_input[2]], dtype=TRAINING_INPUT_TYPE)
+
+    # Fill in empty bits for 'context' -- betting information that is missing, but will be filled in later.
+    empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
+    cards_input_with_context = np.concatenate((cards_input, empty_bits_array), axis = 0)
+
+    return cards_input_with_context
 
 # Encode a string like '011' to 5-length array of "cards"
 def bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
@@ -469,6 +510,35 @@ def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_
                
     # Output all three things. Cards input, best category (0-32) and 32-row vector, of the weights
     return (cards_inputs, output_category, output_values) 
+
+# Similar for Hold'em poker line. For inputs, unpack cards from text and turn these into bit arrays. Pack with zeros for full size outputs.
+# For outputs, arrange 0.0 - 1.0 values into output array in the right order. 
+def read_holdem_poker_line(data_array, csv_key_map):
+    # For inputs, get 'cards', 'flop', 'turn' and 'river' from the array.
+    cards_string = data_array[csv_key_map['hand']]
+    flop_string = data_array[csv_key_map['flop']]
+    turn_string = data_array[csv_key_map['turn']]
+    river_string = data_array[csv_key_map['river']]
+    cards_input = holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string)
+
+    # For outputs, grab holdem value keys. All values [0.0, 1.0] so ReLU good, and no need to adjust values.
+    holdem_values = np.array([float(data_array[csv_key_map[holdem_value_key]]) for holdem_value_key in HOLDEM_VALUE_KEYS], dtype=TRAINING_INPUT_TYPE)
+    zeros_fill = np.zeros(32 - len(HOLDEM_VALUE_KEYS), dtype=TRAINING_INPUT_TYPE)
+    output_values = np.concatenate((holdem_values, zeros_fill), axis = 0)
+
+    # Best category? The most likely hand result (or actual hand result if on the river). Can't choose first index, as overall value.
+    output_category = np.argmax(output_values[1:]) + 1
+
+    """
+    print([cards_string, flop_string, turn_string, river_string])
+    print(output_values)
+    print(output_category)
+    print('---------------------------')
+    """
+
+    # NOTE: Lots of empty values here, but good to keep same format as draw poker.
+    # NOTE: No need for mask, since can just predict all values, including zeros. Mask only needed if known values change, input to input.
+    return ([cards_input], output_category, output_values)
 
 # Same output format as poker line... but encodes a poker event (bet/check/fold)
 # returns (hand_input, output_class, output_array):
@@ -773,6 +843,8 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 # hand_inputs represents array of *equivalent* inputs (in case we want to permute inputs, to get more data)
                 if format == 'video' or format == 'deuce':
                     hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = format, include_num_draws=include_num_draws, include_full_hand = include_full_hand, include_hand_context = include_hand_context)
+                elif format == 'holdem':
+                    hand_inputs_all, output_class, output_array = read_holdem_poker_line(line, csv_key_map)
                 elif format == 'deuce_events':
                     # Hack! Not properly tracking number of cards drawn, especially for draw decision. So build it line by line.
                     # NOTE: Reset at every blind post, set at every draw. Pass optionally to read_poker_line.
@@ -836,7 +908,13 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             # Create an output, for each equivalent input...
             for hand_input in hand_inputs_all:
                 # Weight of last item in output_array == value of keeping all 5 cards.
-                hold_value = output_array[-1]
+                # Except for holdem, where values is [0.0 - 1.0] value against a random hand...
+                if format == 'video' or format == 'deuce':
+                    hold_value = output_array[-1]
+                elif format == 'holdem':
+                    hold_value = output_array[0] 
+                else:
+                    hold_value = 0.0
 
                 # If requested, sample out some too common cases. 
                 # A. Better balance
@@ -904,10 +982,6 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                         opt = np.get_printoptions()
                         np.set_printoptions(threshold='nan')
 
-                        # Also print the whole thing...
-                        #print(hand_input)
-                        #print('-------')
-
                         # Get all bits for input... excluding padding bits that go to 17x17
                         debug_input = hand_input[:,6:10,2:15]
                         print(debug_input)
@@ -916,7 +990,10 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                         # Return options to previous settings...
                         np.set_printoptions(**opt)
 
+                        
                     print(output_class)
+                    if format == 'holdem':
+                        print(HOLDEM_VALUE_KEYS[output_class])
                     print(output_mask)
                     if format != 'deuce_events':
                         print('hold value %s' % hold_value)
@@ -951,6 +1028,10 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             DRAW_VALUE_KEYS[action] = eventCategoryName[action]
         for action in DRAW_CATEGORY_SET:
             DRAW_VALUE_KEYS[action] = drawCategoryName[action]
+    elif format == 'holdem':
+        for i in range(len(HOLDEM_VALUE_KEYS)):
+            action = HOLDEM_VALUE_KEYS[i]
+            DRAW_VALUE_KEYS[i] = action
     print('count ground truth for 32 categories:\n%s\n' % ('\n'.join([str([DRAW_VALUE_KEYS[i],y_count_by_bucket[i],'%.1f%%' % (y_count_by_bucket[i]*100.0/hands)]) for i in range(32)])))
 
     #X_train = np.array(X_train_not_np)
