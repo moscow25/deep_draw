@@ -184,6 +184,9 @@ class HoldemHand(object):
         for card in cards:
             self.dealt_cards.append(card)
 
+        # For backward compatibility...
+        self.final_hand = self.dealt_cards
+
     # Look up with hash tables. Can only evaluate if community cards present
     def evaluate(self):
         if not self.community:

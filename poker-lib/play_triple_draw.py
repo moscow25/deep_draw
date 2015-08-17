@@ -15,21 +15,25 @@ import theano
 import theano.tensor as T
 
 from poker_lib import *
+from holdem_lib import * # if we want to support Holdem hands and game sim
 from poker_util import *
 from draw_poker_lib import * 
 
 from draw_poker import cards_input_from_string
 from draw_poker import hand_input_from_context
+from draw_poker import holdem_cards_input_from_string
 from triple_draw_poker_full_output import build_model
 from triple_draw_poker_full_output import predict_model # outputs result for [BATCH x data]
 from triple_draw_poker_full_output import evaluate_single_hand # single hand... returns 32-point vector
 from triple_draw_poker_full_output import evaluate_single_event # just give it the 26x17x17 bits... and get a vector back
+from triple_draw_poker_full_output import evaluate_single_holdem_hand # for a holdem hand, returns 0-1.0 value vs random, and some odds
 from triple_draw_poker_full_output import expand_parameters_input_to_match # expand older models, to work on larger input (just zero-fill layer)
 # from triple_draw_poker_full_output import evaluate_batch_hands # much faster to evaluate a batch of hands
 
 print('parsing command line args %s' % sys.argv)
 parser = argparse.ArgumentParser(description='Play heads-up triple draw against a convolutional network. Or see two networks battle it out.')
-parser.add_argument('-draw_model', '--draw_model', required=True, help='neural net model for draws, or simulate betting if no bet model') # draws, from 32-length array
+parser.add_argument('-draw_model', '--draw_model', default=None, help='neural net model for draws, or simulate betting if no bet model') # draws, from 32-length array
+parser.add_argument('-holdem_model', '--holdem_model', default=None, help='neural net model for Holdem hands, with first value 0-1.0 value vs random hand, other values the odds of making specific hand types. Baseline value for any valid hand and flop, turn or river')
 parser.add_argument('-CNN_model', '--CNN_model', default=None, help='neural net model for betting') # Optional CNN model. If not supplied, uses draw model to "sim" decent play
 parser.add_argument('-output', '--output', help='output CSV') # CSV output file, in append mode.
 parser.add_argument('--human_player', action='store_true', help='pass for p2 = human player') # Declare if we want a human competitor? (as player_2)
@@ -50,7 +54,14 @@ The game is hard-coded to implement triple draw. But should be possible, to swit
 models and final hand evaluations, to accomodate any other draw game.
 """
 
+# Lame, but effective way of splitting games.
+# TODO: Do this from command line... but then need to ensure that all done correctly.
+# Better yet, outside global constants class (modified from command line, etc)
+# [default format is 'deuce']
+FORMAT = 'holdem' # 'deuce'
+
 # Build up a CSV, of all information we might want for CNN training
+# TODO: Replace with more logical header for 'Holdem', and other games...
 TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
                             'bet_model', 'value_heuristic', 'position',  'num_cards_kept', 'num_opponent_kept',
                             'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand',
@@ -179,6 +190,8 @@ class TripleDrawAIPlayer():
         # This is the draw model. Also, outputs the heuristic (value) of a hand, given # of draws left.
         self.output_layer = None # for draws
         self.input_layer = None
+        self.holdem_output_layer = None # simimilary for holdem (if applies)
+        self.holdem_input_layer = None
         self.bets_output_layer = None 
         self.bets_input_layer = None
         self.use_learning_action_model = False # should we use the trained model, to make betting decisions?
@@ -222,7 +235,10 @@ class TripleDrawAIPlayer():
                 name = name + '_per'
             return name
         else:
-            return 'sim'
+            if FORMAT == 'holdem':
+                return 'holdem_sim'
+            else:
+                return 'sim'
 
     # Takes action on the hand. But first... get Theano output...
     def draw_move(self, deck, num_draws = 1, debug = True, draw_recommendations = None):
@@ -325,9 +341,55 @@ class TripleDrawAIPlayer():
         
         return expected_payout
 
+    # Baseline the hand value. CNN lookup, but with differences depending on the game.
+    # TODO: Change logic to where we pass game type, etc. For now, easier to use a global.
+    def update_hand_value(self, num_draws=0, debug = True):
+        if FORMAT == 'holdem':
+            self.update_holdem_hand_value(debug=debug)
+        else:
+            self.update_draw_hand_value(num_draws=num_draws, debug=debug)
+
+    # Get CNN output for a hand, flop, turn, river, or any legal subset. Will return 0.0-1.0 value for odds vs random hand.
+    # Also other odds that we can use or ignore.
+    # NOTE: It woudl be easy to just give it cards here... but even easier for the AI to track its own hand.
+    def update_holdem_hand_value(self, debug = True):
+        if not self.holdem_output_layer:
+            assert self.holdem_output_layer, 'Need holdem_output_layer CNN model, if we want to value holdem hands!'
+
+        # Reduce debug, if opponent is human (don't give away our hand)
+        if self.opponent and self.opponent.is_human:
+            debug = False
+
+        # The inputs we need to CNN is the cards, flop, turn, river [also save for debug and training cases]
+        self.cards = self.holdem_hand.dealt_cards
+        self.flop = self.holdem_hand.community.flop
+        self.turn = self.holdem_hand.community.turn
+        self.river = self.holdem_hand.community.river
+
+        if debug:
+            print('dealt %s' % ([hand_string(self.cards), hand_string(self.flop), hand_string(self.turn), hand_string(self.river)]))
+            
+        # Quickly exit, and save a lookup, for human player!
+        if self.is_human:
+            return
+
+        # Lookup in the Holdem value model...
+        hand_draws_vector = evaluate_single_holdem_hand(output_layer=self.holdem_output_layer, input_layer=self.holdem_input_layer,
+                                                        cards = self.cards, flop = self.flop, turn = self.turn, river = self.river)
+        # Always just first value. The rest predict odds of a flush, etc.
+        best_draw = 0
+        if debug:
+            # TODO: would be better to print: "flush = 15%", etc (for all non-zero values!)
+            print('All Holdem values: %s' % str(np.around(hand_draws_vector[0:len(HOLDEM_VALUE_KEYS)], decimals=6)))
+            print('Holdem value: %.3f\n' % (hand_draws_vector[best_draw]))
+        expected_payout = hand_draws_vector[best_draw] # keep this, and average it, as well
+        self.heuristic_value = expected_payout
+
+        return expected_payout
+
     # Apply the CNN... to get "value" of the current hand. best draw for hands with draws left; current hand for no more draws.
     # NOTE: Similar to draw_move() but we don't make any actual draws with the hand.
-    def update_hand_value(self, num_draws=0, debug = True):
+    def update_draw_hand_value(self, num_draws=0, debug = True):
         # Reduce debug, if opponent is human (don't give away our hand)
         if self.opponent and self.opponent.is_human:
             debug = False
@@ -721,12 +783,12 @@ class TripleDrawAIPlayer():
         return self.choose_heuristic_action(allowed_actions = list(actions), 
                                             round = round, 
                                             bets_this_round = bets_this_round, 
-                                            has_button = has_button)
+                                            has_button = has_button, debug=debug)
 
     # Use known game information, and especially hand heuristic... to output probability preference for actions.
     # (bet_raise, check_call, fold)
     # TODO: Pass along other important hand aspects here... # of bets made, hand history, opponent draw #, etc
-    def create_heuristic_action_distribution(self, round, bets_this_round = 0, has_button = True):
+    def create_heuristic_action_distribution(self, round, bets_this_round = 0, has_button = True, debug = True):
         # Baseline is 2/2/0.5 bet/check/fold
         bet_raise = 2.0
         check_call = 2.0
@@ -744,7 +806,14 @@ class TripleDrawAIPlayer():
         hand_value = self.heuristic_value
         baseline_value = baseline_heuristic_value(round, bets_this_round)
 
-        print('Player %s (has_button %d) our hand value %.2f, compared to current baseline %.2f %s' % (self.name, has_button, hand_value, baseline_value, hand_string(self.cards)))
+        if FORMAT == 'holdem':
+            if debug:
+                print('Player %s (button %d) value %.2f, vs baseline %.2f %s + %s' % (self.name, has_button, hand_value, baseline_value, 
+                                                                                  hand_string(self.cards), 
+                                                                                  [hand_string(self.holdem_hand.community.flop), hand_string(self.holdem_hand.community.turn), hand_string(self.holdem_hand.community.river)]))
+        else:
+            if debug:
+                print('Player %s (button %d) value %.2f, vs baseline %.2f %s' % (self.name, has_button, hand_value, baseline_value, hand_string(self.cards)))
         
         if hand_value > baseline_value:
             # Dramatically increase our bet/raise frequency, if hand is better than baseline.
@@ -795,14 +864,14 @@ class TripleDrawAIPlayer():
     # Computes a distribution over actions, based on (hand_value, round, other info)
     # Then, probabilistically chooses a single action, from the distribution.
     # NOTE: allowed_actions needs to be a list... so that we can match probabilities for each.
-    def choose_heuristic_action(self, allowed_actions, round, bets_this_round = 0, has_button = True):
+    def choose_heuristic_action(self, allowed_actions, round, bets_this_round = 0, has_button = True, debug=True):
         #print('Allowed actions %s' % ([actionName[action] for action in allowed_actions]))
 
         # First, create a distribution over actions.
         # NOTE: Resulting distribution is *not* normalized. Could return (3, 2, 0.5)
         (bet_raise, check_call, fold) = self.create_heuristic_action_distribution(round, 
                                                                                   bets_this_round = bets_this_round,
-                                                                                  has_button = has_button)
+                                                                                  has_button = has_button, debug=debug)
 
         # Normalize so sum adds to 1.0
         action_sum = bet_raise + check_call + fold
@@ -813,7 +882,8 @@ class TripleDrawAIPlayer():
         fold /= action_sum
 
         # Match outputs above to actual game actions. Assign values directly to action.probability
-        print('(bet/raise %.2f, check/call %.2f, fold %.2f)' % (bet_raise, check_call, fold))
+        if debug:
+            print('(bet/raise %.2f, check/call %.2f, fold %.2f)' % (bet_raise, check_call, fold))
         
         # Good for easy lookup of "are we allowed to bet here"?
         all_actions_set = set(allowed_actions)
@@ -881,7 +951,7 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
                       has_button = True, pot_size=0, actions_this_round=[], actions_whole_hand=[],
                       cards_kept=0, opponent_cards_kept=0, ):
         print('Choosing among actions %s for round %s' % ([actionName[action] for action in actions], round))
-        if SHOW_HUMAN_DEBUG:
+        if SHOW_HUMAN_DEBUG and FORMAT != 'holdem':
             # First show the context for this hand.
             num_draws_left = 3
             if round == PRE_DRAW_BET_ROUND:
@@ -922,7 +992,16 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
             #print(actions_this_round)
             # Hand baseline, purely for debug
             self.create_heuristic_action_distribution(round, bets_this_round = bets_this_round, has_button = has_button)
-
+        elif FORMAT == 'holdem':
+            # Save these, in case needed for recording data.
+            self.cards = self.holdem_hand.dealt_cards
+            self.flop = self.holdem_hand.community.flop
+            self.turn = self.holdem_hand.community.turn
+            self.river = self.holdem_hand.community.river
+            
+            # show basic debug for human hand...
+            print('context %s' % ([hand_string(self.cards), hand_string(self.flop), hand_string(self.turn), hand_string(self.river)]))
+            
         # Prompt user for action, and see if it parses...
         # TODO: Separate function, or library method...
         user_action = None
@@ -1028,7 +1107,7 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
 
     deck = PokerDeck(shuffle=True)
 
-    dealer = TripleDrawDealer(deck=deck, player_button=player_button, player_blind=player_blind)
+    dealer = TripleDrawDealer(deck=deck, player_button=player_button, player_blind=player_blind, format=FORMAT)
     dealer.play_single_hand()
 
     # TODO: Should output results.
@@ -1075,10 +1154,13 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
 
 # Play a bunch of hands.
 # For now... just rush toward full games, and skip details, or fill in with hacks.
-def play(sample_size, output_file_name=None, draw_model_filename=None, bets_model_filename=None, 
-         old_bets_model_filename=None, other_old_bets_model_filename=None, human_player=None):
+def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_model_filename=None,
+         bets_model_filename=None, old_bets_model_filename=None, other_old_bets_model_filename=None, human_player=None):
     # Compute hand values, or compare hands.
-    cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
+    if FORMAT == 'holdem':
+        cashier = HoldemCashier() # Compares by Hold'em (poker high hand) rules
+    else:
+        cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
 
     # TODO: Initialize CSV writer
     csv_header_map = CreateMapFromCSVKey(TRIPLE_DRAW_EVENT_HEADER)
@@ -1091,19 +1173,35 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
 
     # Test the model, by giving it dummy inputs
     # Test cases -- it keeps the two aces. But can it recognize a straight? A flush? Trips? Draw?? Two pair??
-    test_cases = [['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,3s,3d,5c,6d', 3],
-                  ['3h,4s,3d,5c,6d', 2], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 3],
-                  ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1]] 
+    test_cases_draw = [['As,Ad,4d,3s,2c', 1], ['As,Ks,Qs,Js,Ts', 2], ['3h,3s,3d,5c,6d', 3],
+                       ['3h,4s,3d,5c,6d', 2], ['2h,3s,4d,6c,5s', 1], ['3s,2h,4d,8c,5s', 3],
+                       ['8s,Ad,Kd,8c,Jd', 3], ['8s,Ad,2d,7c,Jd', 2], ['2d,7d,8d,9d,4d', 1]] 
+    test_cases_holdem = [['Ad,Ac', '[]', '', ''], # AA preflop
+                         ['[8d,5h]','[Qh,9d,3d]','[Ad]','[7c]'], # missed draw
+                         ['4d,5d', '[6d,7d,3c]', 'Ad', ''], # made flush
+                         ['7c,9h', '[8s,6c,Qh]', '', ''], # open ended straight draw
+                         ['Ad,Qd', '[Kd,Td,2s]', '3s', ''], # big draw
+                         ['7s,2h', '', '', ''], # weak hand preflop
+                         ['Ts,Th', '', '', ''], # good hand preflop
+                         ['9s,Qh', '', '', ''], # average hand preflop
+                         ]
+    if FORMAT == 'holdem':
+        test_cases = test_cases_holdem
+    else:
+        test_cases = test_cases_draw
 
     for i in range(BATCH_SIZE - len(test_cases)):
         test_cases.append(test_cases[1])
 
     # NOTE: Num_draws and full_hand must match trained model.
     # TODO: Use shared environemnt variables...
-    test_batch = np.array([cards_input_from_string(hand_string=case[0], 
-                                                   include_num_draws=True, num_draws=case[1],
-                                                   include_full_hand = True, 
-                                                   include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
+    if FORMAT == 'holdem':
+        test_batch = np.array([holdem_cards_input_from_string(case[0], case[1], case[2], case[3]) for case in test_cases], np.int32)
+    else:
+        test_batch = np.array([cards_input_from_string(hand_string=case[0], 
+                                                       include_num_draws=True, num_draws=case[1],
+                                                       include_full_hand = True, 
+                                                       include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
     print('Test batch dimension')
     print(test_batch.shape)
 
@@ -1111,6 +1209,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     # TODO: 0.0-fill parameters for model, if size doesn't match (26 vs 31, etc)
     # TODO: model loading should be a function!
     output_layer = None
+    input_layer = None
     if draw_model_filename and os.path.isfile(draw_model_filename):
         print('\nExisting model in file %s. Attempt to load it!\n' % draw_model_filename)
         all_param_values_from_file = np.load(draw_model_filename)
@@ -1131,8 +1230,32 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     else:
         print('No model provided or loaded. Expect error if model required. %s', draw_model_filename)
 
+    # Similarly, unpack model for Holdem, if provided.
+    holdem_output_layer = None
+    holdem_input_layer = None
+    if holdem_model_filename and os.path.isfile(holdem_model_filename):
+        print('\nExisting holdem model in file %s. Attempt to load it!\n' % holdem_model_filename)
+        all_param_values_from_file = np.load(holdem_model_filename)
+        expand_parameters_input_to_match(all_param_values_from_file, zero_fill = True)
+
+        # Size must match exactly!
+        holdem_output_layer, holdem_input_layer, holdem_layers  = build_model(
+            HAND_TO_MATRIX_PAD_SIZE, 
+            HAND_TO_MATRIX_PAD_SIZE,
+            32,
+        )
+
+        #print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
+        lasagne.layers.set_all_param_values(holdem_output_layer, all_param_values_from_file)
+        predict_model(output_layer=holdem_output_layer, test_batch=test_batch, format = FORMAT)
+        print('Cases again %s' % str(test_cases))
+        print('Creating player, based on this pickled model...')
+    else:
+        print('No model provided or loaded. Expect error if model required. %s', holdem_model_filename)
+
     # If supplied, also load the bets model. conv(xCards + xNumDraws + xContext) --> values for all betting actions
     bets_output_layer = None
+    bets_input_layer = None
     if bets_model_filename and os.path.isfile(bets_model_filename):
         print('\nExisting *bets* model in file %s. Attempt to load it!\n' % bets_model_filename)
         bets_all_param_values_from_file = np.load(bets_model_filename)
@@ -1213,6 +1336,8 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     # TODO: Perform massive cleanup, removing passing input, output layers for everything... just layers[0] and layers[-1] should suffice.
     player_one.output_layer = output_layer
     player_one.input_layer = input_layer
+    player_one.holdem_output_layer = holdem_output_layer
+    player_one.holdem_input_layer = holdem_input_layer
     player_one.bets_output_layer = bets_output_layer
     player_one.bets_input_layer = bets_input_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
@@ -1235,6 +1360,8 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, bets_mode
     # Otherwise, we want to test the latest model, against the mix. Or the latest model, against the oldest given.
     player_two.output_layer = output_layer
     player_two.input_layer = input_layer
+    player_two.holdem_output_layer = holdem_output_layer
+    player_two.holdem_input_layer = holdem_input_layer
     player_two.bets_output_layer = bets_output_layer
     player_two.bets_input_layer = bets_input_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
@@ -1319,13 +1446,16 @@ if __name__ == '__main__':
     # Input model filename if given
     # TODO: set via command line flagz
     draw_model_filename = None # how to draw, given cards, numDraws (also outputs hand value estimate)
+    holdem_model_filename = None # value of holdem hands... if we are playing holdem!
     bets_model_filename = None # what is the value of bet, raise, check, call, fold in this instance?
     old_bets_model_filename = None # use "old" model if we want to compare CNN vs CNN
     other_old_bets_model_filename = None # a third "old" model
     human_player = False # do we want one player to be human?
 
     # Now fill in these values from command line parameters...
+    # TODO: better organize, what game we are playing, and whether against human, etc. 
     draw_model_filename = args.draw_model
+    holdem_model_filename = args.holdem_model
     bets_model_filename = args.CNN_model
     old_bets_model_filename = args.CNN_old_model
     other_old_bets_model_filename = args.CNN_other_old_model
@@ -1337,6 +1467,7 @@ if __name__ == '__main__':
     # TODO: Take num samples from command line.
     play(sample_size=samples, output_file_name=output_file_name,
          draw_model_filename=draw_model_filename, 
+         holdem_model_filename = holdem_model_filename,
          bets_model_filename=bets_model_filename, 
          old_bets_model_filename=old_bets_model_filename, 
          other_old_bets_model_filename=other_old_bets_model_filename, 
