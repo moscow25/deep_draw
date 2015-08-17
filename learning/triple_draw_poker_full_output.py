@@ -23,9 +23,10 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/holdem/500k_holdem_values.csv' # 500k holdem hand values. Cards, possible flop, turn and river.
-# '../data/holdem/100k_holdem_values.csv' # 100k holdem hand values. Cards, possible flop, turn and river. Odds vs random hand, and odds to make hand categories.
-# '../data/100k_hands_triple_draw_events.csv' # 4M hands, of the latest model (and some human play)
+DATA_FILENAME = '../data/holdem/holdem_sim_examples_50k.csv' # 'holdem_events' Small-ish dataset of simulated Hold'em hands (heuristic stochastic model). Bets in various context, ad results.
+# '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
+# '../data/holdem/100k_holdem_values.csv' # 'holdem' 100k holdem hand values. Cards, possible flop, turn and river. Odds vs random hand, and odds to make hand categories.
+# '../data/100k_hands_triple_draw_events.csv' # 'deuce_events' 4M hands, of the latest model (and some human play)
 # '/Users/kolya/Desktop/poker/triple_draw/code/hands_sample_skew_low_100k.csv' # 0-32 draw results, skewed toward low card hands
 # '../data/100k_hands_triple_draw_events.csv' # 100k hands, of human play, and CNN vs CNN, for CNN3,4,5 and 45 (mix of CNN3, CNN4, CNN5)
 # '../poker-lib/CNN6_mixed-test.csv' # Testing, with data for counter-factual on the river...
@@ -36,15 +37,15 @@ DATA_FILENAME = '../data/holdem/500k_holdem_values.csv' # 500k holdem hand value
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 330000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 30000
+MAX_INPUT_SIZE = 220000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 20000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
-LEARNING_RATE = 0.1 # 0.02 # 0.1 # 0.05
+LEARNING_RATE = 0.02 # 0.1 # 0.02 # 0.1 # 0.05
 MOMENTUM = 0.9
 # Fix and test, before epoch switch...
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
@@ -64,7 +65,7 @@ LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True # False # True
 # If we are trainging on poker events (bets, raises and folds) instead of draw value,
 # input and output shape will be the same. But the way it's uses is totally different. 
 # NOTE: We keep shape the same... so we can use the really good "draw value" model as initialization.
-TRAINING_FORMAT =  'holdem' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'holdem_events'  #'holdem' # 'deuce_events' # 'deuce' # 'video'
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
 DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch to adaptive training?
 
@@ -636,7 +637,7 @@ def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None
     else:
         pred_all = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=DETERMINISTIC_MODEL_RUN)
 
-    if format == 'deuce_events':
+    if format == 'deuce_events' or format == 'holdem_events':
         # Slice it, so only relevant rows are looked at
         pred = pred_all[:17,:10] # pred_all[:17,:5] # hack: show first 17 examples only
     elif format == 'holdem':
@@ -662,7 +663,7 @@ def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None
         softmax_values = pred.eval()
     print(softmax_values)
 
-    if format == 'deuce_events':
+    if format == 'deuce_events' or format == 'holdem_events':
         pred_max = T.argmax(pred[:,0:5], axis=1) # 0-5 bets
     elif format == 'holdem':
         # TODO: Ignore first element... (overall value)
@@ -919,7 +920,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
                          ['9s,Qh', '', '', ''], # average hand preflop
                          ]
                          
-    if TRAINING_FORMAT == 'holdem':
+    if TRAINING_FORMAT == 'holdem' or TRAINING_FORMAT == 'holdem_events':
         test_cases = test_cases_holdem
     else:
         test_cases = test_cases_draw
@@ -937,7 +938,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     elif TRAINING_FORMAT == 'deuce_events':
         # TODO:  Add context, if made available...
         test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
-    elif TRAINING_FORMAT == 'holdem':
+    elif TRAINING_FORMAT == 'holdem' or TRAINING_FORMAT == 'holdem_events':
         test_batch = np.array([holdem_cards_input_from_string(case[0], case[1], case[2], case[3]) for case in test_cases], np.int32)
         
     predict_model(output_layer=output_layer, test_batch=test_batch, format = TRAINING_FORMAT, input_layer = input_layer)

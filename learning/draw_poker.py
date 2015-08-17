@@ -224,7 +224,7 @@ def integer_to_card_array(number, max_integer, pad_to_fit = PAD_INPUT):
 # Similarly to the 5-card draw example above, encode holdem hand into bits array, padded out to maximum size.
 # NOTE: Unless needed, just assume variables like yes, we want to inlude "num draws" == betting rounds left. Etc.
 # NOTE: Return one input matrix. None of this invariances bullshit (like switching suits).
-def holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string, pad_to_fit = PAD_INPUT):
+def holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string, pad_to_fit = PAD_INPUT, include_hand_context = True):
     #print('attempting to read hand from %s' % [cards_string, flop_string, turn_string, river_string])
 
     # Turn cards strings inta arrays of cards.
@@ -257,8 +257,11 @@ def holdem_cards_input_from_string(cards_string, flop_string, turn_string, river
     cards_input = np.array([cards_bits, flop_bits, turn_bits, river_bits, all_community_cards_bits, all_cards_bits, num_draws_input[0], num_draws_input[1], num_draws_input[2]], dtype=TRAINING_INPUT_TYPE)
 
     # Fill in empty bits for 'context' -- betting information that is missing, but will be filled in later.
-    empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
-    cards_input_with_context = np.concatenate((cards_input, empty_bits_array), axis = 0)
+    if include_hand_context:
+        empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
+        cards_input_with_context = np.concatenate((cards_input, empty_bits_array), axis = 0)
+    else:
+        cards_input_with_context = cards_input 
 
     return cards_input_with_context
 
@@ -434,7 +437,7 @@ def adjust_float_value(hand_val, mode = 'video'):
         # For Deuce... we get values on 0-1000 scale. Adjust these to [0.0, 1.0] scale. Easier to train.
         assert hand_val >= 0 and hand_val <= 1000, '\'deuce\' value out of range %s' % hand_val
         return hand_val * 0.001
-    elif mode and mode == 'deuce_events':
+    elif mode and (mode == 'deuce_events' or mode == 'holdem_events'):
         # For events, we are looking at marginal value of events, in 100-200 limit game.
         # Thus, inputs range from +3000 (win big pot) to -2000 (lose a big one, and pay many future bets)
         # map these values to +3.0 and -2.0
@@ -546,12 +549,12 @@ def read_holdem_poker_line(data_array, csv_key_map):
 # output_class --> index of event actually taken
 # output_array --> 32-length output... but only the 'output_class' index matters. The rest are zero
 # Thus, we can train on the same model as 3-round draw decisions... resulting good initialization.
-def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event', pad_to_fit = PAD_INPUT, include_hand_context = False, 
+def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_to_fit = PAD_INPUT, include_hand_context = False, 
                           num_draw_out_position = 0, num_draw_in_position = 0, actions_this_round = ''): 
     #print(data_array)
 
     # If we are told which player agent made this move, skip moves from players except those whom we trust.
-    if csv_key_map.has_key('bet_model') and PLAYERS_INCLUDE_DEUCE_EVENTS:
+    if format == 'deuce_events' and csv_key_map.has_key('bet_model') and PLAYERS_INCLUDE_DEUCE_EVENTS:
         bet_model = data_array[csv_key_map['bet_model']]
         if not(bet_model in PLAYERS_INCLUDE_DEUCE_EVENTS):
             #if bet_model:
@@ -561,9 +564,37 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
 
     # X x 19 x 19 input, including our hand, & num draws. 
     if not CARDS_INPUT_ALL_ZERO:
-        cards_input = cards_input_from_string(data_array[csv_key_map['hand']], 
-                                              include_num_draws=True, num_draws=data_array[csv_key_map['draws_left']], 
-                                              include_full_hand = True)
+        # Deuce events: cards, num_draws
+        if format == 'deuce_events':
+            cards_input = cards_input_from_string(data_array[csv_key_map['hand']], 
+                                                  include_num_draws=True, num_draws=data_array[csv_key_map['draws_left']], 
+                                                  include_full_hand = True)
+        elif format == 'holdem_events':
+            cards_string = data_array[csv_key_map['hand']]
+
+            # Hack for flop, and turn/river. Need to deconstruct...
+            # TODO: Send this in a more straightforward way.
+            flop_string = data_array[csv_key_map['best_draw']]
+            turn_river_string = data_array[csv_key_map['hand_after']]
+            turn_river_array = hand_string_to_array(turn_river_string) # array of card strings...
+            if not turn_river_array:
+                turn_string = ''
+                river_string = ''
+            elif len(turn_river_array) == 1:
+                turn_string = turn_river_string
+                river_string = ''
+            elif len(turn_river_array) == 2:
+                turn_string = turn_river_array[0]
+                river_string = turn_river_array[1]
+            else:
+                assert False, 'unparsable turn-river string |%s|' % turn_river_string
+
+            #print('attempting to create bits from %s' % [cards_string, flop_string, turn_string, river_string])
+            cards_input = holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string, include_hand_context = False)
+            #print(cards_input.shape)
+        else:
+            assert False, 'unknown hand format %s' % format
+            
     else:
         # If we want to focus on game structure and ignore cards, push cards all 0's... [still keep 3 bits for number of rounds]
         # TODO: "num_draws_input" should return np.array to avoid confusion about order, etc
@@ -615,7 +646,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
     important_training_case = False
 
     # Important case: hand is a low straight. We get these bets (and draws) wrong a lot. Need to focus on it.
-    if LOW_STRAIGHTS_ARE_IMPORTANT:
+    if format == 'deuce_events' and LOW_STRAIGHTS_ARE_IMPORTANT:
         cards_array = [card_from_string(s) for s in hand_string_to_array(data_array[csv_key_map['hand']])]
         rank = hand_rank_five_card(cards_array)
         high_category = hand_category(rank)
@@ -700,14 +731,14 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
         #      (FUTURE_DISCOUNT, margin_result, current_margin_result, future_margin_result, margin_value))
 
     # Our results... is an empty 32-vector, with only action's value set
-    action_margin_value = adjust_float_value(margin_value, mode=adjust_floats)
+    action_margin_value = adjust_float_value(margin_value, mode=format)
     output_array[output_category] = action_margin_value
     output_mask_classes[output_category] = 1.0
 
     # Also, we need to code FOLD --> 0.0. Why? This helps with calibration. 
     # [only if fold is allowed!]
     if (FOLD_CATEGORY in legal_actions):
-        fold_marginal_value = adjust_float_value(0.0, mode=adjust_floats)
+        fold_marginal_value = adjust_float_value(0.0, mode=format)
         output_array[FOLD_CATEGORY] = fold_marginal_value
         output_mask_classes[FOLD_CATEGORY] = 1.0
 
@@ -731,7 +762,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
             if call_result == 0.0:
                 call_result = -1.0 * BIG_BET_SIZE
             #print('we would win %.1f by calling... ' % call_result)
-            call_marginal_value = adjust_float_value(call_result, mode=adjust_floats)
+            call_marginal_value = adjust_float_value(call_result, mode=format)
             output_array[CALL_CATEGORY] = call_marginal_value
             output_mask_classes[CALL_CATEGORY] = 1.0
         elif action_taken in ALL_BETS_SET:
@@ -758,7 +789,7 @@ def read_poker_event_line(data_array, csv_key_map, adjust_floats = 'deuce_event'
                     check_call_result = -1.0 * BIG_BET_SIZE
             #print('we would win %.1f by check/calling... ' % check_call_result)
             if check_call_result >= 0.0:
-                check_call_margin_value = adjust_float_value(check_call_result, mode=adjust_floats)
+                check_call_margin_value = adjust_float_value(check_call_result, mode=format)
                 if output_category == BET_CATEGORY:
                     output_array[CHECK_CATEGORY] = check_call_margin_value
                     output_mask_classes[CHECK_CATEGORY] = 1.0
@@ -845,7 +876,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = format, include_num_draws=include_num_draws, include_full_hand = include_full_hand, include_hand_context = include_hand_context)
                 elif format == 'holdem':
                     hand_inputs_all, output_class, output_array = read_holdem_poker_line(line, csv_key_map)
-                elif format == 'deuce_events':
+                elif format == 'deuce_events' or format == 'holdem_events':
                     # Hack! Not properly tracking number of cards drawn, especially for draw decision. So build it line by line.
                     # NOTE: Reset at every blind post, set at every draw. Pass optionally to read_poker_line.
                     # TODO: Fix data collection...
@@ -861,7 +892,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # For less confusion, if input data is "events" ie bets, checks, etc... 
                     # Data gets zipped into the same training format, trained with same shape, but just initialize it differently
                     # (re-use sub functions for encoding a hand, etc, whereever possible)
-                    hand_input, output_class, output_array, output_mask_classes, important_training_case = read_poker_event_line(line, csv_key_map, adjust_floats = format, include_hand_context = include_hand_context, num_draw_out_position = num_draw_out_position, num_draw_in_position = num_draw_in_position, actions_this_round = actions_this_round)
+                    hand_input, output_class, output_array, output_mask_classes, important_training_case = read_poker_event_line(line, csv_key_map, format = format, include_hand_context = include_hand_context, num_draw_out_position = num_draw_out_position, num_draw_in_position = num_draw_in_position, actions_this_round = actions_this_round)
 
                     # Now, after line processed, upate # of cards drawn, if applicable
                     if line and line[csv_key_map['action']]:
@@ -894,8 +925,8 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('unknown input format: %s' % format)
                     sys.exit(-3)
             
-            #except (AssertionError, KeyError): # Fewer errors, for debugging
-            except (TypeError, IndexError, ValueError, KeyError, AssertionError): # Any reading error
+            except (AssertionError, KeyError): # Fewer errors, for debugging
+            #except (TypeError, IndexError, ValueError, KeyError, AssertionError): # Any reading error
                 if lines % 1000 == 0:
                     print('\nskipping malformed/unusable input line:\n|%s|\n' % line)
                 continue
@@ -1023,7 +1054,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             #sys.exit(-3)
 
     # Show histogram... of counts by 32 categories.
-    if format == 'deuce_events':
+    if format == 'deuce_events' or format == 'holdem_events':
         for action in ALL_ACTION_CATEGORY_SET:
             DRAW_VALUE_KEYS[action] = eventCategoryName[action]
         for action in DRAW_CATEGORY_SET:

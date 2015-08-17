@@ -37,6 +37,8 @@ def hand_string(cards_array):
 # And the other way. [Ks,2d] -> ['Ks', '2d']
 # Still strings, but splits reasonably
 def hand_string_to_array(hand_string):
+    if not hand_string:
+        return []
     hand_string = hand_string.replace('[', '')
     hand_string = hand_string.replace(']', '')
     hand_array = hand_string.split(',')
