@@ -13,6 +13,7 @@ import theano
 import theano.tensor as T
 
 from poker_lib import *
+from holdem_lib import * # if we want to support holdem hands!
 from poker_util import *
 
 from draw_poker import cards_input_from_string
@@ -29,7 +30,12 @@ Methods, useful for organizing & evaluating a draw poker match. Include everythi
 
 # Heuristics, to evaluate hand actions. On 0-1000 scale, where wheel is 1000 points, and bad hand is 50-100 points.
 # Meant to map to rough % of winning at showdown. Tuned for ring game, so random hand << 500.
-RANDOM_HAND_HEURISTIC_BASELINE = 0.300 # baseline, before looking at any cards.
+
+# For 'deuce,' random heuristic 0.300 worked. We need to either tie this to FORMAT, etc.
+# RANDOM_HAND_HEURISTIC_BASELINE = 0.300 # baseline, before looking at any cards.
+
+# For 'holdem,' we need a higher baseline heuristic. Average hand is by definition 0.500. Since we literally compare to random hands, HU.
+RANDOM_HAND_HEURISTIC_BASELINE = 0.4000 # baseline, before considering cards
 
 # Cashier for 2-7 lowball. Evaluates hands, as well as compares hands.
 class DeuceLowball(PayoutTable):
@@ -43,12 +49,42 @@ class DeuceLowball(PayoutTable):
     # Compare hands.
     # TODO: Hand split pots, other % payouts. Should really output [hand_id: % pot]
     def showdown(self, hands):
+        print('using DeuceLowball to compare hands')
         # As a hack... output hand with best (2-7) rank. Ties go to best position...
         best_rank = 0
         best_hand = None
         for hand in hands:
             hand.evaluate()
             if hand.rank > best_rank:
+                best_hand = hand
+                best_rank = hand.rank
+            elif hand.rank == best_rank:
+                print('Need to implement ties & splits!')
+                return None
+                #raise NotImplementedError()
+        return best_hand
+
+# Cashier for 2-7 lowball. Evaluates hands, as well as compares hands.
+class HoldemCashier(PayoutTable):
+    #def __init__():
+
+    """
+    # In this context, payout means 0-1000 heuristic value, for a final hand.
+    def payout(self, hand):
+        hand.evaluate() # computes ranks, including for 2-7 lowball
+        return hand.deuce_heuristic
+        """
+
+    # Compare hands.
+    # TODO: Hand split pots, other % payouts. Should really output [hand_id: % pot]
+    def showdown(self, hands):
+        print('using HoldemCashier to compare hands')
+        # As a hack... output hand with best (2-7) rank. Ties go to best position...
+        best_rank = 1000000
+        best_hand = None
+        for hand in hands:
+            hand.evaluate()
+            if hand.rank < best_rank:
                 best_hand = hand
                 best_rank = hand.rank
             elif hand.rank == best_rank:
@@ -64,7 +100,7 @@ class DeuceLowball(PayoutTable):
 # This system strong assumes, that actions take place in order, by a dealer. Poker is a turn-based game.
 class PokerAction:
     # TODO: Copy of the game state (hands, etc)? Zip of the information going into this action?
-    def __init__(self, action_type, actor_name, pot_size, bet_size):
+    def __init__(self, action_type, actor_name, pot_size, bet_size, format = 'deuce'):
         self.type = action_type
         self.name = actionName[action_type]
 
@@ -82,7 +118,8 @@ class PokerAction:
     # Assumes that we know our hand and opponent hand. But can also handle errors.
     # TODO: Use this to estimate future winning percentage? In allin situations...
     def current_win_percentage(self):
-        if (not self.hand) or (not self.oppn_hand):
+        # TODO: Fix "win%" for non-deuce hands. Natural for holdem... except we need to implement preflop comps (or skip)
+        if (not self.hand) or (not self.oppn_hand) or not(format == 'deuce'):
             return 0.5 # unknown, so 50/50
         our_hand = PokerHand(cards = self.hand)
         oppn_hand = PokerHand(cards = self.oppn_hand)
@@ -259,83 +296,82 @@ class PokerAction:
 # Encode a draw event. Doesn't 100% fit in... but confusing not to record the draws, along with the bets.
 class DrawAction(PokerAction):
     def __init__(self, actor_name, pot_size, hand_before, best_draw, hand_after):
-        PokerAction.__init__(self, action_type = DRAW_ACTION, actor_name = actor_name, pot_size = pot_size, bet_size = 0)
+        PokerAction.__init__(self, action_type = DRAW_ACTION, actor_name = actor_name, pot_size = pot_size, bet_size = 0, format='deuce')
         self.hand = list(hand_before)
         self.best_draw = list(best_draw)
         self.hand_after = list(hand_after)
 
 # Simple encoding, for each possible action
 class PostBigBlind(PokerAction):
-    def __init__(self, actor_name, pot_size):
-        PokerAction.__init__(self, action_type = POST_BIG_BLIND, actor_name = actor_name, pot_size = pot_size, bet_size = BIG_BLIND_SIZE)
+    def __init__(self, actor_name, pot_size, format):
+        PokerAction.__init__(self, action_type = POST_BIG_BLIND, actor_name = actor_name, pot_size = pot_size, bet_size = BIG_BLIND_SIZE, format=format)
 
 class PostSmallBlind(PokerAction):
-    def __init__(self, actor_name, pot_size):
-        PokerAction.__init__(self, action_type = POST_SMALL_BLIND, actor_name = actor_name, pot_size = pot_size, bet_size = SMALL_BLIND_SIZE)
+    def __init__(self, actor_name, pot_size, format):
+        PokerAction.__init__(self, action_type = POST_SMALL_BLIND, actor_name = actor_name, pot_size = pot_size, bet_size = SMALL_BLIND_SIZE, format=format)
 
 class CheckStreet(PokerAction):
-    def __init__(self, actor_name, pot_size):
-        PokerAction.__init__(self, action_type = CHECK_HAND, actor_name = actor_name, pot_size = pot_size, bet_size = 0)
+    def __init__(self, actor_name, pot_size, format):
+        PokerAction.__init__(self, action_type = CHECK_HAND, actor_name = actor_name, pot_size = pot_size, bet_size = 0, format=format)
 
 class FoldStreet(PokerAction):
-    def __init__(self, actor_name, pot_size):
-        PokerAction.__init__(self, action_type = FOLD_HAND, actor_name = actor_name, pot_size = pot_size, bet_size = 0)
+    def __init__(self, actor_name, pot_size, format):
+        PokerAction.__init__(self, action_type = FOLD_HAND, actor_name = actor_name, pot_size = pot_size, bet_size = 0, format=format)
 
 # Cost of the other actions... to be computed, from $ spent by player on this street, already.
 # NOTE: Think of it like internet, with chips left in front of players... until betting round is finished.
 class CallSmallStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
+    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street, format):
         total_bet_size = biggest_bet_this_street;
         this_bet = total_bet_size - player_bet_this_street;
         assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = CALL_SMALL_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
+        PokerAction.__init__(self, action_type = CALL_SMALL_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet, format=format)
 
 class CallBigStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
+    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street, format):
         total_bet_size = biggest_bet_this_street;
         this_bet = total_bet_size - player_bet_this_street;
         assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = CALL_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
+        PokerAction.__init__(self, action_type = CALL_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet, format=format)
 
 class BetSmallStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
+    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street, format):
         total_bet_size = biggest_bet_this_street + SMALL_BET_SIZE;
         this_bet = total_bet_size - player_bet_this_street;
         assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = BET_SMALL_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
+        PokerAction.__init__(self, action_type = BET_SMALL_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet, format=format)
 
 class BetBigStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
+    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street, format):
         total_bet_size = biggest_bet_this_street + BIG_BET_SIZE;
         this_bet = total_bet_size - player_bet_this_street;
         assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = BET_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
+        PokerAction.__init__(self, action_type = BET_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet, format=format)
 
 class RaiseSmallStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
+    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street, format):
         total_bet_size = biggest_bet_this_street + SMALL_BET_SIZE;
         this_bet = total_bet_size - player_bet_this_street;
         assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = RAISE_SMALL_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
+        PokerAction.__init__(self, action_type = RAISE_SMALL_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet, format=format)
 
 class RaiseBigStreet(PokerAction):
-    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street):
+    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street, format):
         total_bet_size = biggest_bet_this_street + BIG_BET_SIZE;
         this_bet = total_bet_size - player_bet_this_street;
         assert this_bet > 0, 'error calling %s' % self.__name__
-        PokerAction.__init__(self, action_type = RAISE_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet)
-
-# TODO: Implement 3-betting and 4-betting...
+        PokerAction.__init__(self, action_type = RAISE_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet, format=format)
 
 
 # Should inherit from more general dealer class... when we need one.
 # TODO: Make sure we can handle multiple types of players, not just AI player. (For example, manual-input player)
 # TODO: Think about saving 'game state,' loading 'game state' and pausing action. Useful for API, and for simulation.
 class TripleDrawDealer():
-    def __init__(self, deck, player_button, player_blind):
+    def __init__(self, deck, player_button, player_blind, format = 'deuce'):
         self.deck = deck # Assume it's shuffled, if needs to be shuffled
         self.player_button = player_button # player to act last on every street
         self.player_blind = player_blind # player to act first, except when posting forced blind
+        self.format = format # 'deuce' triple draw, or 'holdem', etc?
 
         # Hack, for convenience.
         # to distinguish between B = button and F = blind player, first to act
@@ -358,7 +394,7 @@ class TripleDrawDealer():
     def post_big_blind(self):
         assert(self.action_on == self.player_blind)
         round = PRE_DRAW_BET_ROUND
-        action = PostBigBlind(actor_name = self.action_on.name, pot_size = self.pot_size)
+        action = PostBigBlind(actor_name = self.action_on.name, pot_size = self.pot_size, format = self.format)
         action.add_context(hand=(self.action_on.draw_hand.dealt_cards if round < DRAW_3_BET_ROUND else self.action_on.draw_hand.final_hand), 
                            draws_left=drawsLeft[round], 
                            position = POSITION_BUTTON if self.action_on == self.player_button else POSITION_BLIND, 
@@ -373,7 +409,7 @@ class TripleDrawDealer():
     def post_small_blind(self):
         assert(self.action_on == self.player_button)
         round = PRE_DRAW_BET_ROUND
-        action = PostSmallBlind(actor_name = self.action_on.name, pot_size = self.pot_size)
+        action = PostSmallBlind(actor_name = self.action_on.name, pot_size = self.pot_size, format = self.format)
         action.add_context(hand=(self.action_on.draw_hand.dealt_cards if round < DRAW_3_BET_ROUND else self.action_on.draw_hand.final_hand), 
                            draws_left=drawsLeft[round], 
                            position = POSITION_BUTTON if self.action_on == self.player_button else POSITION_BLIND, 
@@ -483,7 +519,7 @@ class TripleDrawDealer():
             return
         
         # If still here... ther are legal actions that a player may take!
-        print('Allowed actions for player %s: %s' % (self.action_on.name, [actionName[action] for action in allowed_actions]))
+        print('\nAllowed actions for player %s: %s' % (self.action_on.name, [actionName[action] for action in allowed_actions]))
 
         # Here the agent... would choose a good action.
         best_action = self.action_on.choose_action(actions=allowed_actions, 
@@ -498,41 +534,41 @@ class TripleDrawDealer():
 
         # If action returned, complete the action... and keep going
         if (best_action):
-            print('%d card draw. Best action chose ->  %s' % ((5 - self.action_on.num_cards_kept), actionName[best_action]))
+            print('\nBest action chose ->  %s' % (actionName[best_action]))
             # We keep betting after this action... as long last action allows it.
             keep_betting = True
             # Create the action
             if best_action == CALL_SMALL_STREET:
-                action = CallSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action))
+                action = CallSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
                 if not(round == PRE_DRAW_BET_ROUND and bet_off_action == BIG_BLIND_SIZE):
-                    print('chosen action, closes the action')
+                    print('\nchosen action, closes the action')
                     keep_betting = False
             elif best_action == CALL_BIG_STREET:
-                action = CallBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action))
+                action = CallBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
                 if not(round == PRE_DRAW_BET_ROUND and bet_off_action == BIG_BLIND_SIZE):
-                    print('chosen action, closes the action')
+                    print('\nchosen action, closes the action')
                     keep_betting = False
             elif best_action == BET_SMALL_STREET:
-                action = BetSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action))
+                action = BetSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
             elif best_action == BET_BIG_STREET:
-                action = BetBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action))
+                action = BetBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
             elif best_action == RAISE_SMALL_STREET:
-                action = RaiseSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action))
+                action = RaiseSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
             elif best_action == RAISE_BIG_STREET:
-                action = RaiseBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action))
+                action = RaiseBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
             elif best_action == FOLD_HAND:
-                action = FoldStreet(self.action_on.name, self.pot_size)
-                print('chosen action, closes the action')
+                action = FoldStreet(self.action_on.name, self.pot_size, format=self.format)
+                print('\nchosen action, closes the action')
                 keep_betting = False
             elif best_action == CHECK_HAND:
-                action = CheckStreet(self.action_on.name, self.pot_size)
+                action = CheckStreet(self.action_on.name, self.pot_size, format=self.format)
 
                 # Logic for checking is a bit tricky. Action ended if button checks... except on first, when F player checks ends it.
                 if (round == PRE_DRAW_BET_ROUND and self.action_on == self.player_blind) or (round != PRE_DRAW_BET_ROUND and self.action_on == self.player_button):
-                    print('chosen action, closes the action')
+                    print('\nchosen action, closes the action')
                     keep_betting = False
                 else:
-                    print('this check... does not end the action.')
+                    print('\nthis check... does not end the action.')
             else:
                 assert False, 'Unknown best_action %s' % actionName[best_action]
 
@@ -553,6 +589,11 @@ class TripleDrawDealer():
                                act_val_vector = self.action_on.act_val_vector,
                                num_draw_vector = self.action_on.num_draw_vector)
 
+            # HACK: Use "best_draw" and "hand_after" fields, to record the flop, turn and river in draw games.
+            if self.format == 'holdem':
+                action.best_draw = self.action_on.holdem_hand.community.flop
+                action.hand_after = self.action_on.holdem_hand.community.turn + self.action_on.holdem_hand.community.river
+
             self.process_action(action, pass_control = True)
             if keep_betting:
                 #print('chosen action, allows further betting.')
@@ -561,33 +602,58 @@ class TripleDrawDealer():
 
     # Assumes that everything has been initialized, or reset as needed.
     # Through constants, hard-coded to 50-100 blinds. And 100-200 betting. 
+    # NOTE: We've expanded it to include flop games. split up later... but good to share common infrastructure.
     def play_single_hand(self):
+        # If community card game, create blank community object first.
+        if self.format == 'holdem':
+            self.community = HoldemCommunityHand()
+        else:
+            self.community = None
+
         # Deal initial hands to players
-        draw_hand_blind = PokerHand()
-        deal_cards = self.deck.deal(5)
-        draw_hand_blind.deal(deal_cards)
-        self.player_blind.draw_hand = draw_hand_blind
+        # NOTE: Nice thing with hold'em hands... we're done with player hands, except to update shared community cards.
+        if self.format == 'holdem':
+            deal_cards = self.deck.deal(2)
+            holdem_hand_blind = HoldemHand(cards = deal_cards, community = self.community)
+            self.player_blind.holdem_hand = holdem_hand_blind
+            self.player_blind.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE # Change this, as needed
+            self.player_blind.draw_hand = holdem_hand_blind # For some debug convenience...
+        else:
+            draw_hand_blind = PokerHand()
+            deal_cards = self.deck.deal(5)
+            draw_hand_blind.deal(deal_cards)
+            self.player_blind.draw_hand = draw_hand_blind
+            self.player_blind.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
+            self.player_blind.num_cards_kept = 0
+
         self.player_blind.live = True
         self.player_blind.bet_this_hand = 0.0
         self.player_blind.bet_this_street = 0.0
-        self.player_blind.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
-        self.player_blind.num_cards_kept = 0
 
-        draw_hand_button = PokerHand()
-        deal_cards = self.deck.deal(5)
-        draw_hand_button.deal(deal_cards)
-        self.player_button.draw_hand = draw_hand_button
+        if self.format == 'holdem':
+            deal_cards = self.deck.deal(2)
+            holdem_hand_button = HoldemHand(cards = deal_cards, community = self.community)
+            self.player_button.holdem_hand = holdem_hand_button
+            self.player_button.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE # Change this, as needed
+            self.player_button.draw_hand = holdem_hand_button
+        else:
+            draw_hand_button = PokerHand()
+            deal_cards = self.deck.deal(5)
+            draw_hand_button.deal(deal_cards)
+            self.player_button.draw_hand = draw_hand_button
+            self.player_button.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
+            self.player_button.num_cards_kept = 0
+
         self.player_button.live = True
         self.player_button.bet_this_hand = 0.0
         self.player_button.bet_this_street = 0.0
-        self.player_button.heuristic_value = RANDOM_HAND_HEURISTIC_BASELINE 
-        self.player_button.num_cards_kept = 0
 
         self.hand_history_this_round = []
 
         if not(self.player_blind.is_human or self.player_button.is_human):
-            print('starting new hand. Blind %s and button %s' % (hand_string(self.player_blind.draw_hand.dealt_cards),
-                                                                 hand_string(self.player_button.draw_hand.dealt_cards)))
+            print('starting new hand [format = %s]. Blind %s and button %s' % (self.format, 
+                                                                               hand_string(self.player_blind.draw_hand.dealt_cards),
+                                                                               hand_string(self.player_button.draw_hand.dealt_cards)))
         else:
             print('starting new hand...')
 
@@ -621,14 +687,14 @@ class TripleDrawDealer():
 
         # print(self.hand_history)
 
-        if self.player_blind.live and self.player_button.live:
-            print('\n-- 1st draw --\n')
-            print('Both players live. So continue betting after the 1st draw.')
-        else:
+        if not(self.player_blind.live and self.player_button.live):
             return
 
         # Make draws for each player, in turn
-        if (self.live):
+        if self.format != 'holdem':
+            print('\n-- 1st draw --\n')
+            print('Both players live. So continue betting after the 1st draw.')
+
             # Similar to "player.move()" in the single-draw video poker context
             self.player_blind.draw(deck=self.deck, num_draws=3, 
                                    has_button = False,
@@ -680,15 +746,20 @@ class TripleDrawDealer():
                                     num_draw_vector = self.player_button.num_draw_vector) # use hand we are already up against!
             self.hand_history.append(draw_action)
 
-        # TODO: Switch to pre-draw & evaluate heuristics in a function?
-        draw_hand_blind = PokerHand()
-        draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
-        self.player_blind.draw_hand = draw_hand_blind
-        draw_hand_button = PokerHand()
-        draw_hand_button.deal(self.player_button.draw_hand.final_hand)
-        self.player_button.draw_hand = draw_hand_button
+            # Adjust the current poker hand, after our draw
+            draw_hand_blind = PokerHand()
+            draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
+            self.player_blind.draw_hand = draw_hand_blind
+            draw_hand_button = PokerHand()
+            draw_hand_button.deal(self.player_button.draw_hand.final_hand)
+            self.player_button.draw_hand = draw_hand_button
 
-        # Next round. We bet again, then draw again
+        # Alternatively, if we are playing Holdem, deal the flop!
+        if self.format == 'holdem':
+            self.community.deal(deck=self.deck)
+            print('\n-- Flop -- %s\n' % [hand_string(self.community.flop), hand_string(self.community.turn), hand_string(self.community.river)])
+
+        # Next round. We bet again, (then draw again)
         self.live = True 
         self.action_on = self.player_blind
         self.action_off = self.player_button
@@ -700,7 +771,7 @@ class TripleDrawDealer():
 
         # Now, query the CNN, to find out current value of each hand.
         # NOTE: We re-run the computation a minute later for "best draw..." but that's fine. Redundancy is ok.
-        print('--> compute player heuristics')
+        #print('--> compute player heuristics')
         self.player_blind.update_hand_value(num_draws=2)                                                           
         self.player_button.update_hand_value(num_draws=2)
 
@@ -708,14 +779,14 @@ class TripleDrawDealer():
         
         # print(self.hand_history)
 
-        if self.player_blind.live and self.player_button.live:
-            print('\n-- 2nd draw --\n')
-            print('Both players live. So continue betting after the 2nd draw.')
-        else:
+        if not(self.player_blind.live and self.player_button.live):
             return
 
         # Make draws for each player, in turn
-        if (self.live):
+        if self.format != 'holdem':
+            print('\n-- 2nd draw --\n')
+            print('Both players live. So continue betting after the 2nd draw.')
+
             # Similar to "player.move()" in the single-draw video poker context
             # NOTE: Player already knows his own hand.
             # TODO: We should also integrate context, like hand history, pot size, opponent's actions.
@@ -769,13 +840,18 @@ class TripleDrawDealer():
                                     num_draw_vector = self.player_button.num_draw_vector) # use hand that we are already up against
             self.hand_history.append(draw_action)
 
-        # TODO: Switch to pre-draw & evaluate heuristics in a function?
-        draw_hand_blind = PokerHand()
-        draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
-        self.player_blind.draw_hand = draw_hand_blind
-        draw_hand_button = PokerHand()
-        draw_hand_button.deal(self.player_button.draw_hand.final_hand)
-        self.player_button.draw_hand = draw_hand_button
+            # Update the correct draw hand
+            draw_hand_blind = PokerHand()
+            draw_hand_blind.deal(self.player_blind.draw_hand.final_hand)
+            self.player_blind.draw_hand = draw_hand_blind
+            draw_hand_button = PokerHand()
+            draw_hand_button.deal(self.player_button.draw_hand.final_hand)
+            self.player_button.draw_hand = draw_hand_button
+
+        # Alternatively, if we are playing Holdem, deal the turn!
+        if self.format == 'holdem':
+            self.community.deal(deck=self.deck)
+            print('\n-- Turn -- %s\n' % [hand_string(self.community.flop), hand_string(self.community.turn), hand_string(self.community.river)])
 
         # Next round. We bet again, then draw again
         self.live = True 
@@ -789,7 +865,7 @@ class TripleDrawDealer():
 
         # Now, query the CNN, to find out current value of each hand.
         # NOTE: We re-run the computation a minute later for "best draw..." but that's fine. Redundancy is ok.
-        print('--> compute player heuristics')
+        #print('--> compute player heuristics')
         self.player_blind.update_hand_value(num_draws=1)                                                           
         self.player_button.update_hand_value(num_draws=1)
 
@@ -797,14 +873,13 @@ class TripleDrawDealer():
         
         # print(self.hand_history)
 
-        if self.player_blind.live and self.player_button.live:
-            print('\n-- 3rd draw --\n')
-            print('Both players live. So continue betting after the 3rd draw.')
-        else:
+        if not(self.player_blind.live and self.player_button.live):
             return
 
         # Make draws for each player, in turn
-        if (self.live):
+        if self.format != 'holdem':
+            print('\n-- 3rd draw --\n')
+            print('Both players live. So continue betting after the 3rd draw.')
             # Similar to "player.move()" in the single-draw video poker context
             # NOTE: Player already knows his own hand.
             # TODO: We should also integrate context, like hand history, pot size, opponent's actions.
@@ -858,6 +933,11 @@ class TripleDrawDealer():
                                     num_draw_vector = self.player_button.num_draw_vector) # last draw on last hand = against opponent's final hand!
             self.hand_history.append(draw_action)
 
+        # Alternatively, if we are playing Holdem, deal the river!
+        if self.format == 'holdem':
+            self.community.deal(deck=self.deck)
+            print('\n-- Rivr -- %s\n' % [hand_string(self.community.flop), hand_string(self.community.turn), hand_string(self.community.river)])
+
         # Next round. We bet again, then draw again
         self.live = True 
         self.action_on = self.player_blind
@@ -870,7 +950,7 @@ class TripleDrawDealer():
 
         # Now, query the CNN, to find out current value of each hand.
         # NOTE: We re-run the computation a minute later for "best draw..." but that's fine. Redundancy is ok.
-        print('--> compute player heuristics')
+        #print('--> compute player heuristics')
         self.player_blind.update_hand_value(num_draws=0)                                                           
         self.player_button.update_hand_value(num_draws=0)
 
