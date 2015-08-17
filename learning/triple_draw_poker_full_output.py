@@ -39,7 +39,7 @@ DATA_FILENAME = '../data/holdem/500k_holdem_values.csv' # 500k holdem hand value
 MAX_INPUT_SIZE = 330000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 30000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -707,14 +707,14 @@ def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUD
                                                    include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], TRAINING_INPUT_TYPE)
 
     # print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
-    now = time.time()
+    #now = time.time()
     if input_layer:
         #print('evaluating batch with input layer, so no grow in theano.shared()!')
         pred = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
     else:
         pred = lasagne.layers.get_output(output_layer, lasagne.utils.floatX(test_batch), deterministic=DETERMINISTIC_MODEL_RUN)
     # print('%.2fs to get_output' % (time.time() - now))
-    now = time.time()
+    #now = time.time()
 
     #print('Prediciton: %s' % pred)
     #print(tp.pprint(pred))
@@ -736,6 +736,27 @@ def evaluate_single_hand(output_layer, hand_string_dealt, num_draws = 1,
     test_cases = [[hand_string_dealt, num_draws]]
     softmax_values = evaluate_batch_hands(output_layer, test_cases, include_hand_context = include_hand_context, input_layer = input_layer)
     return softmax_values[0]
+
+# Similar for Holdem. 
+def evaluate_single_holdem_hand(output_layer, input_layer, cards, flop, turn, river):
+    now = time.time()
+
+    # Just one case, and all zeros to fit the input.
+    # TODO: Create side function to avoid this tostring, then back to array nonsense...
+    test_case = holdem_cards_input_from_string(hand_string(cards), hand_string(flop), hand_string(turn), hand_string(river))
+    test_cases = [test_case]
+    for i in range(BATCH_SIZE - len(test_cases)):
+        test_cases.append(np.zeros_like(test_case))
+    test_batch = np.array(test_cases, TRAINING_INPUT_TYPE)
+
+    # Get model prediction. Requires input layer.
+    pred = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
+    softmax_values = pred.eval({input_layer.input_var: lasagne.utils.floatX(test_batch)})
+    softmax_single_vector = softmax_values[0]
+    print('%.2fs to eval() output' % (time.time() - now))
+
+    # Return output vector for our single input.
+    return softmax_single_vector
 
 # Just give us the bits... expect 26x17x17 matrix...
 def evaluate_single_event(output_layer, event_input, input_layer = None):
