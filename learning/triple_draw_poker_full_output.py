@@ -45,7 +45,7 @@ BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
-LEARNING_RATE = 0.1 # 0.02 # 0.1 # 0.02 # 0.1 # 0.05
+LEARNING_RATE = 0.02 # 0.1 # 0.02 # 0.1 # 0.05
 MOMENTUM = 0.9
 # Fix and test, before epoch switch...
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
@@ -74,7 +74,7 @@ DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch 
 # NOTE: Default mask isn't all 1's... it's best_output == 1, others == 0
 # WARINING: Theano will complain if we pass a mask and don't use it!
 TRAIN_MASKED_OBJECTIVE = True
-if not(TRAINING_FORMAT == 'deuce_events'):
+if not(TRAINING_FORMAT == 'deuce_events' or TRAINING_FORMAT == 'holdem_events'):
     TRAIN_MASKED_OBJECTIVE = False
 
 # Helps speed up inputs?
