@@ -102,7 +102,7 @@ NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a littl
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
-USE_ACTION_PERCENTAGE = True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
+USE_ACTION_PERCENTAGE = False # True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
 ACTION_PERCENTAGE_CHOICE_RATE = 0.3 #  0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
@@ -516,7 +516,7 @@ class TripleDrawAIPlayer():
             
             # Save for debug
             self.bet_val_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[:5]]]
-            self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/np.sum([val for val in bets_vector[5:10]]) for val in bets_vector[5:10]]]
+            self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/max(np.sum([val for val in bets_vector[5:10]]), 0.01) for val in bets_vector[5:10]]]
             self.num_draw_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]]
 
             if debug:
@@ -584,25 +584,32 @@ class TripleDrawAIPlayer():
 
         if bets_layer and self.use_learning_action_model:
             #print('We has a *bets* output model. Use it!')
-            num_draws_left = 3
-            if round == PRE_DRAW_BET_ROUND:
-                num_draws_left = 3
-            elif round == DRAW_1_BET_ROUND:
-                num_draws_left = 2
-            elif round == DRAW_2_BET_ROUND:
-                num_draws_left = 1
-            elif round == DRAW_3_BET_ROUND:
-                 num_draws_left = 0
-
-            if (num_draws_left >= 1):
-                hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
+            if FORMAT == 'holdem':
+                cards_string = hand_string(self.holdem_hand.dealt_cards)
+                flop_string = hand_string(self.holdem_hand.community.flop)
+                turn_string = hand_string(self.holdem_hand.community.turn)
+                river_string = hand_string(self.holdem_hand.community.river)
+                cards_input = holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string, include_hand_context = False)
             else:
-                hand_string_dealt = hand_string(self.draw_hand.final_hand)
+                num_draws_left = 3
+                if round == PRE_DRAW_BET_ROUND:
+                    num_draws_left = 3
+                elif round == DRAW_1_BET_ROUND:
+                    num_draws_left = 2
+                elif round == DRAW_2_BET_ROUND:
+                    num_draws_left = 1
+                elif round == DRAW_3_BET_ROUND:
+                    num_draws_left = 0
 
-            # Input related to the hand
-            cards_input = cards_input_from_string(hand_string_dealt, include_num_draws=True, 
-                                                  num_draws=num_draws_left, include_full_hand = True, 
-                                                  include_hand_context = False)
+                if (num_draws_left >= 1):
+                    hand_string_dealt = hand_string(self.draw_hand.dealt_cards)
+                else:
+                    hand_string_dealt = hand_string(self.draw_hand.final_hand)
+
+                # Input related to the hand
+                cards_input = cards_input_from_string(hand_string_dealt, include_num_draws=True, 
+                                                      num_draws=num_draws_left, include_full_hand = True, 
+                                                      include_hand_context = False)
 
             # TODO: This should be a util function.
             bets_string = ''
@@ -629,37 +636,17 @@ class TripleDrawAIPlayer():
             
             # Now hand context
             if debug:
-                print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
+                if FORMAT == 'holdem':
+                    print('context %s' % ([cards_string, flop_string, turn_string, river_string, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
+                else:
+                    print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
             hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
                                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
                                                          all_rounds_bets_string=all_rounds_bets_string)
             full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
 
-            """
-            # What do input bits look like?
-            if debug:
-                opt = np.get_printoptions()
-                np.set_printoptions(threshold='nan')
-
-                # Get all bits for input... excluding padding bits that go to 17x17
-                debug_input = full_input[:,6:10,2:15]
-                print(debug_input)
-                print(debug_input.shape)
-
-                # Return options to previous settings...
-                np.set_printoptions(**opt)
-                """
-
             # TODO: Rewrite with input and output layer... so that we can avoid putting all this data into Theano.shared()
             bets_vector = evaluate_single_event(bets_layer, full_input, input_layer = bets_input_layer)
-
-            """
-            # For special (and slow) debug... show all models, if available...
-            if debug and self.bets_output_array:
-                for model_layer in self.bets_output_array:
-                    possible_bets_vector = evaluate_single_event(model_layer, full_input)
-                    print('vals\t%s' % ([val - 2.0 for val in possible_bets_vector[:5]]))
-                    """
 
             # Show all the raw returns from training. [0:5] -> values of actions [5:10] -> probabilities recommended
             # NOTE: Actions are good, and useful, and disconnected from values... but starting with CNN7 only!
@@ -682,7 +669,7 @@ class TripleDrawAIPlayer():
 
             # Save for debug
             self.bet_val_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[:5]]]
-            self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/np.sum([val for val in bets_vector[5:10]]) for val in bets_vector[5:10]]]
+            self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/max(np.sum([val for val in bets_vector[5:10]]), 0.01) for val in bets_vector[5:10]]]
             self.num_draw_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]]
 
             # Now we have a choice.
