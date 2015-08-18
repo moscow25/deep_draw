@@ -978,7 +978,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 # We can also add output "mask" for which of the "output_array" values matter.
                 # As default, for testing, etc, try applying mask for "output_class" == 1
                 # NOTE: For deuce events, we can also encode other know values (call on river,etc), as well as to code in illegal actions.
-                if format == 'deuce_events' and len(output_mask_classes) > 0:
+                if (format == 'deuce_events' or format == 'holdem_events') and len(output_mask_classes) > 0:
                     output_mask = output_mask_classes
                     
                     # HACK: for deuce game, allow computing loss on [5-9] as "action %" on the give bets
