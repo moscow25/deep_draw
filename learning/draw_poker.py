@@ -677,7 +677,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         output_category = category_from_event_action(action_taken, cards_kept = len(cards_kept))
 
         # Important case: all "pat" draws.
-        if PAT_DRAWS_ARE_IMPORTANT and len(cards_kept) == 5:
+        if format == 'deuce_events' and PAT_DRAWS_ARE_IMPORTANT and len(cards_kept) == 5:
             important_training_case = True
 
         # TODO: Add option to quit early, if we only want bet actions (no draw actions)
@@ -799,7 +799,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
             #else:
                 #print('since we bet out and could have checked, no counter-factual information')
         elif output_category == CALL_CATEGORY:
-            if RIVER_CALLS_ARE_IMPORTANT:
+            if format == 'deuce_events' and RIVER_CALLS_ARE_IMPORTANT:
                 #print('including river call as significant action for training')
                 important_training_case = True
         #else:

@@ -806,13 +806,10 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
             all_param_values_from_file_with_type.append(lasagne.utils.floatX(value))
         print('Loaded values %d' % len(all_param_values_from_file_with_type))
         for layer_param in all_param_values_from_file_with_type:
-            print(layer_param)
+            #print(layer_param)
             print(layer_param.shape)
             print('---------------')
         expand_parameters_input_to_match(all_param_values_from_file_with_type, zero_fill=False)
-
-        # What are the parameters for output layer? Should be same.
-
         #print(all_param_values_from_file_with_type)
         lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file_with_type)
         print('Successfully initialized model with previous saved params!')
