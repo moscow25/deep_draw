@@ -58,7 +58,7 @@ models and final hand evaluations, to accomodate any other draw game.
 # TODO: Do this from command line... but then need to ensure that all done correctly.
 # Better yet, outside global constants class (modified from command line, etc)
 # [default format is 'deuce']
-FORMAT = 'deuce' # 'holdem' # 'deuce'
+FORMAT = 'holdem' # 'deuce'
 
 # Build up a CSV, of all information we might want for CNN training
 # TODO: Replace with more logical header for 'Holdem', and other games...
