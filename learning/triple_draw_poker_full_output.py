@@ -23,7 +23,8 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/holdem/holdem_sim_examples_50k.csv' # 'holdem_events' Small-ish dataset of simulated Hold'em hands (heuristic stochastic model). Bets in various context, ad results.
+DATA_FILENAME = '../data/holdem/100k_CNN_holdem_hands.csv' # 'holdem_events' trained on actually CNN hands (at least some poker ability)
+#'../data/holdem/holdem_sim_examples_50k.csv' # 'holdem_events' Small-ish dataset of simulated Hold'em hands (heuristic stochastic model). Bets in various context, ad results.
 # '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
 # '../data/holdem/100k_holdem_values.csv' # 'holdem' 100k holdem hand values. Cards, possible flop, turn and river. Odds vs random hand, and odds to make hand categories.
 # '../data/100k_hands_triple_draw_events.csv' # 'deuce_events' 4M hands, of the latest model (and some human play)
@@ -37,8 +38,8 @@ DATA_FILENAME = '../data/holdem/holdem_sim_examples_50k.csv' # 'holdem_events' S
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 730000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 30000
+MAX_INPUT_SIZE = 110000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 10000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100

@@ -115,7 +115,7 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 
 # Are the some cases that are important, and should always be selected?
 LOW_STRAIGHTS_ARE_IMPORTANT = True
@@ -963,7 +963,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                         #    print(line)
                         #    print('Skipping item with %s hold value!\n' % hold_value)
                         continue
-                elif format == 'deuce_events':
+                elif format == 'deuce_events' or format == 'holdem_events':
                     # For 'deuce_events', randomly down-sample from full set of events. 
                     # NOTE: We do this, to cover more hands, and to not over-train on specific hand situation.
                     # TODO: Control this by flag, or pre-compute data before choosing sample policy
@@ -989,6 +989,9 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     output_mask[7] = 0.0
                     output_mask[8] = 0.0
                     output_mask[9] = 0.0
+                    output_mask[BET_ACTIONS_VALUE_CATEGORY] = 1.0
+                    output_mask[BET_ACTIONS_SUM_CATEGORY] = 1.0
+                    output_mask[12] = 0.0
 
                     # Try to train toward action% sum... but onl if we are making a betting action (not a draw action)
                     if output_class in ALL_ACTION_CATEGORY_SET:
