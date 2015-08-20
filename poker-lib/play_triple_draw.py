@@ -1225,6 +1225,11 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
         all_param_values_from_file = np.load(holdem_model_filename)
         expand_parameters_input_to_match(all_param_values_from_file, zero_fill = True)
 
+        for layer_param in all_param_values_from_file:
+            print(layer_param)
+            print(layer_param.shape)
+            print('---------------')
+
         # Size must match exactly!
         holdem_output_layer, holdem_input_layer, holdem_layers  = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
@@ -1234,6 +1239,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
 
         #print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
         lasagne.layers.set_all_param_values(holdem_output_layer, all_param_values_from_file)
+
         predict_model(output_layer=holdem_output_layer, test_batch=test_batch, format = FORMAT)
         print('Cases again %s' % str(test_cases))
         print('Creating player, based on this pickled model...')
@@ -1254,6 +1260,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
             HAND_TO_MATRIX_PAD_SIZE,
             32,
         )
+
         #print('filling model with shape %s, with %d params' % (str(bets_output_layer.get_output_shape()), len(bets_all_param_values_from_file)))
         lasagne.layers.set_all_param_values(bets_output_layer, bets_all_param_values_from_file)
         predict_model(output_layer=bets_output_layer, test_batch=test_batch)

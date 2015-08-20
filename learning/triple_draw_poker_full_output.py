@@ -42,7 +42,7 @@ VALIDATION_SIZE = 30000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
-BORDER_SHAPE = "valid" # "same" # "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
+BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.02 # 0.1 # 0.02 # 0.1 # 0.05
@@ -342,7 +342,7 @@ def build_model(input_width, input_height, output_dim,
         num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
         #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        pad=BORDER_SHAPE,
+        #pad=BORDER_SHAPE,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
@@ -357,14 +357,14 @@ def build_model(input_width, input_height, output_dim,
         num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
         #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        pad=BORDER_SHAPE,
+        #pad=BORDER_SHAPE,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_conv1_1)
     print('convolution layer l_conv1_1. Shape %s' % str(l_conv1_1.output_shape))
 
-    l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, pool_size=(2, 2))
+    l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, pool_size=(2, 2), ignore_border=False)
     layers.append(l_pool1)
     # Try *not pooling* in the suit layer...
     #l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, ds=(2, 1))
@@ -386,7 +386,7 @@ def build_model(input_width, input_height, output_dim,
         num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
         #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        pad=BORDER_SHAPE,
+        #pad=BORDER_SHAPE,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
@@ -400,7 +400,7 @@ def build_model(input_width, input_height, output_dim,
         num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
         #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        pad=BORDER_SHAPE,
+        #pad=BORDER_SHAPE,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
         )
@@ -409,7 +409,7 @@ def build_model(input_width, input_height, output_dim,
 
     # Question? No need for Max-pool for already narrow network... NO
     # Try *not pooling* in the suit layer...
-    l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, pool_size=(2, 2))
+    l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, pool_size=(2, 2), ignore_border=False)
     layers.append(l_pool2)
     #l_pool2 = lasagne.layers.MaxPool2DLayer(l_conv2_2, ds=(2, 1))
 
@@ -426,7 +426,7 @@ def build_model(input_width, input_height, output_dim,
     #l_pool3 = lasagne.layers.MaxPool2DLayer(l_conv3, ds=(2, 2))
 
     l_hidden1 = lasagne.layers.DenseLayer(
-        l_pool2, # l_pool3, # l_pool2,
+        l_pool2,
         num_units=NUM_HIDDEN_UNITS,
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -548,34 +548,11 @@ def create_iter_functions_full_output(dataset, output_layer,
     print('Using updates.nesterov_momentum with learning rate %.2f, momentum %.2f' % (learning_rate, momentum))
     updates_nesterov = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
 
-    # "AdaDelta" by Matt Zeiler -- no learning rate or momentum...
-    #print('Using AdaDelta adaptive learning after %d epochs, with epsilon %s, learning rate %.2f!' % (EPOCH_SWITCH_ADAPT, str(ADA_DELTA_EPSILON), ADA_LEARNING_RATE))
-    #updates_ada_delta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=ADA_LEARNING_RATE, epsilon=ADA_DELTA_EPSILON) #learning_rate=learning_rate)
-
-    # Compile a function performing a training step on a mini-batch (by giving
-    # the updates dictionary) and returning the corresponding training loss:
-    #train_fn = theano.function([X_batch, z_batch], loss_train, updates=updates_nesterov)
-
-    # Compile a second function computing the validation loss and accuracy:
-    #val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
-
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
-        givens_train = {
-            #X_batch: dataset['X_train'][batch_slice],
-            # Not computing 'accuracy' on training... [though we should]
-            #y_batch: dataset['y_train'][batch_slice],
-            #z_batch: dataset['z_train'][batch_slice],
-            #m_batch: dataset['m_train'][batch_slice],
-            }
+        givens_train = {}
     else:
-         givens_train = {
-            #X_batch: dataset['X_train'][batch_slice],
-            # Not computing 'accuracy' on training... [though we should]
-            #y_batch: dataset['y_train'][batch_slice],
-            #z_batch: dataset['z_train'][batch_slice],
-            #m_batch: dataset['m_train'][batch_slice],
-            }
+         givens_train = {}
 
     # Function to train with nesterov momentum...
     iter_train_nesterov = theano.function(
@@ -588,30 +565,11 @@ def create_iter_functions_full_output(dataset, output_layer,
     # Still the default training function
     iter_train = iter_train_nesterov
 
-    """
-    # Try training with AdaDelta (adaptive training)
-    iter_train_ada_delta= theano.function(
-        [batch_index, input_layer.input_var], loss_train,
-        updates=updates_ada_delta,
-        givens=givens_train,
-        )
-        """
-
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
-        givens_valid = {
-            #X_batch: dataset['X_valid'][batch_slice],
-            #y_batch: dataset['y_valid'][batch_slice],
-            #z_batch: dataset['z_valid'][batch_slice],
-            #m_batch: dataset['m_valid'][batch_slice],
-        }
+        givens_valid = {}
     else:
-        givens_valid = {
-            #X_batch: dataset['X_valid'][batch_slice],
-            #y_batch: dataset['y_valid'][batch_slice],
-            #z_batch: dataset['z_valid'][batch_slice],
-            #m_batch: dataset['m_valid'][batch_slice],
-        }
+        givens_valid = {}
     iter_valid = theano.function(
         [input_layer.input_var, y_batch, z_batch, m_batch], [loss_eval, accuracy],
         givens=givens_valid,
@@ -847,10 +805,12 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
             all_param_values_from_file_with_type.append(lasagne.utils.floatX(value))
         print('Loaded values %d' % len(all_param_values_from_file_with_type))
         for layer_param in all_param_values_from_file_with_type:
-            #print(layer_param)
+            print(layer_param)
             print(layer_param.shape)
             print('---------------')
         expand_parameters_input_to_match(all_param_values_from_file_with_type, zero_fill=False)
+
+        # What are the parameters for output layer? Should be same.
 
         #print(all_param_values_from_file_with_type)
         lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file_with_type)
