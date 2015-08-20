@@ -58,7 +58,7 @@ models and final hand evaluations, to accomodate any other draw game.
 # TODO: Do this from command line... but then need to ensure that all done correctly.
 # Better yet, outside global constants class (modified from command line, etc)
 # [default format is 'deuce']
-FORMAT = 'holdem' # 'deuce'
+FORMAT = 'deuce' # 'holdem' # 'deuce'
 
 # Build up a CSV, of all information we might want for CNN training
 # TODO: Replace with more logical header for 'Holdem', and other games...
@@ -102,8 +102,11 @@ NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a littl
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
-USE_ACTION_PERCENTAGE = False # True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
-ACTION_PERCENTAGE_CHOICE_RATE = 0.3 #  0.7 # How often do we use the choice %?? (value with noise the rest of the time)
+USE_ACTION_PERCENTAGE = True # True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
+# Disable action% for holdem... until it's ready.
+if FORMAT == 'holdem':
+    USE_ACTION_PERCENTAGE = False 
+ACTION_PERCENTAGE_CHOICE_RATE = 0.3 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
 SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
@@ -685,6 +688,8 @@ class TripleDrawAIPlayer():
                 choice = np.random.choice([action_tuple[1] for action_tuple in action_percentge], 
                                           p=probabilities)
                 best_action = choice
+                if debug:
+                    print('~ using percent action choice ~')
                 print('\n%s\n' % actionName[best_action])
                 return best_action
 
