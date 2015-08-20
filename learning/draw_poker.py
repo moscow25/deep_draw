@@ -115,12 +115,13 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 
 # Are the some cases that are important, and should always be selected?
 LOW_STRAIGHTS_ARE_IMPORTANT = True
 PAT_DRAWS_ARE_IMPORTANT = True
 RIVER_CALLS_ARE_IMPORTANT = True
+RIVER_RAISES_ARE_IMPORTANT = True
 
 # Use this to train only on results of intelligent players, if different versions available
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'man']) # learn only from better models, or man's actions
@@ -783,6 +784,9 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                 #print('We bet, when could have checked behind')
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
             else:
+                if format == 'deuce_events' and RIVER_RAISES_ARE_IMPORTANT:
+                    #print('including river raise as significant action for training')
+                    important_training_case = True
                 #print('We raised, when could have called')
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
                 if check_call_result == 0.0:
