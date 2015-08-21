@@ -102,7 +102,7 @@ NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a littl
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
-USE_ACTION_PERCENTAGE = True # True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
+USE_ACTION_PERCENTAGE = False # True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
 # Disable action% for holdem... until it's ready.
 if FORMAT == 'holdem':
     USE_ACTION_PERCENTAGE = False 
