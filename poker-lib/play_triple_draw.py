@@ -102,7 +102,7 @@ NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a littl
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
-USE_ACTION_PERCENTAGE = False # True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
+USE_ACTION_PERCENTAGE = True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
 # Disable action% for holdem... until it's ready.
 if FORMAT == 'holdem':
     USE_ACTION_PERCENTAGE = False 
@@ -690,6 +690,17 @@ class TripleDrawAIPlayer():
                 best_action = choice
                 if debug:
                     print('~ using percent action choice ~')
+
+                # Final Hack! We need should aim to avoid close folds pre-draw.
+                # Thus, if close, try again.
+                if round == PRE_DRAW_BET_ROUND and best_action == FOLD_HAND and retry == False and RETRY_FOLD_ACTION:
+                    if debug:
+                        'Retrying preflop fold action...'
+                    return self.choose_action(actions=actions, round=round, bets_this_round = bets_this_round, 
+                                              has_button = has_button, pot_size=pot_size, actions_this_round=actions_this_round,
+                                              cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept, 
+                                              debug = debug, retry = True, actions_whole_hand=actions_whole_hand)
+
                 print('\n%s\n' % actionName[best_action])
                 return best_action
 
