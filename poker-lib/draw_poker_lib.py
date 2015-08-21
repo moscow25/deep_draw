@@ -519,7 +519,7 @@ class TripleDrawDealer():
             return
         
         # If still here... ther are legal actions that a player may take!
-        print('\nAllowed actions for player %s: %s' % (self.action_on.name, [actionName[action] for action in allowed_actions]))
+        print('Allowed actions for player %s: %s' % (self.action_on.name, [actionName[action] for action in allowed_actions]))
 
         # Here the agent... would choose a good action.
         best_action = self.action_on.choose_action(actions=allowed_actions, 
@@ -534,19 +534,19 @@ class TripleDrawDealer():
 
         # If action returned, complete the action... and keep going
         if (best_action):
-            print('\nBest action chose ->  %s' % (actionName[best_action]))
+            # print('\nBest action chose ->  %s' % (actionName[best_action]))
             # We keep betting after this action... as long last action allows it.
             keep_betting = True
             # Create the action
             if best_action == CALL_SMALL_STREET:
                 action = CallSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
                 if not(round == PRE_DRAW_BET_ROUND and bet_off_action == BIG_BLIND_SIZE):
-                    print('\nchosen action, closes the action')
+                    #print('\nchosen action, closes the action')
                     keep_betting = False
             elif best_action == CALL_BIG_STREET:
                 action = CallBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
                 if not(round == PRE_DRAW_BET_ROUND and bet_off_action == BIG_BLIND_SIZE):
-                    print('\nchosen action, closes the action')
+                    #print('\nchosen action, closes the action')
                     keep_betting = False
             elif best_action == BET_SMALL_STREET:
                 action = BetSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
@@ -558,14 +558,14 @@ class TripleDrawDealer():
                 action = RaiseBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
             elif best_action == FOLD_HAND:
                 action = FoldStreet(self.action_on.name, self.pot_size, format=self.format)
-                print('\nchosen action, closes the action')
+                #print('\nchosen action, closes the action')
                 keep_betting = False
             elif best_action == CHECK_HAND:
                 action = CheckStreet(self.action_on.name, self.pot_size, format=self.format)
 
                 # Logic for checking is a bit tricky. Action ended if button checks... except on first, when F player checks ends it.
                 if (round == PRE_DRAW_BET_ROUND and self.action_on == self.player_blind) or (round != PRE_DRAW_BET_ROUND and self.action_on == self.player_button):
-                    print('\nchosen action, closes the action')
+                    #print('\nchosen action, closes the action')
                     keep_betting = False
                 else:
                     print('\nthis check... does not end the action.')
