@@ -758,14 +758,16 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         #print(data_array)
         
         if action_taken == FOLD_HAND:
-            #print('--> consider counter-factual of call instead of FOLD')
-            call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
-            if call_result == 0.0:
-                call_result = -1.0 * BIG_BET_SIZE
-            #print('we would win %.1f by calling... ' % call_result)
-            call_marginal_value = adjust_float_value(call_result, mode=format)
-            output_array[CALL_CATEGORY] = call_marginal_value
-            output_mask_classes[CALL_CATEGORY] = 1.0
+            # 0.5 result == may indicate default value. Until/unless fixed, ignore it.
+            if csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5:
+                # print('--> consider counter-factual of call instead of FOLD')
+                call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
+                if call_result == 0.0:
+                    call_result = -1.0 * BIG_BET_SIZE
+                # print('we would win %.1f by calling... ' % call_result)
+                call_marginal_value = adjust_float_value(call_result, mode=format)
+                output_array[CALL_CATEGORY] = call_marginal_value
+                output_mask_classes[CALL_CATEGORY] = 1.0
         elif action_taken in ALL_BETS_SET:
             #print('consider counter-factual of check/call instead of bet/raise...')
             if output_category == BET_CATEGORY and not position:
@@ -791,8 +793,9 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
                 if check_call_result == 0.0:
                     check_call_result = -1.0 * BIG_BET_SIZE
+            # Again, skip 0.5 win result, as this may be a data error. 
             #print('we would win %.1f by check/calling... ' % check_call_result)
-            if check_call_result >= 0.0:
+            if csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5 and check_call_result >= 0.0:
                 check_call_margin_value = adjust_float_value(check_call_result, mode=format)
                 if output_category == BET_CATEGORY:
                     output_array[CHECK_CATEGORY] = check_call_margin_value
