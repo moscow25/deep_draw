@@ -392,6 +392,7 @@ def legal_actions_context(num_draws, position, bets_string, reverse = False):
     legal_actions = set([])
     if num_bets == 0:
         assert(num_draws < 3) # No such thing as zero bets on first round of actions
+        #print('--> first or second to act, check or bet')
         legal_actions.add(BET_CATEGORY)
         legal_actions.add(CHECK_CATEGORY)
     elif num_draws == 3 and num_bets == 1:
@@ -406,10 +407,12 @@ def legal_actions_context(num_draws, position, bets_string, reverse = False):
             legal_actions.add(RAISE_CATEGORY)
             legal_actions.add(CHECK_CATEGORY)
     elif num_bets < 4:
+        #print('--> facing a bet. Raise, call or fold')
         legal_actions.add(RAISE_CATEGORY)
         legal_actions.add(CALL_CATEGORY)
         legal_actions.add(FOLD_CATEGORY)
     else:
+        #print('--> facing a 3bet bet. Can not raise')
         legal_actions.add(CALL_CATEGORY)
         legal_actions.add(FOLD_CATEGORY)
 
@@ -612,7 +615,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         position = int(data_array[csv_key_map['position']]) # binary
         pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
         bets_string = data_array[csv_key_map['actions_this_round']] # items like '0111' (5 max)
-        if (not bets_string) and actions_this_round:
+        if (not bets_string) and actions_this_round and format == 'deuce_actions':
             #print('replacing actions_this_round string with %s' % actions_this_round)
             bets_string = actions_this_round # replace, but only if empty
         all_rounds_bets_string = data_array[csv_key_map['actions_full_hand']] # All rounds of betting. Something like '010100110'
@@ -812,22 +815,22 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         #else:
             #print('no possible counter-factual to action taken |%s|... yet' % action_taken)
             
-
-    #print(output_array)
-    #print(output_mask_classes)
-
-    # Do no encode unknown values as val == 0.0... that confuses things.
     """
-    # Lastly, fill in default value... for non-illegal, non-fold, and not action actually taken
-    # Why? To distinguish between unknown actions centered at 0.0, and known illegal actions centered at -2.0
-    for legal_action in legal_actions:
-        if output_mask_classes[legal_action] == 0.0:
-            output_array[legal_action] = adjust_float_value(0.0, mode=adjust_floats)
-            """
+    print(data_array)
+    print(output_mask_classes)
+    print(output_array)
 
-    # print('output mask: %s' % output_mask_classes)
-    #if important_training_case:
-    #    print(data_array)
+    print('illegal actions %s' % illegal_actions)
+    print('legal actions %s' % legal_actions)
+    print('action taken %s' % action_taken)
+
+    print('--------------------')
+
+    # For debug...
+    if bets_action and num_draws == 0 and csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5:
+        #sys.exit(-1)
+        time.sleep(2)
+        """
 
     # Do we return just the hand, or also 17 "bits" of context?
     if include_hand_context:
@@ -902,7 +905,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     hand_input, output_class, output_array, output_mask_classes, important_training_case = read_poker_event_line(line, csv_key_map, format = format, include_hand_context = include_hand_context, num_draw_out_position = num_draw_out_position, num_draw_in_position = num_draw_in_position, actions_this_round = actions_this_round)
 
                     # Now, after line processed, upate # of cards drawn, if applicable
-                    if line and line[csv_key_map['action']]:
+                    if format == 'deuce_events' and line and line[csv_key_map['action']]:
                         action_name = line[csv_key_map['action']]
                         action = actionNameToAction[action_name]
                         if action == DRAW_ACTION:
@@ -921,7 +924,6 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                             actions_this_round = line[csv_key_map['actions_this_round']]
                         #else:
                         #    print('unable to update actions_this_round...')
-                                
                                                       
 
                     #print('processed line: %s' % line)
