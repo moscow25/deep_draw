@@ -115,7 +115,7 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.5 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 
 # Are the some cases that are important, and should always be selected?
 LOW_STRAIGHTS_ARE_IMPORTANT = True
@@ -124,7 +124,7 @@ RIVER_CALLS_ARE_IMPORTANT = True
 RIVER_RAISES_ARE_IMPORTANT = True
 
 # Use this to train only on results of intelligent players, if different versions available
-PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'man']) # learn only from better models, or man's actions
+PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'CNN_76_per', 'man']) # learn only from better models, or man's actions
 # set(['CNN', 'CNN_2', 'CNN_3', 'man', 'sim']) # Incude 'sim' and ''?
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
