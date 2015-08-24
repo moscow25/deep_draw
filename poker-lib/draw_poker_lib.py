@@ -49,7 +49,7 @@ class DeuceLowball(PayoutTable):
     # Compare hands.
     # TODO: Hand split pots, other % payouts. Should really output [hand_id: % pot]
     def showdown(self, hands):
-        print('using DeuceLowball to compare hands')
+        #print('using DeuceLowball to compare hands')
         # As a hack... output hand with best (2-7) rank. Ties go to best position...
         best_rank = 0
         best_hand = None
@@ -78,7 +78,7 @@ class HoldemCashier(PayoutTable):
     # Compare hands.
     # TODO: Hand split pots, other % payouts. Should really output [hand_id: % pot]
     def showdown(self, hands):
-        print('using HoldemCashier to compare hands')
+        #print('using HoldemCashier to compare hands')
         # As a hack... output hand with best (2-7) rank. Ties go to best position...
         best_rank = 1000000
         best_hand = None
