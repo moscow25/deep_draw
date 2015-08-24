@@ -103,6 +103,7 @@ class PokerAction:
     def __init__(self, action_type, actor_name, pot_size, bet_size, format = 'deuce'):
         self.type = action_type
         self.name = actionName[action_type]
+        self.format = format
 
         # For now... just a hack to distinguish between B = button and F = blind player, first to act
         self.actor_name = actor_name
@@ -113,23 +114,60 @@ class PokerAction:
         self.hand = None
         self.best_draw = None
         self.hand_after = None
-        self.cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
+        if format == 'deuce':
+            self.cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
+        elif format == 'holdem':
+            self.cashier = HoldemCashier() # Categories, in hold'em format.
     
+    # What's currently winning? (not expected to win, but if we have to showdown)
     # Assumes that we know our hand and opponent hand. But can also handle errors.
     # TODO: Use this to estimate future winning percentage? In allin situations...
     def current_win_percentage(self):
         # TODO: Fix "win%" for non-deuce hands. Natural for holdem... except we need to implement preflop comps (or skip)
-        if (not self.hand) or (not self.oppn_hand) or not(format == 'deuce'):
-            return 0.5 # unknown, so 50/50
-        our_hand = PokerHand(cards = self.hand)
-        oppn_hand = PokerHand(cards = self.oppn_hand)
-        winners = self.cashier.showdown([our_hand, oppn_hand])
-        if winners == our_hand:
-            return 1.0
-        elif winners == oppn_hand:
-            return 0.0
+        #if (not self.hand) or (not self.oppn_hand) or not(format == 'deuce'):
+        #    return 0.5 # unknown, so 50/50
+        #print('calculating win percentages')
+        #print([self.format, self.hand, self.oppn_hand, self.best_draw])
+
+        if self.format == 'deuce' and self.hand and self.oppn_hand:
+            our_hand = PokerHand(cards = self.hand)
+            oppn_hand = PokerHand(cards = self.oppn_hand)
+            winners = self.cashier.showdown([our_hand, oppn_hand])
+            if winners == our_hand:
+                return 1.0
+            elif winners == oppn_hand:
+                return 0.0
+            else:
+                return 0.5 # chop, or unknown.
+        elif self.format == 'holdem' and self.hand and self.oppn_hand and self.best_draw:
+            # Project community hand, if available. Can only evaluate if flop or more (otherwise, no 5 card hand)
+            flop = []
+            turn = []
+            river = []
+            if self.best_draw:
+                flop = self.best_draw
+            if self.hand_after:
+                if len(self.hand_after) == 1:
+                    self.turn = self.hand_after
+                elif len(self.hand_after) == 2:
+                    self.turn = [self.hand_after[0]]
+                    self.river = [self.hand_after[1]]
+                else:
+                    assert False, 'Unparsable turn/river %s' % self.hand_after
+            community = HoldemCommunityHand(flop=flop, turn=turn, river=river)
+            our_hand = HoldemHand(cards=self.hand, community=community)
+            oppn_hand = HoldemHand(cards=self.oppn_hand, community=community)
+            our_hand.evaluate()
+            oppn_hand.evaluate()
+            winners = self.cashier.showdown([our_hand, oppn_hand])
+            if winners == our_hand:
+                return 1.0
+            elif winners == oppn_hand:
+                return 0.0
+            else:
+                return 0.5 # chop, or unknown.
         else:
-            return 0.5 # chop, or unknown.
+            return 0.5 # unknown, so 50/50
 
 
     # Context needed, to record actions properly to CVS...
@@ -519,7 +557,7 @@ class TripleDrawDealer():
             return
         
         # If still here... ther are legal actions that a player may take!
-        print('\nAllowed actions for player %s: %s' % (self.action_on.name, [actionName[action] for action in allowed_actions]))
+        print('Allowed actions for player %s: %s' % (self.action_on.name, [actionName[action] for action in allowed_actions]))
 
         # Here the agent... would choose a good action.
         best_action = self.action_on.choose_action(actions=allowed_actions, 
@@ -534,19 +572,19 @@ class TripleDrawDealer():
 
         # If action returned, complete the action... and keep going
         if (best_action):
-            print('\nBest action chose ->  %s' % (actionName[best_action]))
+            # print('\nBest action chose ->  %s' % (actionName[best_action]))
             # We keep betting after this action... as long last action allows it.
             keep_betting = True
             # Create the action
             if best_action == CALL_SMALL_STREET:
                 action = CallSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
                 if not(round == PRE_DRAW_BET_ROUND and bet_off_action == BIG_BLIND_SIZE):
-                    print('\nchosen action, closes the action')
+                    #print('\nchosen action, closes the action')
                     keep_betting = False
             elif best_action == CALL_BIG_STREET:
                 action = CallBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
                 if not(round == PRE_DRAW_BET_ROUND and bet_off_action == BIG_BLIND_SIZE):
-                    print('\nchosen action, closes the action')
+                    #print('\nchosen action, closes the action')
                     keep_betting = False
             elif best_action == BET_SMALL_STREET:
                 action = BetSmallStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
@@ -558,19 +596,24 @@ class TripleDrawDealer():
                 action = RaiseBigStreet(self.action_on.name, self.pot_size, bet_on_action, max(bet_on_action, bet_off_action), format=self.format)
             elif best_action == FOLD_HAND:
                 action = FoldStreet(self.action_on.name, self.pot_size, format=self.format)
-                print('\nchosen action, closes the action')
+                #print('\nchosen action, closes the action')
                 keep_betting = False
             elif best_action == CHECK_HAND:
                 action = CheckStreet(self.action_on.name, self.pot_size, format=self.format)
 
                 # Logic for checking is a bit tricky. Action ended if button checks... except on first, when F player checks ends it.
                 if (round == PRE_DRAW_BET_ROUND and self.action_on == self.player_blind) or (round != PRE_DRAW_BET_ROUND and self.action_on == self.player_button):
-                    print('\nchosen action, closes the action')
+                    #print('\nchosen action, closes the action')
                     keep_betting = False
                 else:
                     print('\nthis check... does not end the action.')
             else:
                 assert False, 'Unknown best_action %s' % actionName[best_action]
+
+            # HACK: Use "best_draw" and "hand_after" fields, to record the flop, turn and river in draw games.
+            if self.format == 'holdem':
+                action.best_draw = self.action_on.holdem_hand.community.flop
+                action.hand_after = self.action_on.holdem_hand.community.turn + self.action_on.holdem_hand.community.river
 
             # Add additional information to the action.
             # NOTE: More convenient to do this in one place, since action-independent context...
@@ -588,11 +631,6 @@ class TripleDrawDealer():
                                bet_val_vector = self.action_on.bet_val_vector,
                                act_val_vector = self.action_on.act_val_vector,
                                num_draw_vector = self.action_on.num_draw_vector)
-
-            # HACK: Use "best_draw" and "hand_after" fields, to record the flop, turn and river in draw games.
-            if self.format == 'holdem':
-                action.best_draw = self.action_on.holdem_hand.community.flop
-                action.hand_after = self.action_on.holdem_hand.community.turn + self.action_on.holdem_hand.community.river
 
             self.process_action(action, pass_control = True)
             if keep_betting:

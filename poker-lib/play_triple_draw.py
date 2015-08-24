@@ -58,7 +58,7 @@ models and final hand evaluations, to accomodate any other draw game.
 # TODO: Do this from command line... but then need to ensure that all done correctly.
 # Better yet, outside global constants class (modified from command line, etc)
 # [default format is 'deuce']
-FORMAT = 'deuce' # 'holdem' # 'deuce'
+FORMAT = 'holdem' # 'deuce'
 
 # Build up a CSV, of all information we might want for CNN training
 # TODO: Replace with more logical header for 'Holdem', and other games...
@@ -102,11 +102,12 @@ NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a littl
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
-USE_ACTION_PERCENTAGE = False # True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
+USE_ACTION_PERCENTAGE = True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
+USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage... can be useful for Hold'em. Good for exploratory moves
 # Disable action% for holdem... until it's ready.
-if FORMAT == 'holdem':
-    USE_ACTION_PERCENTAGE = False 
-ACTION_PERCENTAGE_CHOICE_RATE = 0.3 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
+#if FORMAT == 'holdem':
+#    USE_ACTION_PERCENTAGE = False 
+ACTION_PERCENTAGE_CHOICE_RATE = 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
 SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
@@ -682,7 +683,7 @@ class TripleDrawAIPlayer():
             if USE_ACTION_PERCENTAGE and self.use_action_percent_model and np.random.rand() <= ACTION_PERCENTAGE_CHOICE_RATE:
                 # Sampled choice, from available actions, based on action% from neural net output.
                 # NOTE: Need to explicitly round... to avoid annoying numpy/float32 issues
-                probabilities = np.array([int(action_tuple[0] * 100000) / 100000.0 for action_tuple in action_percentge])
+                probabilities = np.array([max(int(action_tuple[0] * 100000), 0) / 100000.0 for action_tuple in action_percentge])
                 remainder = 1.0 - probabilities.sum()
                 probabilities[0] += remainder
                 choice = np.random.choice([action_tuple[1] for action_tuple in action_percentge], 
@@ -690,6 +691,17 @@ class TripleDrawAIPlayer():
                 best_action = choice
                 if debug:
                     print('~ using percent action choice ~')
+
+                # Final Hack! We need should aim to avoid close folds pre-draw.
+                # Thus, if close, try again.
+                if round == PRE_DRAW_BET_ROUND and best_action == FOLD_HAND and retry == False and RETRY_FOLD_ACTION:
+                    if debug:
+                        'Retrying preflop fold action...'
+                    return self.choose_action(actions=actions, round=round, bets_this_round = bets_this_round, 
+                                              has_button = has_button, pot_size=pot_size, actions_this_round=actions_this_round,
+                                              cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept, 
+                                              debug = debug, retry = True, actions_whole_hand=actions_whole_hand)
+
                 print('\n%s\n' % actionName[best_action])
                 return best_action
 
@@ -1157,8 +1169,9 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     # TODO: Initialize CSV writer
     csv_header_map = CreateMapFromCSVKey(TRIPLE_DRAW_EVENT_HEADER)
     csv_writer=None
+    bufsize = 0 # Write immediately to CSV file. Why? Don't want to lose last hand, etc. Writing to CSV is not dominant operation.
     if output_file_name:
-        output_file = open(output_file_name, 'a') # append to file... 
+        output_file = open(output_file_name, 'a', bufsize) # append to file... 
         csv_writer = csv.writer(output_file)
         csv_writer.writerow(TRIPLE_DRAW_EVENT_HEADER)
 
@@ -1344,6 +1357,10 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
 
     # Use action% for opponent... but only against human player. Confusing... but not really.
     if (human_player) and USE_ACTION_PERCENTAGE:
+        player_one.use_action_percent_model = True
+    elif USE_ACTION_PERCENTAGE and USE_ACTION_PERCENTAGE_BOTH_PLAYERS:
+        # HACK: What if we want both players to use action percentage model?
+        # TODO: Fix this better, or from command line.
         player_one.use_action_percent_model = True
     if USE_MIXED_MODEL_WHEN_AVAILABLE and (old_bets_output_layer or other_old_bets_output_layer):
         player_one.bets_output_array = []
