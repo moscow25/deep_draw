@@ -1169,8 +1169,9 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     # TODO: Initialize CSV writer
     csv_header_map = CreateMapFromCSVKey(TRIPLE_DRAW_EVENT_HEADER)
     csv_writer=None
+    bufsize = 0 # Write immediately to CSV file. Why? Don't want to lose last hand, etc. Writing to CSV is not dominant operation.
     if output_file_name:
-        output_file = open(output_file_name, 'a') # append to file... 
+        output_file = open(output_file_name, 'a', bufsize) # append to file... 
         csv_writer = csv.writer(output_file)
         csv_writer.writerow(TRIPLE_DRAW_EVENT_HEADER)
 
