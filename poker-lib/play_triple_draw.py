@@ -58,7 +58,7 @@ models and final hand evaluations, to accomodate any other draw game.
 # TODO: Do this from command line... but then need to ensure that all done correctly.
 # Better yet, outside global constants class (modified from command line, etc)
 # [default format is 'deuce']
-FORMAT = 'holdem' # 'deuce'
+FORMAT = 'deuce' # 'holdem' # 'deuce'
 
 # Build up a CSV, of all information we might want for CNN training
 # TODO: Replace with more logical header for 'Holdem', and other games...
@@ -96,7 +96,7 @@ BOOST_PAT_BET_ACTION_NOISE = True # Do we explicitly support betting after stand
 # Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
 USE_NUM_DRAW_MODEL = True
 # Use a num_draw model... and tend to do so more later in the hand. For example, 30% first draw, 60% 2nd draw, 90% 3rd draw.
-NUM_DRAW_MODEL_RATE = 0.9 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+NUM_DRAW_MODEL_RATE = 1.0 # 0.9 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
 NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW = 0.3 # Use model on the final draw, but perhaps less on previous draws...
 NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a little. 
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
@@ -107,7 +107,7 @@ USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage..
 # Disable action% for holdem... until it's ready.
 #if FORMAT == 'holdem':
 #    USE_ACTION_PERCENTAGE = False 
-ACTION_PERCENTAGE_CHOICE_RATE = 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
+ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
 SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
