@@ -998,17 +998,19 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     output_mask[7] = 0.0
                     output_mask[8] = 0.0
                     output_mask[9] = 0.0
-                    output_mask[BET_ACTIONS_VALUE_CATEGORY] = 1.0
-                    output_mask[BET_ACTIONS_SUM_CATEGORY] = 1.0
-                    output_mask[12] = 0.0
 
-                    # Try to train toward action% sum... but onl if we are making a betting action (not a draw action)
+                    # Try to train toward action% sum... but only if we are making a betting action (not a draw action)
                     if output_class in ALL_ACTION_CATEGORY_SET:
 
                         # Super hack. Try to increase array sum...
                         output_array[BET_ACTIONS_VALUE_CATEGORY] = 0.0 # Choose zero, to maximize the inverse... # 4.0 choose a big number, to maximize values
                         output_array[BET_ACTIONS_SUM_CATEGORY] = 0.1 # 1.0 # Probabilities sum target...
                         output_array[12] = 0.0 # spread the action values around, within reason (huge discount, but should be a factor)
+
+                        # Mask, but only if we have value to train toward.
+                        output_mask[BET_ACTIONS_VALUE_CATEGORY] = 1.0
+                        output_mask[BET_ACTIONS_SUM_CATEGORY] = 1.0
+                        output_mask[12] = 0.0
 
                 else:
                     output_mask = np.zeros(32)

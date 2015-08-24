@@ -23,7 +23,7 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-DATA_FILENAME = '../data/holdem/100k_CNN_holdem_hands.csv' # 'holdem_events' trained on actually CNN hands (at least some poker ability)
+DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 'deuce_events' 4M hands, of the latest model (and some human play)
 #'../data/holdem/100k_CNN_holdem_hands.csv' # 'holdem_events' trained on actually CNN hands (at least some poker ability)
 #'../data/holdem/holdem_sim_examples_50k.csv' # 'holdem_events' Small-ish dataset of simulated Hold'em hands (heuristic stochastic model). Bets in various context, ad results.
 # '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
