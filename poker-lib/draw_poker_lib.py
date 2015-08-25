@@ -148,10 +148,10 @@ class PokerAction:
                 flop = self.best_draw
             if self.hand_after:
                 if len(self.hand_after) == 1:
-                    self.turn = self.hand_after
+                    turn = self.hand_after
                 elif len(self.hand_after) == 2:
-                    self.turn = [self.hand_after[0]]
-                    self.river = [self.hand_after[1]]
+                    turn = [self.hand_after[0]]
+                    river = [self.hand_after[1]]
                 else:
                     assert False, 'Unparsable turn/river %s' % self.hand_after
             community = HoldemCommunityHand(flop=flop, turn=turn, river=river)
