@@ -12,9 +12,10 @@ Visualize CNN filters for a trained model...
 deuce_bets_model = '../learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_bets_percent_overtrained_500k.pickle'
 deuce_draws_model = '../learning/deuce_triple_draw_conv_24_filter_xCards_xNumDraws_x0_53_percent_baseline_low_hands_good.pickle'
 holdem_values_model = '../learning/holdem_conv_24_filter_xCards_xNumDraws_x0_9831_percent_basline_800k.pickle'
+holdem_bets_model = '../learning/holdem_events_conv_24_filter_xCards_xCommunity_xContext_0.02_CNN_1_3_trained_on_CNN_1_2_700k.pickle'
 video_poker_model = '../poker-lib/archive/draw_poker_conv_0.10_learn_rate_10_epoch_adaptive_16_filters_valid_border_model-81-percent.pickle'
 
-fn = video_poker_model # holdem_values_model # deuce_draws_model # deuce_bets_model
+fn = holdem_bets_model # video_poker_model # holdem_values_model # deuce_draws_model # deuce_bets_model
 with open(fn,'rb') as fp:
 	data = pickle.load(fp)
 	print dir(data), type(data)
