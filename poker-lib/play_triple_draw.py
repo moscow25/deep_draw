@@ -649,10 +649,32 @@ class TripleDrawAIPlayer():
                     print('context %s' % ([cards_string, flop_string, turn_string, river_string, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
                 else:
                     print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
+
+            # TODO: Clean up this hack. Need "x_events" format for model loading.
+            format = 'deuce_events'
+            if FORMAT == 'holdem':
+                format = 'holdem_events'
             hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
                                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
-                                                         all_rounds_bets_string=all_rounds_bets_string)
+                                                         all_rounds_bets_string=all_rounds_bets_string, format=format)
             full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
+
+            ###########################
+            """
+            print(full_input)
+            print('fully concatenated input %s, shape %s' % (type(full_input), full_input.shape))
+            opt = np.get_printoptions()
+            np.set_printoptions(threshold='nan')
+
+            # Get all bits for input... excluding padding bits that go to 17x17
+            debug_input = full_input[:,6:10,2:15]
+            print(debug_input)
+            print(debug_input.shape)
+
+            # Return options to previous settings...
+            np.set_printoptions(**opt)
+            """
+            #############################
 
             # TODO: Rewrite with input and output layer... so that we can avoid putting all this data into Theano.shared()
             bets_vector = evaluate_single_event(bets_layer, full_input, input_layer = bets_input_layer)

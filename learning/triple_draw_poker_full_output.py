@@ -23,7 +23,7 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-TRAINING_FORMAT = 'deuce_events' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 
 DATA_FILENAME = None
 if TRAINING_FORMAT == 'deuce_events':
@@ -49,7 +49,7 @@ elif TRAINING_FORMAT == 'holdem':
 MAX_INPUT_SIZE = 550000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 50000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 20 # 50 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -164,6 +164,7 @@ def set_values_at_row_from_target(row_num, output_rows, target_rows):
     return T.set_subtensor(zeros_subtensor, average_row)
 
 # Can we at least use outside mask??
+INCREASE_VALUES_SUM_INVERSE = 2.0 # default 1.0 (1/3 or so)
 def value_action_error(output_matrix, target_matrix):
     # Compute a mask... which per-row takes 5 bits of values, if target matrix has values,
     # and the five (six) bits of draws if target matrix is all about draws. 
@@ -209,7 +210,7 @@ def value_action_error(output_matrix, target_matrix):
     # minimize this, to maximize average value!
     # Average value will be ~1/3.0 = 0.33 [since normal/worst value of a normal spot is all folds]
     # Further reduce this, if we want the network to learn it slowly, not change values, etc.
-    values_sum_inverse_vector = 1.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
+    values_sum_inverse_vector = INCREASE_VALUES_SUM_INVERSE * 1.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
 
     # sum of all probabilities...
     # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.

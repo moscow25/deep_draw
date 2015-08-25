@@ -298,7 +298,8 @@ def get_previous_round_string(all_round_string, current_round_bets_string = ''):
     current_action = -1
     current_string = ''
     all_rounds = []
-    #print (all_round_string)
+    #print('all rounds: %s' % all_round_string)
+    #print('curr round: %s' % current_round_bets_string)
     for i in range(len(all_round_string)):
         c = all_round_string[i]
         #print(c)
@@ -326,18 +327,29 @@ def get_previous_round_string(all_round_string, current_round_bets_string = ''):
     
     #print(all_rounds)
     previous_round = ''
+    round_before = ''
+    two_round_before = ''
     if current_round_bets_string:
         if len(all_rounds) > 1:
             previous_round = all_rounds[-2]
+        if len(all_rounds) > 2:
+            round_before = all_rounds[-3]
+        if len(all_rounds) > 3:
+            two_round_before = all_rounds[-4]
     else:
         # If current round string '' or missing, then take last element
         if len(all_rounds) > 0:
             previous_round = all_rounds[-1]
-    #print('Current round |%s| and previous round |%s|' % (current_round_bets_string, previous_round))
-    return previous_round
+        if len(all_rounds) > 1:
+            round_before = all_rounds[-2]
+        if len(all_rounds) > 2:
+            two_round_before = all_rounds[-3]
+    #print('Current round |%s| prev_round |%s| round_before |%s| two_round_before |%s|' % (current_round_bets_string, previous_round, round_before, two_round_before))
+    # Now, return all three (possible) previous rounds. Either just use "previous_round," or encode them all.
+    return (previous_round, round_before, two_round_before)
 
 # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
-def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0, opponent_cards_kept=0, pad_to_fit = PAD_INPUT, all_rounds_bets_string=None):
+def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0, opponent_cards_kept=0, pad_to_fit = PAD_INPUT, all_rounds_bets_string=None, format = 'deuce_events'):
 
     position_input = card_to_matrix_fill(position, pad_to_fit = pad_to_fit)
     pot_size_input = pot_to_array(pot_size, pad_to_fit = pad_to_fit) # saved to single "card"
@@ -347,17 +359,34 @@ def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0
     # If present...
     # NOTE: This will extend context array. Flag to enable it. And change all 26-length dependencies!
     #print('Attempting to dig up \'previous rounds bets\' from %s' % all_rounds_bets_string)
-    previous_round_bets_string = get_previous_round_string(all_rounds_bets_string, current_round_bets_string=bets_string)
+    (previous_round, round_before, two_round_before) = get_previous_round_string(all_rounds_bets_string, current_round_bets_string=bets_string)
+    previous_round_bets_string = previous_round
     #print('-->%s' % previous_round_bets_string)
     previous_bets_string_input = bets_string_to_array(previous_round_bets_string, pad_to_fit = pad_to_fit) # Also, 5 bits
 
-    # Put it all together...
-    # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
-    hand_context_input = np.array([position_input, pot_size_input, 
+    # NOTE: Use previous rounds... if requested.
+    round_before_string = round_before
+    round_before_string_input = bets_string_to_array(round_before_string, pad_to_fit = pad_to_fit) # Also, 5 bits
+    two_round_before_string = two_round_before
+    two_round_before_string_input = bets_string_to_array(two_round_before_string, pad_to_fit = pad_to_fit) # Also, 5 bits
+
+    if format == 'holdem_events':
+        # For holdem_events... swap out cards_kep, and swap in... previous rounds betting
+        # [xPosition, xPot, xBets [this street], ... , xPreviousBets]
+        # A bit confusing... but do pot and bets first, then previous round bets in the correct order [to get "prev_round" to match]
+        hand_context_input = np.array([position_input, pot_size_input, 
                                    bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
-                                   cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
-                                   opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4],
+                                   two_round_before_string_input[0], two_round_before_string_input[1], two_round_before_string_input[2], two_round_before_string_input[3], two_round_before_string_input[4],
+                                   round_before_string_input[0], round_before_string_input[1], round_before_string_input[2], round_before_string_input[3], round_before_string_input[4],
                                    previous_bets_string_input[0], previous_bets_string_input[1], previous_bets_string_input[2], previous_bets_string_input[3], previous_bets_string_input[4]], TRAINING_INPUT_TYPE)
+    elif format == 'deuce_events':
+        # Put it all together...
+        # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousBets]
+        hand_context_input = np.array([position_input, pot_size_input, 
+                                       bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
+                                       cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
+                                       opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4],
+                                       previous_bets_string_input[0], previous_bets_string_input[1], previous_bets_string_input[2], previous_bets_string_input[3], previous_bets_string_input[4]], TRAINING_INPUT_TYPE)
     return hand_context_input
 
 # Encode pot (0 to 3000 or so) into array... by faking a hand.
@@ -630,15 +659,29 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         #print('Context: %s' % [num_draws, position, pot_size, bets_string, cards_kept, opponent_cards_kept])
         hand_context_input = hand_input_from_context(position=position, pot_size=pot_size, bets_string=bets_string,
                                                      cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
-                                                     all_rounds_bets_string=all_rounds_bets_string)
+                                                     all_rounds_bets_string=all_rounds_bets_string, format=format)
 
         full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
     else:
         empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
         full_input = np.concatenate((cards_input, empty_bits_array), axis = 0)
 
-    #print(full_input)
-    #print('fully concatenated input %s, shape %s' % (type(full_input), full_input.shape))
+    ###########################
+    """
+    print(full_input)
+    print('fully concatenated input %s, shape %s' % (type(full_input), full_input.shape))
+    opt = np.get_printoptions()
+    np.set_printoptions(threshold='nan')
+
+    # Get all bits for input... excluding padding bits that go to 17x17
+    debug_input = full_input[:,6:10,2:15]
+    print(debug_input)
+    print(debug_input.shape)
+
+    # Return options to previous settings...
+    np.set_printoptions(**opt)
+    """
+    #############################
 
     # Look up the action taken with this event. If it's unknown or not appropriate, skip.
     action_name = data_array[csv_key_map['action']]
