@@ -58,7 +58,7 @@ models and final hand evaluations, to accomodate any other draw game.
 # TODO: Do this from command line... but then need to ensure that all done correctly.
 # Better yet, outside global constants class (modified from command line, etc)
 # [default format is 'deuce']
-FORMAT = 'deuce' # 'holdem' # 'deuce'
+FORMAT = 'holdem' # 'deuce'
 
 # Build up a CSV, of all information we might want for CNN training
 # TODO: Replace with more logical header for 'Holdem', and other games...
@@ -107,7 +107,12 @@ USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage..
 # Disable action% for holdem... until it's ready.
 #if FORMAT == 'holdem':
 #    USE_ACTION_PERCENTAGE = False 
-ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
+if FORMAT == 'deuce':
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
+elif FORMAT == 'holdem':
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.7 # 0.5 
+else:
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.0
 
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
 SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
