@@ -825,7 +825,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                 #print('We bet, when could have checked behind')
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
             else:
-                if format == 'deuce_events' and RIVER_RAISES_ARE_IMPORTANT:
+                if RIVER_RAISES_ARE_IMPORTANT:
                     #print('including river raise as significant action for training')
                     important_training_case = True
                 #print('We raised, when could have called')
@@ -845,7 +845,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
             #else:
                 #print('since we bet out and could have checked, no counter-factual information')
         elif output_category == CALL_CATEGORY:
-            if format == 'deuce_events' and RIVER_CALLS_ARE_IMPORTANT:
+            if RIVER_CALLS_ARE_IMPORTANT:
                 #print('including river call as significant action for training')
                 important_training_case = True
         #else:
