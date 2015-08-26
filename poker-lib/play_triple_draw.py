@@ -110,7 +110,7 @@ USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage..
 if FORMAT == 'deuce':
     ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 elif FORMAT == 'holdem':
-    ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.3 # 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with no explore
 else:
     ACTION_PERCENTAGE_CHOICE_RATE = 0.0
 
@@ -692,12 +692,12 @@ class TripleDrawAIPlayer():
             # If we can't fold... we should favor checking in these spots. Why bet, if betting has a known negative value?
             if len(value_predictions) == 2 and (CHECK_HAND in actions) and not (FOLD_HAND in actions):
                 #print('Only bet and check options. Boost check, if both are negative...')
-                if value_predictions[0][0] < 0 and value_predictions[1][0] < 0:
+                if value_predictions[0][0] < 0.025 and value_predictions[1][0] < 0.025:
                     #print('Yep, both negative.')
                     for prediction in value_predictions:
                         action = prediction[1]
                         if action == CHECK_HAND:
-                            noise = abs(prediction[0]) / 2.0
+                            noise = abs(prediction[0]) * 0.66666
                             #print('boost negative check value by %.3f' % noise)
                             prediction[0] += noise
             value_predictions.sort(reverse=True)
