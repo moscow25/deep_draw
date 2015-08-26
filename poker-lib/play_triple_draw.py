@@ -661,7 +661,7 @@ class TripleDrawAIPlayer():
 
             ###########################
             """
-            print(full_input)
+            #print(full_input)
             print('fully concatenated input %s, shape %s' % (type(full_input), full_input.shape))
             opt = np.get_printoptions()
             np.set_printoptions(threshold='nan')

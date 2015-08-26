@@ -60,13 +60,6 @@ else:
 
 DATA_URL = '' # 'http://deeplearning.net/data/mnist/mnist.pkl.gz'
 DATA_FILENAME = '../data/250k_full_sim_combined.csv' # full dataset, with preference to better data (more samples per point)
-#'../data/100k-super_sim_full_vector.csv' # more data, still 5k samples per point; see if improvement on more inexact data?  
-#'../data/40k-super_sim_full_vector.csv' # smaller data set, 5k samples per hand point 
-#'../data/300k_full_sim_samples.csv' # big data set, 1k samples per generated hand point
-# '../data/100k_full_sim_samples.csv' # '../data/20000_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' #'../data/40000_full_sim_samples.csv'
-# Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
-# '../data/20000_full_sim_samples.csv'
-
 # Default, if not specified elsewhere...
 MAX_INPUT_SIZE = 250000 #100000 # 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
@@ -115,7 +108,7 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.8 # 0.5 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.5 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 
 # Are the some cases that are important, and should always be selected?
 LOW_STRAIGHTS_ARE_IMPORTANT = True
@@ -805,7 +798,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         
         if action_taken == FOLD_HAND:
             # 0.5 result == may indicate default value. Until/unless fixed, ignore it.
-            if csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5 and format == 'deuce_events':
+            if csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5:
                 # print('--> consider counter-factual of call instead of FOLD')
                 call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
                 if call_result == 0.0:
@@ -841,7 +834,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                     check_call_result = -1.0 * BIG_BET_SIZE
             # Again, skip 0.5 win result, as this may be a data error. 
             #print('we would win %.1f by check/calling... ' % check_call_result)
-            if csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5 and check_call_result >= 0.0 and format == 'deuce_events':
+            if csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5 and check_call_result >= 0.0:
                 check_call_margin_value = adjust_float_value(check_call_result, mode=format)
                 if output_category == BET_CATEGORY:
                     output_array[CHECK_CATEGORY] = check_call_margin_value

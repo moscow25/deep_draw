@@ -24,6 +24,8 @@ First, need new data import functins.
 """
 
 TRAINING_FORMAT = 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
+# fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
+USE_FAT_MODEL = False # True
 
 DATA_FILENAME = None
 if TRAINING_FORMAT == 'deuce_events':
@@ -31,7 +33,9 @@ if TRAINING_FORMAT == 'deuce_events':
 elif TRAINING_FORMAT == 'holdem_events':
     DATA_FILENAME = '../data/holdem/100k_CNN_holdem_hands.csv' # 'holdem_events' trained on actually CNN hands (at least some poker ability)
 elif TRAINING_FORMAT == 'holdem':
-     DATA_FILENAME = '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
+    DATA_FILENAME = '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
+elif TRAINING_FORMAT == 'deuce':
+    DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values for 'deuce' (draws)
 #'../data/holdem/holdem_sim_examples_50k.csv' # 'holdem_events' Small-ish dataset of simulated Hold'em hands (heuristic stochastic model). Bets in various context, ad results.
 # '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
 # '../data/holdem/100k_holdem_values.csv' # 'holdem' 100k holdem hand values. Cards, possible flop, turn and river. Odds vs random hand, and odds to make hand categories.
@@ -46,10 +50,10 @@ elif TRAINING_FORMAT == 'holdem':
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 550000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 50000
+MAX_INPUT_SIZE = 55000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 20 # 50 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -60,6 +64,9 @@ MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
 ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
+if USE_FAT_MODEL:
+    NUM_FILTERS /= 2
+    LEARNING_RATE *= 5
 
 # Here, we get into growing input information, beyond the 5-card hand.
 INCLUDE_NUM_DRAWS = True # 3 "cards" to encode number of draws left. ex. 2 draws: [0], [1], [1]
@@ -322,6 +329,95 @@ def load_data():
         #input_dim=X_train.shape[1] * X_train.shape[2] * X_train.shape[3], # How much size per input?? 5x4x13 data (cards, suits, ranks)
         output_dim=32, # output cases
     )
+
+# Alternatively, but model with 5x5 filter on the bottom. Better visualization(?)
+def build_fat_model(input_width, input_height, output_dim,
+                    batch_size=BATCH_SIZE, input_var = None):
+    print('building fat model, layer by layer...')
+    num_input_cards = FULL_INPUT_LENGTH
+
+    # Track all layers created, and return the full stack
+    layers = []
+    l_in = lasagne.layers.InputLayer(
+        shape=(batch_size, num_input_cards, input_height, input_width),
+        input_var = input_var,
+        )
+    layers.append(l_in)
+    print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
+    l_conv1 = lasagne.layers.Conv2DLayer(
+        l_in,
+        num_filters=NUM_FILTERS,
+        filter_size=(5,5),
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv1)
+    print('convolution layer l_conv1. Shape %s' % str(l_conv1.output_shape))
+    l_conv1_1 = lasagne.layers.Conv2DLayer(
+        l_conv1,
+        num_filters=NUM_FILTERS,
+        filter_size=(3,3),
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv1_1)
+    print('convolution layer l_conv1_1. Shape %s' % str(l_conv1_1.output_shape))
+
+    l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_1, pool_size=(2, 2), ignore_border=False)
+    layers.append(l_pool1)
+    print('maxPool layer l_pool1. Shape %s' % str(l_pool1.output_shape))
+
+    l_conv2 = lasagne.layers.Conv2DLayer(
+        l_pool1,
+        num_filters=NUM_FILTERS*2, 
+        filter_size=(3,3),
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv2)
+    print('convolution layer l_conv2. Shape %s' % str(l_conv2.output_shape))
+
+    # Add 4th convolution layer...
+    l_conv2_2 = lasagne.layers.Conv2DLayer(
+        l_conv2,
+        num_filters=NUM_FILTERS*2,
+        filter_size=(3,3),
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv2_2)
+    print('convolution layer l_conv2_2. Shape %s' % str(l_conv2_2.output_shape))
+
+    # OK now skip second max-pool.
+
+    l_hidden1 = lasagne.layers.DenseLayer(
+        l_conv2_2, #l_pool2,
+        num_units=NUM_HIDDEN_UNITS,
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_hidden1)
+
+    print('hidden layer l_hidden1. Shape %s' % str(l_hidden1.output_shape))
+
+    l_hidden1_dropout = lasagne.layers.DropoutLayer(l_hidden1, p=0.5)
+    layers.append(l_hidden1_dropout)
+
+    print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.output_shape))
+
+    l_out = lasagne.layers.DenseLayer(
+        l_hidden1_dropout,
+        num_units=output_dim,
+        nonlinearity=lasagne.nonlinearities.rectify, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_out)
+
+    print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.output_shape)))
+    print('produced network of %d layers. TODO: name \'em!' % len(layers))
+
+    # Don't really need l_out... but easy to access that way
+    return (l_out, l_in, layers)
 
 # Need to explicitly pass input_var... if we want to feed input into the network, without putting that input into "shared"
 def build_model(input_width, input_height, output_dim,
@@ -797,12 +893,20 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
     # Pass this reference, to compute theano graph
     input_var = T.tensor4('inputs')
-    output_layer, input_layer, layers = build_model(
-        input_height=dataset['input_height'],
-        input_width=dataset['input_width'],
-        output_dim=dataset['output_dim'],
-        input_var = input_var,
-        )
+    if USE_FAT_MODEL:
+        output_layer, input_layer, layers = build_fat_model(
+            input_height=dataset['input_height'],
+            input_width=dataset['input_width'],
+            output_dim=dataset['output_dim'],
+            input_var = input_var,
+            )
+    else:
+        output_layer, input_layer, layers = build_model(
+            input_height=dataset['input_height'],
+            input_width=dataset['input_width'],
+            output_dim=dataset['output_dim'],
+            input_var = input_var,
+            )
 
     # Optionally, load in previous model parameters, from pickle!
     # NOTE: Network shape must match *exactly*
