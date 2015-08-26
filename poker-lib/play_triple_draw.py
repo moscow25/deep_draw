@@ -110,7 +110,7 @@ USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage..
 if FORMAT == 'deuce':
     ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 elif FORMAT == 'holdem':
-    ACTION_PERCENTAGE_CHOICE_RATE = 0.7 # 0.5 
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7
 else:
     ACTION_PERCENTAGE_CHOICE_RATE = 0.0
 
@@ -687,6 +687,19 @@ class TripleDrawAIPlayer():
                 print('acts\t%s' % ([val for val in bets_vector[5:10]]))
                 print('drws\t%s' % ([(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]))
             value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
+            # Special case: if we can bet or check... and both values are negative... then boost the check.
+            # Not uncommon, especially early in game training, to have negative expectation for all actions. 
+            # If we can't fold... we should favor checking in these spots. Why bet, if betting has a known negative value?
+            if len(value_predictions) == 2 and (CHECK_HAND in actions) and not (FOLD_HAND in actions):
+                #print('Only bet and check options. Boost check, if both are negative...')
+                if value_predictions[0][0] < 0 and value_predictions[1][0] < 0:
+                    #print('Yep, both negative.')
+                    for prediction in value_predictions:
+                        action = prediction[1]
+                        if action == CHECK_HAND:
+                            noise = abs(prediction[0]) / 2.0
+                            #print('boost negative check value by %.3f' % noise)
+                            prediction[0] += noise
             value_predictions.sort(reverse=True)
 
             # Same for action%
