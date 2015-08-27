@@ -108,13 +108,16 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.5 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 
 # Are the some cases that are important, and should always be selected?
 LOW_STRAIGHTS_ARE_IMPORTANT = True
 PAT_DRAWS_ARE_IMPORTANT = True
 RIVER_CALLS_ARE_IMPORTANT = True
 RIVER_RAISES_ARE_IMPORTANT = True
+
+# For HE, boost other cases also
+HOLDEM_TWO_PAIR_ARE_IMPORTANT = True # 'big hands,' whether that be big board w/o private cards, or hand that helps
 
 # Use this to train only on results of intelligent players, if different versions available
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'CNN_76_per', 'man']) # learn only from better models, or man's actions
@@ -694,6 +697,46 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
             important_training_case = True
             #print('found a straight or flush in the hand!')
             #print(data_array)
+    elif format == 'holdem_events' and HOLDEM_TWO_PAIR_ARE_IMPORTANT and data_array[csv_key_map['best_draw']]:
+        # Similarly for HE, give special attention to board where we have 2p+.
+        # 
+        # A. Some cases with very strong board, which we do or don't improve
+        # B. How to be a very strong hand? Slowplay sometimes. 
+        # Currently, both leave something to be desired. For example, CNN sees any flush as lock... not true. 
+        # Will also call with Q-hi on two pair board every time. Maybe not good. 
+        # Lastly, we need better sample for value of big hand where we might want to slowplay. Trips, etc.
+        
+        # Hack for flop, and turn/river. Need to deconstruct...
+        # TODO: Should be a function!
+        cards_string = data_array[csv_key_map['hand']]
+        flop_string = data_array[csv_key_map['best_draw']]
+        turn_river_string = data_array[csv_key_map['hand_after']]
+        turn_river_array = hand_string_to_array(turn_river_string) # array of card strings...
+        if not turn_river_array:
+            turn_string = ''
+            river_string = ''
+        elif len(turn_river_array) == 1:
+            turn_string = turn_river_string
+            river_string = ''
+        elif len(turn_river_array) == 2:
+            turn_string = turn_river_array[0]
+            river_string = turn_river_array[1]
+
+        # Turn cards strings inta arrays of cards.
+        cards_array = [card_from_string(card_str) for card_str in hand_string_to_array(cards_string)]
+        flop_array = [card_from_string(card_str) for card_str in hand_string_to_array(flop_string)]
+        turn_array = [card_from_string(card_str) for card_str in hand_string_to_array(turn_string)]
+        river_array = [card_from_string(card_str) for card_str in hand_string_to_array(river_string)]
+    
+        # Verify that the hand is legit
+        community = HoldemCommunityHand(flop = flop_array, turn = turn_array, river = river_array)
+        hand = HoldemHand(cards = cards_array, community = community)
+
+        # See if hand qualifies for "good hand" boost.
+        hand.evaluate()
+        if hand.category in set([TWO_PAIR, THREE_OF_A_KIND, STRAIGHT, FLUSH, FULL_HOUSE, FOUR_OF_A_KIND, ROYAL_FLUSH]):
+            #print('Hand big enough to be important! %s' % hand)
+            important_training_case = True
 
     # We can handle bets (bet, raise, check, call fold) and draws (how many?).
     # Other valid action (posting blinds, etc) don't do much for us.

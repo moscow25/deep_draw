@@ -110,7 +110,7 @@ USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage..
 if FORMAT == 'deuce':
     ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 elif FORMAT == 'holdem':
-    ACTION_PERCENTAGE_CHOICE_RATE = 0.3 # 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with no explore
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with not enough explore
 else:
     ACTION_PERCENTAGE_CHOICE_RATE = 0.0
 

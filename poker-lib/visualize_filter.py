@@ -18,9 +18,9 @@ video_poker_model = '../poker-lib/archive/draw_poker_conv_0.10_learn_rate_10_epo
 # experimental
 holdem_values_5_5_maxpool_model = '../learning/holdem_conv_12_filter_fat_x0_9354_50k.pickle' # 5x5 filter, 4-layer network (also one maxPool)
 #holdem_values_5_5_shallow_model = '../learning/holdem_conv_0.10_learn_rate_20_epoch_adaptive_12_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle' # 5x5, 3-layer network with no maxpool
-deuce_values_5_5_maxpool_model = '../learning/deucetriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_12_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle' # 5x5 filter, 4-layer network (also one maxPool)
+deuce_values_5_5_maxpool_model = '../learning/deuce_conv_12_filter_fat_x0_5398_50k.pickle' # 5x5 filter, 4-layer network (also one maxPool)
 
-fn = deuce_values_5_5_maxpool_model # holdem_values_5_5_maxpool_model # holdem_values_model # deuce_draws_model # deuce_bets_model
+fn = holdem_bets_model # deuce_values_5_5_maxpool_model # holdem_values_5_5_maxpool_model # holdem_values_model # deuce_draws_model # deuce_bets_model
 with open(fn,'rb') as fp:
 	data = pickle.load(fp)
 	print dir(data), type(data)

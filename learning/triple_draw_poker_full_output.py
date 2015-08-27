@@ -50,10 +50,10 @@ elif TRAINING_FORMAT == 'deuce':
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 55000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+MAX_INPUT_SIZE = 95000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 5000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 20 # 50 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -156,7 +156,7 @@ def set_mask_at_row_from_target(row_num, output_matrix, target_matrix):
 
 # For row with output value and (sparse) matrix values, combine (output) + X (real value) [X is a learning rate]
 # NOTE: Would be better to connect this to true RL, and then can increase observation significantly.
-TARGET_ACTION_LEARNING_RATE = 0.05 # 0.1 # 0.05
+TARGET_ACTION_LEARNING_RATE = 0.1 # 0.05
 def set_values_at_row_from_target(row_num, output_rows, target_rows):
     zeros = T.zeros_like(target_rows)
     zeros_subtensor = zeros[row_num[0],:] # row in 2D matrix
@@ -171,7 +171,7 @@ def set_values_at_row_from_target(row_num, output_rows, target_rows):
     return T.set_subtensor(zeros_subtensor, average_row)
 
 # Can we at least use outside mask??
-INCREASE_VALUES_SUM_INVERSE = 2.0 # default 1.0 (1/3 or so)
+INCREASE_VALUES_SUM_INVERSE = 1.0 # default 1.0 (1/3 or so)
 def value_action_error(output_matrix, target_matrix):
     # Compute a mask... which per-row takes 5 bits of values, if target matrix has values,
     # and the five (six) bits of draws if target matrix is all about draws. 
