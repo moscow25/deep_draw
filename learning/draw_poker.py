@@ -108,16 +108,20 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.2 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+IMPORTANT_CASES_SAMPLE_RATE = min(3.0 * SAMPLE_RATE_DEUCE_EVENTS, 1.0)
 
 # Are the some cases that are important, and should always be selected?
 LOW_STRAIGHTS_ARE_IMPORTANT = True
 PAT_DRAWS_ARE_IMPORTANT = True
-RIVER_CALLS_ARE_IMPORTANT = True
-RIVER_RAISES_ARE_IMPORTANT = True
+
+# Betting decisions. Train on these... but don't over-train. Be careful.
+RIVER_CALLS_ARE_IMPORTANT = False
+RIVER_RAISES_ARE_IMPORTANT = False
 
 # For HE, boost other cases also
 HOLDEM_TWO_PAIR_ARE_IMPORTANT = True # 'big hands,' whether that be big board w/o private cards, or hand that helps
+HOLDEM_RIVER_PLAY_BOARD_ARE_IMPORTANT = True # same category as the "board" cards (could be Ace-high though)
 
 # Use this to train only on results of intelligent players, if different versions available
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'CNN_76_per', 'man']) # learn only from better models, or man's actions
@@ -697,7 +701,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
             important_training_case = True
             #print('found a straight or flush in the hand!')
             #print(data_array)
-    elif format == 'holdem_events' and HOLDEM_TWO_PAIR_ARE_IMPORTANT and data_array[csv_key_map['best_draw']]:
+    elif format == 'holdem_events' and data_array[csv_key_map['best_draw']]:
         # Similarly for HE, give special attention to board where we have 2p+.
         # 
         # A. Some cases with very strong board, which we do or don't improve
@@ -734,9 +738,20 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
 
         # See if hand qualifies for "good hand" boost.
         hand.evaluate()
-        if hand.category in set([TWO_PAIR, THREE_OF_A_KIND, STRAIGHT, FLUSH, FULL_HOUSE, FOUR_OF_A_KIND, ROYAL_FLUSH]):
+        if HOLDEM_TWO_PAIR_ARE_IMPORTANT and hand.category in set([TWO_PAIR, THREE_OF_A_KIND, STRAIGHT, FLUSH, FULL_HOUSE, FOUR_OF_A_KIND, ROYAL_FLUSH]):
             #print('Hand big enough to be important! %s' % hand)
             important_training_case = True
+
+        # Another boost is for calling on the river without changing the category (A-hi, J-hi, etc)
+        if HOLDEM_RIVER_PLAY_BOARD_ARE_IMPORTANT and len(community.river) > 0:
+            play_board_rank = hand_rank_five_card(community.cards())
+            play_board_category = hand_category(play_board_rank)
+
+            # Not really playing the board... but same category. Ace-hi can be the nuts sometimes. 
+            if play_board_category == hand.category:
+                #print(data_array)
+                #print('playing the board on the river. This is important')
+                important_training_case = True
 
     # We can handle bets (bet, raise, check, call fold) and draws (how many?).
     # Other valid action (posting blinds, etc) don't do much for us.
@@ -1057,10 +1072,11 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # TODO: Control this by flag, or pre-compute data before choosing sample policy
                     # TODO: Sample differently by "sim", "man", "cnn" actors...
                     sample_rate = SAMPLE_RATE_DEUCE_EVENTS
+                    important_cases_sample_rate = max(sample_rate, IMPORTANT_CASES_SAMPLE_RATE)
                     if not important_training_case and random.random() > sample_rate:
                         #print('\nskipping form sample %s\n' % sample_rate)
                         continue
-                    elif important_training_case:
+                    elif important_training_case and random.random() <= important_cases_sample_rate:
                         important_training_cases += 1
 
                 # We can also add output "mask" for which of the "output_array" values matter.
