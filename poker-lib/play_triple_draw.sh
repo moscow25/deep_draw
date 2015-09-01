@@ -21,9 +21,9 @@ DRAW_MODEL="$DEEP_DRAW_PATH/learning/deuce_triple_draw_conv_24_filter_xCards_xNu
 #OTHER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_6_draws_model_300k.pickle"
 
 # Three similar versions of model with disconnecte gradient actions. A bit passive, and pays off river too much. But plays good, and snows sometimes.
-LATEST_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_action_percentage_700k.pickle"
-OLDER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_bets_percent_overtrained_500k.pickle"
-OTHER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_pat_river_500k.pickle"
+LATEST_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_action_percentage_700k.pickle" # Too passive. 
+OLDER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_bets_percent_overtrained_500k.pickle" # Folds too much (overtrained)
+OTHER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_pat_river_500k.pickle" # Not too good. Too aggro, and misses subtlety. But we want it... to increase random betting.
 
 #LATEST_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_pat_river_500k.pickle"
 #OLDER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_disconnect_grad_bet_percent_full_run_500k.pickle"

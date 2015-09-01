@@ -367,6 +367,21 @@ def card_from_string(card_str):
     except KeyError:
         raise KeyError('Invalid card_str! |%s|' % card_str)
 
+# card array from long string (no comma or [])
+def card_array_from_string(card_str):
+    #print card_str
+    if not card_str:
+        return []
+    assert len(card_str) % 2 == 0, 'Invalid card string! |%s|' % card_str
+    try:
+        card_array = []
+        for i in range(len(card_str)/2):
+            card_array.append(card_from_string(card_str[2*i:2*i+2]))
+        return card_array
+    except KeyError:
+        raise KeyError('Invalid card string! |%s|' % card_str)
+
+
 # Return array of equivalent hands (same order, different suits)
 # NOTE: array of cards, not strings.
 def hand_suit_scrambles(hand_array):

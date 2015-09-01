@@ -22,10 +22,10 @@ Anything that's a util, not based on Card or Deck class... belongs in poker_util
 # Values for Hold'em games.
 
 # "Rounds" in the game, equivalent to 3,2,1 draws left, similar to draw games.
-PREFLOP_ROUND = 1
-FLOP_ROUND = 2
-TURN_ROUND = 3
-RIVER_ROUND = 4
+PREFLOP_ROUND = 1 # PRE_DRAW_BET_ROUND
+FLOP_ROUND = 2 # DRAW_1_BET_ROUND
+TURN_ROUND = 3 # DRAW_2_BET_ROUND
+RIVER_ROUND = 4 # DRAW_3_BET_ROUND
 holdemRoundsLeft = {PREFLOP_ROUND:3, FLOP_ROUND: 2, TURN_ROUND: 1, RIVER_ROUND:0}
 HOLDEM_ROUNDS_SET = set([PREFLOP_ROUND, FLOP_ROUND, TURN_ROUND, RIVER_ROUND])
 
