@@ -25,8 +25,8 @@ First, need new data import functins.
 
 TRAINING_FORMAT = 'video' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
-USE_FAT_MODEL = True # False # True
-USE_FULLY_CONNECTED_MODEL = True # False
+USE_FAT_MODEL = False # True # False # True
+USE_FULLY_CONNECTED_MODEL = False # True # False
 
 DATA_FILENAME = None
 if TRAINING_FORMAT == 'deuce_events':
@@ -53,8 +53,8 @@ elif TRAINING_FORMAT == 'video':
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 210000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 10000
+MAX_INPUT_SIZE = 220000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 20000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 200 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
