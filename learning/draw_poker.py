@@ -86,6 +86,13 @@ NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape.
 PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
 CONTEXT_LENGTH = 2 + 5 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBetting]
 FULL_INPUT_LENGTH = 5 + 1 + 3 + CONTEXT_LENGTH
+
+#######################
+## HACK for 'video' ###
+CONTEXT_LENGTH = 0
+FULL_INPUT_LENGTH = 5 + CONTEXT_LENGTH
+#######################
+
 CONTEXT_ALL_ZERO = False # True # Set true, to map "xPos, xPot, ..." to x0 of same length. Useful for getting baseline for hands, values first
 CARDS_INPUT_ALL_ZERO = False # True # Set true, to map xCards to x0. Why? To train a decision baseline that has to focus on betting & pot odds for a minute.
 
@@ -507,13 +514,18 @@ def sample_rate_for_hold_value(hold_value):
 # if output_best_class==TRUE, instead outputs index 0-32 of the best value (for softmax category output)
 # Why? A. Easier to train B. Can re-use MNIST setup.
 def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_draws = False, include_full_hand = False, include_hand_context = False):
+    #print(data_array)
     # array of equivalent inputs (if we choose to create more data by permuting suits)
     # NOTE: Usually... we don't do that.
     # NOTE: We can also, optionally, expand input to include other data, like number of draws made.
     # It might be more proper to append this... but logically, easier to place in the original np.array
-    cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
-                                            include_num_draws=include_num_draws, num_draws=data_array[csv_key_map['draws_left']], 
-                                            include_full_hand = include_full_hand, include_hand_context = include_hand_context)
+    if adjust_floats == 'video':
+        cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
+                                                include_num_draws=False, include_full_hand = False, include_hand_context = False)
+    else:
+        cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
+                                                include_num_draws=include_num_draws, num_draws=data_array[csv_key_map['draws_left']], 
+                                                include_full_hand = include_full_hand, include_hand_context = include_hand_context)
 
     #print(cards_inputs[0])
     #print((cards_inputs[0]).shape)

@@ -23,9 +23,9 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-TRAINING_FORMAT = 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'video' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
-USE_FAT_MODEL = False # True
+USE_FAT_MODEL = True # False # True
 
 DATA_FILENAME = None
 if TRAINING_FORMAT == 'deuce_events':
@@ -36,6 +36,8 @@ elif TRAINING_FORMAT == 'holdem':
     DATA_FILENAME = '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
 elif TRAINING_FORMAT == 'deuce':
     DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values for 'deuce' (draws)
+elif TRAINING_FORMAT == 'video':
+    DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
 #'../data/holdem/holdem_sim_examples_50k.csv' # 'holdem_events' Small-ish dataset of simulated Hold'em hands (heuristic stochastic model). Bets in various context, ad results.
 # '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
 # '../data/holdem/100k_holdem_values.csv' # 'holdem' 100k holdem hand values. Cards, possible flop, turn and river. Odds vs random hand, and odds to make hand categories.
@@ -50,10 +52,10 @@ elif TRAINING_FORMAT == 'deuce':
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 95000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 5000
+MAX_INPUT_SIZE = 210000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 10000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 200 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -66,7 +68,7 @@ ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
 ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
 if USE_FAT_MODEL:
     NUM_FILTERS /= 2
-    LEARNING_RATE *= 5
+    LEARNING_RATE = 0.1 # *= 5
 
 # Here, we get into growing input information, beyond the 5-card hand.
 INCLUDE_NUM_DRAWS = True # 3 "cards" to encode number of draws left. ex. 2 draws: [0], [1], [1]
@@ -74,6 +76,13 @@ INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a sin
 
 CONTEXT_LENGTH = 2 + 5 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBetting]
 FULL_INPUT_LENGTH = 5 + 1 + 3 + CONTEXT_LENGTH
+
+#######################
+## HACK for 'video' ###
+if TRAINING_FORMAT == 'video':
+    LEARNING_RATE = 0.1
+    CONTEXT_LENGTH = 0
+    FULL_INPUT_LENGTH = 5 + CONTEXT_LENGTH
 
 # Do we use linear loss? Why? If cases uncertain or small sample, might be better to approximate the average...
 LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True # False # True
@@ -245,7 +254,7 @@ def load_data():
     print('About to load up to %d items of data, for training format %s' % (MAX_INPUT_SIZE, TRAINING_FORMAT))
     # Do *not* bias the data, or smooth out big weight values, as we would for video poker.
     # 'deuce' has its own adjustments...
-    data = _load_poker_csv(filename=DATA_FILENAME, max_input = MAX_INPUT_SIZE, keep_all_data=True, format=TRAINING_FORMAT, include_num_draws = INCLUDE_NUM_DRAWS, include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT)
+    data = _load_poker_csv(filename=DATA_FILENAME, max_input = MAX_INPUT_SIZE, keep_all_data=(TRAINING_FORMAT != 'video'), format=TRAINING_FORMAT, include_num_draws = INCLUDE_NUM_DRAWS, include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT)
 
     # num_hands = total loaded, X = input, y = best cateogy, z = all categories, m = mask on all categories (if applicable)
     num_hands, X_all, y_all, z_all, m_all = data
@@ -1004,7 +1013,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     # Test_batch... 5 cards, no 3-card "round" encoding.
     # test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
     if TRAINING_FORMAT == 'video' or TRAINING_FORMAT == 'deuce':
-        test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
+        test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=(INCLUDE_NUM_DRAWS and TRAINING_FORMAT != 'video'), num_draws=case[1], include_full_hand = (INCLUDE_FULL_HAND and TRAINING_FORMAT != 'video'), include_hand_context = (INCLUDE_HAND_CONTEXT and TRAINING_FORMAT != 'video')) for case in test_cases], np.int32)
     elif TRAINING_FORMAT == 'deuce_events':
         # TODO:  Add context, if made available...
         test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
