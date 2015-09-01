@@ -26,6 +26,7 @@ First, need new data import functins.
 TRAINING_FORMAT = 'video' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
 USE_FAT_MODEL = True # False # True
+USE_FULLY_CONNECTED_MODEL = True # False
 
 DATA_FILENAME = None
 if TRAINING_FORMAT == 'deuce_events':
@@ -66,7 +67,7 @@ MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
 ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
-if USE_FAT_MODEL:
+if USE_FAT_MODEL or USE_FULLY_CONNECTED_MODEL:
     NUM_FILTERS /= 2
     LEARNING_RATE = 0.1 # *= 5
 
@@ -338,6 +339,57 @@ def load_data():
         #input_dim=X_train.shape[1] * X_train.shape[2] * X_train.shape[3], # How much size per input?? 5x4x13 data (cards, suits, ranks)
         output_dim=32, # output cases
     )
+
+# Alternatively, compare to same input... but two fully connected layers
+def build_fully_connected_model(input_width, input_height, output_dim,
+                                batch_size=BATCH_SIZE, input_var = None):
+    print('building fat model, layer by layer...')
+    num_input_cards = FULL_INPUT_LENGTH
+
+    # Track all layers created, and return the full stack
+    layers = []
+    l_in = lasagne.layers.InputLayer(
+        shape=(batch_size, num_input_cards, input_height, input_width),
+        input_var = input_var,
+        )
+    layers.append(l_in)
+    print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
+
+    l_hidden0 = lasagne.layers.DenseLayer(
+        l_in, # l_conv2_2, #l_pool2,
+        num_units=NUM_HIDDEN_UNITS, # NUM_HIDDEN_UNITS/2,
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_hidden0)
+    print('hidden layer l_hidden0. Shape %s' % str(l_hidden0.output_shape))
+
+    l_hidden1 = lasagne.layers.DenseLayer(
+        l_hidden0, # l_conv2_2, #l_pool2,
+        num_units=NUM_HIDDEN_UNITS,
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_hidden1)
+    print('hidden layer l_hidden1. Shape %s' % str(l_hidden1.output_shape))
+
+    l_hidden1_dropout = lasagne.layers.DropoutLayer(l_hidden1, p=0.5)
+    layers.append(l_hidden1_dropout)
+    print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.output_shape))
+
+    l_out = lasagne.layers.DenseLayer(
+        l_hidden1_dropout,
+        num_units=output_dim,
+        nonlinearity=lasagne.nonlinearities.rectify, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_out)
+
+    print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.output_shape)))
+    print('produced network of %d layers. TODO: name \'em!' % len(layers))
+
+    # Don't really need l_out... but easy to access that way
+    return (l_out, l_in, layers)
 
 # Alternatively, but model with 5x5 filter on the bottom. Better visualization(?)
 def build_fat_model(input_width, input_height, output_dim,
@@ -902,7 +954,14 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
     # Pass this reference, to compute theano graph
     input_var = T.tensor4('inputs')
-    if USE_FAT_MODEL:
+    if USE_FULLY_CONNECTED_MODEL:
+        output_layer, input_layer, layers = build_fully_connected_model(
+            input_height=dataset['input_height'],
+            input_width=dataset['input_width'],
+            output_dim=dataset['output_dim'],
+            input_var = input_var,
+            )
+    elif USE_FAT_MODEL:
         output_layer, input_layer, layers = build_fat_model(
             input_height=dataset['input_height'],
             input_width=dataset['input_width'],
