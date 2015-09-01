@@ -60,13 +60,6 @@ else:
 
 DATA_URL = '' # 'http://deeplearning.net/data/mnist/mnist.pkl.gz'
 DATA_FILENAME = '../data/250k_full_sim_combined.csv' # full dataset, with preference to better data (more samples per point)
-#'../data/100k-super_sim_full_vector.csv' # more data, still 5k samples per point; see if improvement on more inexact data?  
-#'../data/40k-super_sim_full_vector.csv' # smaller data set, 5k samples per hand point 
-#'../data/300k_full_sim_samples.csv' # big data set, 1k samples per generated hand point
-# '../data/100k_full_sim_samples.csv' # '../data/20000_full_sim_samples.csv' # '../data/100k_full_sim_samples.csv' #'../data/40000_full_sim_samples.csv'
-# Not too much accuracy gain... in doubling the training data. And more than 2x as slow.
-# '../data/20000_full_sim_samples.csv'
-
 # Default, if not specified elsewhere...
 MAX_INPUT_SIZE = 250000 #100000 # 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
@@ -115,13 +108,20 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.5 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.2 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+IMPORTANT_CASES_SAMPLE_RATE = min(3.0 * SAMPLE_RATE_DEUCE_EVENTS, 1.0)
 
 # Are the some cases that are important, and should always be selected?
 LOW_STRAIGHTS_ARE_IMPORTANT = True
 PAT_DRAWS_ARE_IMPORTANT = True
-RIVER_CALLS_ARE_IMPORTANT = True
-RIVER_RAISES_ARE_IMPORTANT = True
+
+# Betting decisions. Train on these... but don't over-train. Be careful.
+RIVER_CALLS_ARE_IMPORTANT = False
+RIVER_RAISES_ARE_IMPORTANT = False
+
+# For HE, boost other cases also
+HOLDEM_TWO_PAIR_ARE_IMPORTANT = True # 'big hands,' whether that be big board w/o private cards, or hand that helps
+HOLDEM_RIVER_PLAY_BOARD_ARE_IMPORTANT = True # same category as the "board" cards (could be Ace-high though)
 
 # Use this to train only on results of intelligent players, if different versions available
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'CNN_76_per', 'man']) # learn only from better models, or man's actions
@@ -298,7 +298,8 @@ def get_previous_round_string(all_round_string, current_round_bets_string = ''):
     current_action = -1
     current_string = ''
     all_rounds = []
-    #print (all_round_string)
+    #print('all rounds: %s' % all_round_string)
+    #print('curr round: %s' % current_round_bets_string)
     for i in range(len(all_round_string)):
         c = all_round_string[i]
         #print(c)
@@ -326,18 +327,29 @@ def get_previous_round_string(all_round_string, current_round_bets_string = ''):
     
     #print(all_rounds)
     previous_round = ''
+    round_before = ''
+    two_round_before = ''
     if current_round_bets_string:
         if len(all_rounds) > 1:
             previous_round = all_rounds[-2]
+        if len(all_rounds) > 2:
+            round_before = all_rounds[-3]
+        if len(all_rounds) > 3:
+            two_round_before = all_rounds[-4]
     else:
         # If current round string '' or missing, then take last element
         if len(all_rounds) > 0:
             previous_round = all_rounds[-1]
-    #print('Current round |%s| and previous round |%s|' % (current_round_bets_string, previous_round))
-    return previous_round
+        if len(all_rounds) > 1:
+            round_before = all_rounds[-2]
+        if len(all_rounds) > 2:
+            two_round_before = all_rounds[-3]
+    #print('Current round |%s| prev_round |%s| round_before |%s| two_round_before |%s|' % (current_round_bets_string, previous_round, round_before, two_round_before))
+    # Now, return all three (possible) previous rounds. Either just use "previous_round," or encode them all.
+    return (previous_round, round_before, two_round_before)
 
 # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
-def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0, opponent_cards_kept=0, pad_to_fit = PAD_INPUT, all_rounds_bets_string=None):
+def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0, opponent_cards_kept=0, pad_to_fit = PAD_INPUT, all_rounds_bets_string=None, format = 'deuce_events'):
 
     position_input = card_to_matrix_fill(position, pad_to_fit = pad_to_fit)
     pot_size_input = pot_to_array(pot_size, pad_to_fit = pad_to_fit) # saved to single "card"
@@ -347,17 +359,34 @@ def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0
     # If present...
     # NOTE: This will extend context array. Flag to enable it. And change all 26-length dependencies!
     #print('Attempting to dig up \'previous rounds bets\' from %s' % all_rounds_bets_string)
-    previous_round_bets_string = get_previous_round_string(all_rounds_bets_string, current_round_bets_string=bets_string)
+    (previous_round, round_before, two_round_before) = get_previous_round_string(all_rounds_bets_string, current_round_bets_string=bets_string)
+    previous_round_bets_string = previous_round
     #print('-->%s' % previous_round_bets_string)
     previous_bets_string_input = bets_string_to_array(previous_round_bets_string, pad_to_fit = pad_to_fit) # Also, 5 bits
 
-    # Put it all together...
-    # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept]
-    hand_context_input = np.array([position_input, pot_size_input, 
+    # NOTE: Use previous rounds... if requested.
+    round_before_string = round_before
+    round_before_string_input = bets_string_to_array(round_before_string, pad_to_fit = pad_to_fit) # Also, 5 bits
+    two_round_before_string = two_round_before
+    two_round_before_string_input = bets_string_to_array(two_round_before_string, pad_to_fit = pad_to_fit) # Also, 5 bits
+
+    if format == 'holdem_events':
+        # For holdem_events... swap out cards_kep, and swap in... previous rounds betting
+        # [xPosition, xPot, xBets [this street], ... , xPreviousBets]
+        # A bit confusing... but do pot and bets first, then previous round bets in the correct order [to get "prev_round" to match]
+        hand_context_input = np.array([position_input, pot_size_input, 
                                    bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
-                                   cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
-                                   opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4],
+                                   two_round_before_string_input[0], two_round_before_string_input[1], two_round_before_string_input[2], two_round_before_string_input[3], two_round_before_string_input[4],
+                                   round_before_string_input[0], round_before_string_input[1], round_before_string_input[2], round_before_string_input[3], round_before_string_input[4],
                                    previous_bets_string_input[0], previous_bets_string_input[1], previous_bets_string_input[2], previous_bets_string_input[3], previous_bets_string_input[4]], TRAINING_INPUT_TYPE)
+    elif format == 'deuce_events':
+        # Put it all together...
+        # [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousBets]
+        hand_context_input = np.array([position_input, pot_size_input, 
+                                       bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
+                                       cards_kept_input[0], cards_kept_input[1], cards_kept_input[2], cards_kept_input[3], cards_kept_input[4],
+                                       opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4],
+                                       previous_bets_string_input[0], previous_bets_string_input[1], previous_bets_string_input[2], previous_bets_string_input[3], previous_bets_string_input[4]], TRAINING_INPUT_TYPE)
     return hand_context_input
 
 # Encode pot (0 to 3000 or so) into array... by faking a hand.
@@ -630,15 +659,29 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         #print('Context: %s' % [num_draws, position, pot_size, bets_string, cards_kept, opponent_cards_kept])
         hand_context_input = hand_input_from_context(position=position, pot_size=pot_size, bets_string=bets_string,
                                                      cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
-                                                     all_rounds_bets_string=all_rounds_bets_string)
+                                                     all_rounds_bets_string=all_rounds_bets_string, format=format)
 
         full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
     else:
         empty_bits_array = np.zeros((CONTEXT_LENGTH, HAND_TO_MATRIX_PAD_SIZE, HAND_TO_MATRIX_PAD_SIZE), dtype=TRAINING_INPUT_TYPE)
         full_input = np.concatenate((cards_input, empty_bits_array), axis = 0)
 
-    #print(full_input)
-    #print('fully concatenated input %s, shape %s' % (type(full_input), full_input.shape))
+    ###########################
+    """
+    print(full_input)
+    print('fully concatenated input %s, shape %s' % (type(full_input), full_input.shape))
+    opt = np.get_printoptions()
+    np.set_printoptions(threshold='nan')
+
+    # Get all bits for input... excluding padding bits that go to 17x17
+    debug_input = full_input[:,6:10,2:15]
+    print(debug_input)
+    print(debug_input.shape)
+
+    # Return options to previous settings...
+    np.set_printoptions(**opt)
+    """
+    #############################
 
     # Look up the action taken with this event. If it's unknown or not appropriate, skip.
     action_name = data_array[csv_key_map['action']]
@@ -658,6 +701,57 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
             important_training_case = True
             #print('found a straight or flush in the hand!')
             #print(data_array)
+    elif format == 'holdem_events' and data_array[csv_key_map['best_draw']]:
+        # Similarly for HE, give special attention to board where we have 2p+.
+        # 
+        # A. Some cases with very strong board, which we do or don't improve
+        # B. How to be a very strong hand? Slowplay sometimes. 
+        # Currently, both leave something to be desired. For example, CNN sees any flush as lock... not true. 
+        # Will also call with Q-hi on two pair board every time. Maybe not good. 
+        # Lastly, we need better sample for value of big hand where we might want to slowplay. Trips, etc.
+        
+        # Hack for flop, and turn/river. Need to deconstruct...
+        # TODO: Should be a function!
+        cards_string = data_array[csv_key_map['hand']]
+        flop_string = data_array[csv_key_map['best_draw']]
+        turn_river_string = data_array[csv_key_map['hand_after']]
+        turn_river_array = hand_string_to_array(turn_river_string) # array of card strings...
+        if not turn_river_array:
+            turn_string = ''
+            river_string = ''
+        elif len(turn_river_array) == 1:
+            turn_string = turn_river_string
+            river_string = ''
+        elif len(turn_river_array) == 2:
+            turn_string = turn_river_array[0]
+            river_string = turn_river_array[1]
+
+        # Turn cards strings inta arrays of cards.
+        cards_array = [card_from_string(card_str) for card_str in hand_string_to_array(cards_string)]
+        flop_array = [card_from_string(card_str) for card_str in hand_string_to_array(flop_string)]
+        turn_array = [card_from_string(card_str) for card_str in hand_string_to_array(turn_string)]
+        river_array = [card_from_string(card_str) for card_str in hand_string_to_array(river_string)]
+    
+        # Verify that the hand is legit
+        community = HoldemCommunityHand(flop = flop_array, turn = turn_array, river = river_array)
+        hand = HoldemHand(cards = cards_array, community = community)
+
+        # See if hand qualifies for "good hand" boost.
+        hand.evaluate()
+        if HOLDEM_TWO_PAIR_ARE_IMPORTANT and hand.category in set([TWO_PAIR, THREE_OF_A_KIND, STRAIGHT, FLUSH, FULL_HOUSE, FOUR_OF_A_KIND, ROYAL_FLUSH]):
+            #print('Hand big enough to be important! %s' % hand)
+            important_training_case = True
+
+        # Another boost is for calling on the river without changing the category (A-hi, J-hi, etc)
+        if HOLDEM_RIVER_PLAY_BOARD_ARE_IMPORTANT and len(community.river) > 0:
+            play_board_rank = hand_rank_five_card(community.cards())
+            play_board_category = hand_category(play_board_rank)
+
+            # Not really playing the board... but same category. Ace-hi can be the nuts sometimes. 
+            if play_board_category == hand.category:
+                #print(data_array)
+                #print('playing the board on the river. This is important')
+                important_training_case = True
 
     # We can handle bets (bet, raise, check, call fold) and draws (how many?).
     # Other valid action (posting blinds, etc) don't do much for us.
@@ -789,7 +883,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                 #print('We bet, when could have checked behind')
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
             else:
-                if format == 'deuce_events' and RIVER_RAISES_ARE_IMPORTANT:
+                if RIVER_RAISES_ARE_IMPORTANT:
                     #print('including river raise as significant action for training')
                     important_training_case = True
                 #print('We raised, when could have called')
@@ -809,7 +903,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
             #else:
                 #print('since we bet out and could have checked, no counter-factual information')
         elif output_category == CALL_CATEGORY:
-            if format == 'deuce_events' and RIVER_CALLS_ARE_IMPORTANT:
+            if RIVER_CALLS_ARE_IMPORTANT:
                 #print('including river call as significant action for training')
                 important_training_case = True
         #else:
@@ -978,10 +1072,11 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # TODO: Control this by flag, or pre-compute data before choosing sample policy
                     # TODO: Sample differently by "sim", "man", "cnn" actors...
                     sample_rate = SAMPLE_RATE_DEUCE_EVENTS
+                    important_cases_sample_rate = max(sample_rate, IMPORTANT_CASES_SAMPLE_RATE)
                     if not important_training_case and random.random() > sample_rate:
                         #print('\nskipping form sample %s\n' % sample_rate)
                         continue
-                    elif important_training_case:
+                    elif important_training_case and random.random() <= important_cases_sample_rate:
                         important_training_cases += 1
 
                 # We can also add output "mask" for which of the "output_array" values matter.

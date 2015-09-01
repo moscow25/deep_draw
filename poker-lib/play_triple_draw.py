@@ -60,6 +60,18 @@ models and final hand evaluations, to accomodate any other draw game.
 # [default format is 'deuce']
 FORMAT = 'deuce' # 'holdem' # 'deuce'
 
+USE_ACTION_PERCENTAGE = True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
+USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage... can be useful for Hold'em. Good for exploratory moves
+# Disable action% for holdem... until it's ready.
+#if FORMAT == 'holdem':
+#    USE_ACTION_PERCENTAGE = False 
+if FORMAT == 'deuce':
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
+elif FORMAT == 'holdem':
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with not enough explore
+else:
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.0
+
 # Build up a CSV, of all information we might want for CNN training
 # TODO: Replace with more logical header for 'Holdem', and other games...
 TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
@@ -90,29 +102,25 @@ PREDICTION_VALUE_NOISE_MU = PREDICTION_VALUE_NOISE_AVERAGE - 0.58821 * PREDICTIO
 # Don't boost aggressive actions so much... we want to see more calls, check, especially checks, attempted in spots that might be close.
 AGGRESSIVE_ACTION_NOISE_FACTOR = 1.0 # 1.0 # 0.5
 BOOST_AGGRESSIVE_ACTION_NOISE = True # training only(?), increase value of aggressive actions (don't let them go negative)
-MULTIPLE_MODELS_NOISE_FACTOR = 0.5 # Reduce noise... if using multiple models already (noise that way)
+MULTIPLE_MODELS_NOISE_FACTOR = 1.0 # 0.5 # Reduce noise... if using multiple models already (noise that way)
 BOOST_PAT_BET_ACTION_NOISE = True # Do we explicitly support betting after standing pat? Yes. Even if hand is weak (snowed, etc).
 
 # Enable, to use 0-5 num_draw model. Recommends when to snow, and when to break, depending on context.
 USE_NUM_DRAW_MODEL = True
 # Use a num_draw model... and tend to do so more later in the hand. For example, 30% first draw, 60% 2nd draw, 90% 3rd draw.
-NUM_DRAW_MODEL_RATE = 1.0 # 0.9 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
-NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW = 0.3 # Use model on the final draw, but perhaps less on previous draws...
+NUM_DRAW_MODEL_RATE = 1.0 # 0.7 # how often do we use num_draw model? Just use context-free 0-32 output much/most of the time...
+NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW = 0.4 # 0.3 # Use model on the final draw, but perhaps less on previous draws...
 NUM_DRAW_MODEL_NOISE_FACTOR = 0.2 # Add noise to predictions... but just a little. 
 FAVOR_DEFAULT_NUM_DRAW_MODEL = True # Enable, to boost # of draw cards preferred by 0-32 model. Else, too noisy... but strong preference for other # of cards still matters.
 
 INCLUDE_HAND_CONTEXT = True # False 17 or so extra "bits" of context. Could be set, could be zero'ed out.
-USE_ACTION_PERCENTAGE = True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
-USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage... can be useful for Hold'em. Good for exploratory moves
-# Disable action% for holdem... until it's ready.
-#if FORMAT == 'holdem':
-#    USE_ACTION_PERCENTAGE = False 
-ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 
 SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
 SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
 USE_MIXED_MODEL_WHEN_AVAILABLE = True # When possible, including against human, use 2 or 3 models, and choose randomly which one decides actions.
 RETRY_FOLD_ACTION = True # If we get a model that says fold preflop... try again. But just once. We should avoid raise/fold pre
+ADJUST_VALUES_TO_FIX_IMPOSSIBILITY = True # Do we fix impossible values? Like check < 0.0, or calling on river > pot + bet
+USE_NEGATIVE_RIVER_CALL_VALUE = True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponent), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -170,8 +178,8 @@ def best_five_draws(hand_draws_vector):
 def best_draw_value_boost():
     # 0.5 * (5 x max(0, noise))
     noise = 0.5 * (max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) + max(0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)) )
-    # 1 x noise_average
-    noise += PREDICTION_VALUE_NOISE_AVERAGE * 1.0
+    # 2 x noise_average
+    noise += PREDICTION_VALUE_NOISE_AVERAGE * 2.0
     return noise
 
 # Actually a demotion. Suppress 'pat' draw, as model learns to suggest it way too often.
@@ -182,13 +190,16 @@ def pat_draw_value_boost():
 # Similarly, demote 3 & 4 card draws, late in the hand. Reason is the same.
 # These trigger when normal draw is bad. But still... taking 3 or 4 cards late isn't the answer. Consider alternatives.
 def draw_many_value_boost():
-    return -0.5 * best_draw_value_boost()
+    return -1.0 * best_draw_value_boost()
+def draw_very_many_value_boost():
+    return -2.0 * best_draw_value_boost()
 
 # Should inherit from more general player... when we need one. (For example, manual player who chooses his own moves and own draws)
 class TripleDrawAIPlayer():
     # TODO: Initialize model to use, etc.
     def __init__(self):
         self.draw_hand = None
+        self.name = '' # backward-compatible, not really used any more...
 
         # TODO: Name, and track, multiple models. 
         # This is the draw model. Also, outputs the heuristic (value) of a hand, given # of draws left.
@@ -287,20 +298,29 @@ class TripleDrawAIPlayer():
                     action = prediction[1]
                     # Boost the value by fixed positive but noisy amount (noise only on the upside)
                     # This will reduce randomly choosing an inferior draw. But not every time. And *much better* draw action wins easily.
-                    if drawCategoryNumCardsKept[action] == default_num_kept:
+                    # NOTE: DO *not* boost the pat move, when model recommends breaking. 
+                    if drawCategoryNumCardsKept[action] == default_num_kept and action != KEEP_5_CARDS:
                         noise = best_draw_value_boost()
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted %d-card draw by %.3f' % (5-default_num_kept, noise))
                     # Demote pat draw somewhat. This is especially useful if we need alternatives. As pat represents itself well.
-                    if action == KEEP_5_CARDS:
+                    # NOTE: DO *not* demote pat... if it's the recommended move
+                    # TODO: Also do not demote pat... if it's close in value to the recommended move
+                    if action == KEEP_5_CARDS and drawCategoryNumCardsKept[action] != default_num_kept:
                         noise = pat_draw_value_boost()
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted pat draw by %.3f' % (noise))
                     # Also demote 3,4,5 card draws. Look for other alteratives, even in a tough spot. Especially late in the hand.
-                    if (num_draws < 3) and (action == KEEP_0_CARDS or action == KEEP_1_CARDS or action == KEEP_2_CARDS):
+                    if (num_draws < 3) and (action == KEEP_2_CARDS) and drawCategoryNumCardsKept[action] != default_num_kept:
                         noise = draw_many_value_boost()
+                        prediction[0] += noise
+                        if debug:
+                            print('\tBoosted %d-draw by %.3f' % (5-drawCategoryNumCardsKept[action], noise))
+                    elif (num_draws < 3) and (action == KEEP_0_CARDS or action == KEEP_1_CARDS) and drawCategoryNumCardsKept[action] != default_num_kept:
+                        # Almost no reason at all to draw 4+ cards. Strongly consider any other option
+                        noise = draw_very_many_value_boost()
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted %d-draw by %.3f' % (5-drawCategoryNumCardsKept[action], noise))
@@ -616,27 +636,53 @@ class TripleDrawAIPlayer():
                                                       include_hand_context = False)
 
             # TODO: This should be a util function.
+            # NOTE: 'Actions' can be objects, with "type", or a string...
             bets_string = ''
-            for action in actions_this_round:
-                if action.type in ALL_BETS_SET:
-                    bets_string += '1'
-                elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
-                    bets_string += '0'
-                else:
-                    # Don't encode non-bets
-                    continue
+            if actions_this_round and isinstance(actions_this_round, basestring):
+                print('detected actions_this_round is string: %s' % actions_this_round)
+                for action in actions_this_round:
+                    if action == 'r':
+                        bets_string += '1'
+                    elif action == 'c':
+                        bets_string += '0'
+                    else:
+                        # Don't encode non-bets
+                        continue
+                print(bets_string)
+            else:
+                for action in actions_this_round:
+                    if action.type in ALL_BETS_SET:
+                        bets_string += '1'
+                    elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
+                        bets_string += '0'
+                    else:
+                        # Don't encode non-bets
+                        continue
 
             # Repeat the same for 'whole game' bets string
             # TODO: Use a util function!
+            # NOTE: 'Actions' can be objects, with "type", or a string...
             all_rounds_bets_string = ''
-            for action in actions_whole_hand:
-                if action.type in ALL_BETS_SET:
-                    all_rounds_bets_string += '1'
-                elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
-                    all_rounds_bets_string += '0'
-                else:
-                    # Don't encode non-bets
-                    continue
+            if actions_whole_hand and isinstance(actions_whole_hand, basestring):
+                print('detected actions_whole_hand is string: %s' % actions_whole_hand)
+                for action in actions_whole_hand:
+                    if action == 'r':
+                        all_rounds_bets_string += '1'
+                    elif action == 'c':
+                        all_rounds_bets_string += '0'
+                    else:
+                        # Don't encode non-bets
+                        continue
+                print(all_rounds_bets_string)
+            else:
+                for action in actions_whole_hand:
+                    if action.type in ALL_BETS_SET:
+                        all_rounds_bets_string += '1'
+                    elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
+                        all_rounds_bets_string += '0'
+                    else:
+                        # Don't encode non-bets
+                        continue
             
             # Now hand context
             if debug:
@@ -644,10 +690,32 @@ class TripleDrawAIPlayer():
                     print('context %s' % ([cards_string, flop_string, turn_string, river_string, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
                 else:
                     print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
+
+            # TODO: Clean up this hack. Need "x_events" format for model loading.
+            format = 'deuce_events'
+            if FORMAT == 'holdem':
+                format = 'holdem_events'
             hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
                                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
-                                                         all_rounds_bets_string=all_rounds_bets_string)
+                                                         all_rounds_bets_string=all_rounds_bets_string, format=format)
             full_input = np.concatenate((cards_input, hand_context_input), axis = 0)
+
+            ###########################
+            """
+            #print(full_input)
+            print('fully concatenated input %s, shape %s' % (type(full_input), full_input.shape))
+            opt = np.get_printoptions()
+            np.set_printoptions(threshold='nan')
+
+            # Get all bits for input... excluding padding bits that go to 17x17
+            debug_input = full_input[:,6:10,2:15]
+            print(debug_input)
+            print(debug_input.shape)
+
+            # Return options to previous settings...
+            np.set_printoptions(**opt)
+            """
+            #############################
 
             # TODO: Rewrite with input and output layer... so that we can avoid putting all this data into Theano.shared()
             bets_vector = evaluate_single_event(bets_layer, full_input, input_layer = bets_input_layer)
@@ -660,56 +728,60 @@ class TripleDrawAIPlayer():
                 print('acts\t%s' % ([val for val in bets_vector[5:10]]))
                 print('drws\t%s' % ([(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]))
             value_predictions = [[(bets_vector[category_from_event_action(action)] - 2.0), action, '%s: %.3f' % (actionName[action], bets_vector[category_from_event_action(action)] - 2.0)] for action in actions]
+
+
+            # Use this space to fix bad logic in the values. Things that could not *possibly* be true.
+            # A. Check has value < 0.0. 
+            # B. Check has value > pot, and we are closing the action (checking behind)
+            # C. Call has value > pot, and we are closing the action (calling final bet)
+            adjusted_values_to_fix_impossibility = False
+            if ADJUST_VALUES_TO_FIX_IMPOSSIBILITY:
+                for prediction in value_predictions:
+                    action = prediction[1]
+                    value = prediction[0]
+                    if action == CHECK_HAND:
+                        #print('examining check_hand action, value %.2f' % value)
+                        #print('round = %s, has_button = %s' % (round, has_button))
+                        # A. Check has value < 0.0. 
+                        if value < 0.0:
+                            if debug:
+                                print('--> reset check-hand value to 0.0. It can not be negative.')
+                            prediction[0] = 0.0
+                            adjusted_values_to_fix_impossibility = True
+                        # B. Check has value > pot, if we are closing the action.
+                        if value > pot_size / 1000.0 and (round == DRAW_3_BET_ROUND) and has_button:
+                            if debug:
+                                print('--> reset check-down value to pot size, if we closing the action.')
+                            prediction[0] = pot_size / 1000.0
+                            adjusted_values_to_fix_impossibility = True
+                    elif action == CALL_BIG_STREET:
+                        # C. Call has value > pot, and we are closing the action (calling final bet)
+                        if value > (pot_size + BIG_BET_SIZE) / 1000.0 and round == DRAW_3_BET_ROUND:
+                            if debug:
+                                print('--> reset call-down value to pot size plus bet, if we calling on the river')
+                            prediction[0] = (pot_size + BIG_BET_SIZE) / 1000.0
+                            adjusted_values_to_fix_impossibility = True
             value_predictions.sort(reverse=True)
 
-            # Same for action%
-            action_percentge = [[bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01), action, '%s: (%.1f%%)' % (actionName[action], bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01) * 100.0)] for action in actions]
-            action_percentge.sort(reverse=True)
-            if debug:
-                print(action_percentge)
-            
-            if debug:
-                print(value_predictions)
+            # If we are on the river and calling has negative value... notice, so we don't use action% model (still ok to tweak & call)
+            negative_river_call_value = False
+            if USE_NEGATIVE_RIVER_CALL_VALUE and (round == DRAW_3_BET_ROUND):
+                for prediction in value_predictions:
+                    action = prediction[1]
+                    value = prediction[0]
+                    if action == CALL_BIG_STREET and value < 0.0:
+                        negative_river_call_value = True
 
-            # Save for debug
-            self.bet_val_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[:5]]]
-            self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/max(np.sum([val for val in bets_vector[5:10]]), 0.01) for val in bets_vector[5:10]]]
-            self.num_draw_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]]
-
-            # Now we have a choice.
-            # A. Add noise to action values, and take action with highest post-noise value. This is a good option. Directly from RL
-            # B. If good action% model... just take the action based on %
-            best_action = None
-            if USE_ACTION_PERCENTAGE and self.use_action_percent_model and np.random.rand() <= ACTION_PERCENTAGE_CHOICE_RATE:
-                # Sampled choice, from available actions, based on action% from neural net output.
-                # NOTE: Need to explicitly round... to avoid annoying numpy/float32 issues
-                probabilities = np.array([max(int(action_tuple[0] * 100000), 0) / 100000.0 for action_tuple in action_percentge])
-                remainder = 1.0 - probabilities.sum()
-                probabilities[0] += remainder
-                choice = np.random.choice([action_tuple[1] for action_tuple in action_percentge], 
-                                          p=probabilities)
-                best_action = choice
-                if debug:
-                    print('~ using percent action choice ~')
-
-                # Final Hack! We need should aim to avoid close folds pre-draw.
-                # Thus, if close, try again.
-                if round == PRE_DRAW_BET_ROUND and best_action == FOLD_HAND and retry == False and RETRY_FOLD_ACTION:
-                    if debug:
-                        'Retrying preflop fold action...'
-                    return self.choose_action(actions=actions, round=round, bets_this_round = bets_this_round, 
-                                              has_button = has_button, pot_size=pot_size, actions_this_round=actions_this_round,
-                                              cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept, 
-                                              debug = debug, retry = True, actions_whole_hand=actions_whole_hand)
-
-                print('\n%s\n' % actionName[best_action])
-                return best_action
+            #if adjusted_values_to_fix_impossibility:
+            #    sys.exit(-1)
 
             # Now apply noise to action values, if requested.
             # Why? If actions are close, don't be vulnerable to small differences that lock us into action.
             # NOTE: We do *not* want more folds, so only increase values of non-fold actions. Clear folds still fold.
+            # Also, boost betting out if we're drawing ahead.
             best_action_no_noise = value_predictions[0][1]
-            if PREDICTION_VALUE_NOISE_HIGH and not best_action:
+            adjust_bet_better_draw = False
+            if PREDICTION_VALUE_NOISE_HIGH:
                 for prediction in value_predictions:
                     action = prediction[1]
                     noise = 0.0
@@ -738,15 +810,17 @@ class TripleDrawAIPlayer():
 
                         # If we are pat, consider boosting the bet value. Too many checks after patting (not only on snow)
                         # (similarly, though less, tend to bet when we took fewer cards than apponent)
-                        draws_ahead_boost = 2.0 * PREDICTION_VALUE_NOISE_AVERAGE +  max([0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA), np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA), np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)])
+                        draws_ahead_boost = 3.0 * PREDICTION_VALUE_NOISE_AVERAGE +  max([0.0, np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA), np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA), np.random.gumbel(PREDICTION_VALUE_NOISE_MU, PREDICTION_VALUE_NOISE_BETA)])
                         if BOOST_PAT_BET_ACTION_NOISE and cards_kept == 5 and opponent_cards_kept != 5:
                             if debug:
                                 print('considering boosting the *bet* for pat hand. Opponent won\'t bet hand for us!')
-                            noise += draws_ahead_boost
-                        elif BOOST_PAT_BET_ACTION_NOISE and cards_kept == 4 and opponent_cards_kept < cards_kept:
+                            noise += draws_ahead_boost * 2.0 * (cards_kept - opponent_cards_kept)
+                            adjust_bet_better_draw = True
+                        elif BOOST_PAT_BET_ACTION_NOISE and cards_kept > 2 and opponent_cards_kept < cards_kept:
                             if debug:
                                 print('considering boosting the *bet* for drawing hand that is ahead. Opponent won\'t bet hand for us!')
-                            noise += draws_ahead_boost * 0.5
+                            noise += draws_ahead_boost * (cards_kept - opponent_cards_kept)
+                            adjust_bet_better_draw = True
 
                     # NOTE: Do *not* apply noise, if already using a mixed model. That is noise enough.
                     if self.bets_output_array:
@@ -756,6 +830,66 @@ class TripleDrawAIPlayer():
                 value_predictions.sort(reverse=True)
                 if debug:
                     print(value_predictions)
+
+            """
+            # Special case: if we can bet or check... and both values are negative... then boost the check.
+            # Not uncommon, especially early in game training, to have negative expectation for all actions. 
+            # If we can't fold... we should favor checking in these spots. Why bet, if betting has a known negative value?
+            if len(value_predictions) == 2 and (CHECK_HAND in actions) and not (FOLD_HAND in actions):
+                #print('Only bet and check options. Boost check, if both are negative...')
+                if value_predictions[0][0] < 0.025 and value_predictions[1][0] < 0.025:
+                    #print('Yep, both negative.')
+                    for prediction in value_predictions:
+                        action = prediction[1]
+                        if action == CHECK_HAND:
+                            noise = abs(prediction[0]) * 0.66666
+                            #print('boost negative check value by %.3f' % noise)
+                            prediction[0] += noise
+            value_predictions.sort(reverse=True)
+            """
+
+            # Same for action%
+            action_percentge = [[bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01), action, '%s: (%.1f%%)' % (actionName[action], bets_vector[category_from_event_action(action) + 5] / max(np.sum(bets_vector[5:10]), 0.01) * 100.0)] for action in actions]
+            action_percentge.sort(reverse=True)
+            if debug:
+                print(action_percentge)
+            
+            if debug:
+                print(value_predictions)
+
+            # Save for debug
+            self.bet_val_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[:5]]]
+            self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/max(np.sum([val for val in bets_vector[5:10]]), 0.01) for val in bets_vector[5:10]]]
+            self.num_draw_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]]
+
+            # Now we have a choice.
+            # A. Add noise to action values, and take action with highest post-noise value. This is a good option. Directly from RL
+            # B. If good action% model... just take the action based on %
+            best_action = None
+            if (not adjusted_values_to_fix_impossibility) and (not adjust_bet_better_draw) and (not negative_river_call_value) and USE_ACTION_PERCENTAGE and self.use_action_percent_model and np.random.rand() <= ACTION_PERCENTAGE_CHOICE_RATE:
+                # Sampled choice, from available actions, based on action% from neural net output.
+                # NOTE: Need to explicitly round... to avoid annoying numpy/float32 issues
+                probabilities = np.array([max(int(action_tuple[0] * 100000), 0) / 100000.0 for action_tuple in action_percentge])
+                remainder = 1.0 - probabilities.sum()
+                probabilities[0] += remainder
+                choice = np.random.choice([action_tuple[1] for action_tuple in action_percentge], 
+                                          p=probabilities)
+                best_action = choice
+                if debug:
+                    print('~ using percent action choice ~')
+
+                # Final Hack! We need should aim to avoid close folds pre-draw.
+                # Thus, if close, try again.
+                if round == PRE_DRAW_BET_ROUND and best_action == FOLD_HAND and retry == False and RETRY_FOLD_ACTION:
+                    if debug:
+                        'Retrying preflop fold action...'
+                    return self.choose_action(actions=actions, round=round, bets_this_round = bets_this_round, 
+                                              has_button = has_button, pot_size=pot_size, actions_this_round=actions_this_round,
+                                              cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept, 
+                                              debug = debug, retry = True, actions_whole_hand=actions_whole_hand)
+
+                print('\n%s\n' % actionName[best_action])
+                return best_action
             
             # Highest-value action, after all possible adjustments.
             best_action = value_predictions[0][1]
@@ -895,7 +1029,7 @@ class TripleDrawAIPlayer():
         action_probs = []
         for action in allowed_actions:
             probability = 0.0
-            if action == CALL_SMALL_STREET or  action == CALL_BIG_STREET:
+            if action == CALL_SMALL_STREET or action == CALL_BIG_STREET:
                 #print('CALL take all of the check/call credit: %s' % check_call)
                 probability += check_call
                 
