@@ -191,7 +191,7 @@ def evaluate_draws(input_filename, output_filename, tries_per_draw, max_input=50
 
 if __name__ == '__main__':
     tries_per_draw = 2000 
-    max_input = 2000 # hands to examine
+    max_input = 3000 # hands to examine
     # Load CSV with POKER_GAME_HEADER header.
     if len(sys.argv) >= 2:
         input_filename = sys.argv[1]
