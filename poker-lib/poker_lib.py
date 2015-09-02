@@ -786,7 +786,7 @@ class PokerHand(object):
         dummy_rank = hand_rank_five_card(dummy_hand)
 
         # print it once in a while...
-        if random.random() <= debug_delta:
+        if random.random() <= debug_delta or dummy_rank <= 1:
             print 'dummy_hand [%d] %s' % (dummy_rank, ','.join([str(card) for card in dummy_hand]))
 
         # D. return drawn cards to deck & shuffle it
@@ -829,9 +829,10 @@ class PokerHand(object):
 
                 # HACK! If we did *not* expect royal flush for this number of tried (example: []), knock Royal --> str8 flush.
                 # (else too much skew)
-                if hand_rank == ROYAL_FLUSH and not is_royal_flush_draw(draw_cards):
-                    print('Caught unexpected Roual flush for non-royal draw |%s|. Knocking down to str8 flush...' % draw_cards)
-                    hand_rank = STRAIGHT_FLUSH
+                if hand_category(hand_rank) == ROYAL_FLUSH and not is_royal_flush_draw(draw_cards):
+                    print('Caught unexpected Royal flush for non-royal draw |%s|. Knocking down to str8 flush...' % hand_string(draw_cards))
+                    print(hand_rank)
+                    hand_rank += 1 # Knock it down to str8 flush from Royal.
 
                 hand_payout = payout_table.payout_rank(hand_rank)
                 #print '\t$%d' % hand_payout

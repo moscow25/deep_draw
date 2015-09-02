@@ -38,6 +38,12 @@ NUM_SHOW_ERRORS = 100
 
 # Get relevant data, simulate draw, and notice differences.
 def evaluate_draw_line(line, csv_key_map, tries_per_draw, cashier):
+    ########################################
+    # HACK: Use this to look at a hand... if we want to
+    # line[csv_key_map['dealt_cards']] = '[8s,4c,5c,3c,Ac]' # Hand we look at
+    # line[csv_key_map['held_cards']] = '[4c,5c,3c]' # draw made by AI
+    ########################################
+
     dealt_hand_string = line[csv_key_map['dealt_cards']]
     print('Evaluating dealt hand: %s' % dealt_hand_string)
     hand_array = hand_string_to_array(dealt_hand_string)
@@ -184,7 +190,7 @@ def evaluate_draws(input_filename, output_filename, tries_per_draw, max_input=50
 
 
 if __name__ == '__main__':
-    tries_per_draw = 2000
+    tries_per_draw = 2000 
     max_input = 2000 # hands to examine
     # Load CSV with POKER_GAME_HEADER header.
     if len(sys.argv) >= 2:
