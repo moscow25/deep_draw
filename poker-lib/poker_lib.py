@@ -826,6 +826,13 @@ class PokerHand(object):
             for x in range(tries_local):
                 # Returns hand rank, and puts cards back in the deck
                 hand_rank = self.draw_in_place(deck, draw_pattern)
+
+                # HACK! If we did *not* expect royal flush for this number of tried (example: []), knock Royal --> str8 flush.
+                # (else too much skew)
+                if hand_rank == ROYAL_FLUSH and not is_royal_flush_draw(draw_cards):
+                    print('Caught unexpected Roual flush for non-royal draw |%s|. Knocking down to str8 flush...' % draw_cards)
+                    hand_rank = STRAIGHT_FLUSH
+
                 hand_payout = payout_table.payout_rank(hand_rank)
                 #print '\t$%d' % hand_payout
                 sim_result.add_result(hand_payout)
