@@ -26,6 +26,7 @@ POKER_GAME_HEADER = ['dealt_cards', 'held_cards', 'discards', 'draw_cards', 'fin
 ERROR_HAND_HEADER = ['error', 'dealt_hand_string', 'best_result_string', 'best_result_value', 'ai_draw_string', 'ai_draw_value']
 
 # thresholds for error types...
+TRIVIAL_ERROR_THRESHOLD = 0.005 # No error at all
 TINY_ERROR_THRESHOLD = 0.08 # seems large, but can still be in the noise
 SMALL_ERROR_THRESHOLD = 0.25 # anything bigger, is a major error
 
@@ -33,7 +34,7 @@ SMALL_ERROR_THRESHOLD = 0.25 # anything bigger, is a major error
 SKIP_LINE_PROBABILITY = 0.80
 
 # How many errors in debug?
-NUM_SHOW_ERRORS = 25 
+NUM_SHOW_ERRORS = 100 
 
 # Get relevant data, simulate draw, and notice differences.
 def evaluate_draw_line(line, csv_key_map, tries_per_draw, cashier):

@@ -59,7 +59,7 @@ TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 200 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
-NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
+NUM_FILTERS = 16 # 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.02 # 0.1 # 0.02 # 0.1 # 0.05
 MOMENTUM = 0.9
@@ -67,8 +67,12 @@ MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
 ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
+
+NUM_FAT_FILTERS = NUM_FILTERS / 2
+if USE_FAT_MODEL:
+    NUM_FILTERS = NUM_FAT_FILTERS
+
 if USE_FAT_MODEL or USE_FULLY_CONNECTED_MODEL:
-    NUM_FILTERS /= 2
     LEARNING_RATE = 0.1 # *= 5
 
 # Here, we get into growing input information, beyond the 5-card hand.
@@ -407,7 +411,7 @@ def build_fat_model(input_width, input_height, output_dim,
     print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
     l_conv1 = lasagne.layers.Conv2DLayer(
         l_in,
-        num_filters=NUM_FILTERS,
+        num_filters=NUM_FAT_FILTERS,
         filter_size=(5,5),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -416,7 +420,7 @@ def build_fat_model(input_width, input_height, output_dim,
     print('convolution layer l_conv1. Shape %s' % str(l_conv1.output_shape))
     l_conv1_1 = lasagne.layers.Conv2DLayer(
         l_conv1,
-        num_filters=NUM_FILTERS,
+        num_filters=NUM_FAT_FILTERS,
         filter_size=(3,3),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -430,7 +434,7 @@ def build_fat_model(input_width, input_height, output_dim,
 
     l_conv2 = lasagne.layers.Conv2DLayer(
         l_pool1,
-        num_filters=NUM_FILTERS*2, 
+        num_filters=NUM_FAT_FILTERS*2, 
         filter_size=(3,3),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -441,7 +445,7 @@ def build_fat_model(input_width, input_height, output_dim,
     # Add 4th convolution layer...
     l_conv2_2 = lasagne.layers.Conv2DLayer(
         l_conv2,
-        num_filters=NUM_FILTERS*2,
+        num_filters=NUM_FAT_FILTERS*2,
         filter_size=(3,3),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -826,10 +830,18 @@ def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUD
         test_cases.append(test_cases[0])
     
     # case = [hand_string, int(num_draws)]
-    test_batch = np.array([cards_input_from_string(hand_string=case[0],
-                                                   include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], 
-                                                   include_full_hand = INCLUDE_FULL_HAND,
-                                                   include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], TRAINING_INPUT_TYPE)
+    #print(test_cases)
+    if TRAINING_FORMAT == 'video' and isinstance(test_cases[0], basestring):
+        # for 'video', consider case where 'case' just includes a card string.
+        test_batch = np.array([cards_input_from_string(hand_string=case,
+                                                       include_num_draws = False,
+                                                       include_full_hand = False,
+                                                       include_hand_context = False) for case in test_cases], TRAINING_INPUT_TYPE)
+    else:
+        test_batch = np.array([cards_input_from_string(hand_string=case[0],
+                                                       include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], 
+                                                       include_full_hand = INCLUDE_FULL_HAND,
+                                                       include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], TRAINING_INPUT_TYPE)
 
     # print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     #now = time.time()

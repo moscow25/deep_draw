@@ -17,7 +17,7 @@ video_poker_model = '../poker-lib/archive/draw_poker_conv_0.10_learn_rate_10_epo
 
 # 
 video_poker_model_retrain = '../learning/videotriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle'
-video_poker_5_5_maxpool_model = '../learning/video_conv_12_filter_fat_x0_6750_150k.pickle'
+video_poker_5_5_maxpool_model = '../learning/video_conv_12_filter_fat_x0_7621_150k.pickle'
 
 # experimental
 holdem_values_5_5_maxpool_model = '../learning/holdem_conv_12_filter_fat_x0_9354_50k.pickle' # 5x5 filter, 4-layer network (also one maxPool)
@@ -36,7 +36,7 @@ for i, l in enumerate(data):
 a = data[0]
 print a.shape
 
-ncols = 12 # 24 # 3 # how many filters to show (all random)
+ncols = 2 # 12 # 24 # 3 # how many filters to show (all random)
 # For Holdem: [0] = 2 private cards, [1] = flop [2] = turn [3] = river, [4] = all public cards [5] = all cards
 # 3x Draw: [0-4] = individual cards [5] = all cards
 # Video poker: [0-4] = individual cards

@@ -142,7 +142,7 @@ def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
 
     # Now turn the array of Card abbreviations into numpy array of of input
     cards_array_original = [card_from_string(card_str) for card_str in hand_array]
-    assert(len(cards_array_original) == 5)
+    assert len(cards_array_original) == 5, hand_string
 
     # If we also for "full hand", also include a 6th "card" that's matrix of the entire hand.
     # NOTE: We do *not* support permutations. If we want permutations... should permute this also.

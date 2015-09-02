@@ -6,6 +6,7 @@ import time
 import re
 import random
 import os.path # checking file existence, etc
+import argparse # command line arguements parsing
 import numpy as np
 import scipy.stats as ss
 import lasagne
@@ -16,10 +17,20 @@ from poker_lib import *
 from poker_util import *
 
 from draw_poker import cards_input_from_string
-from draw_poker_conv_full_output import build_model
-from draw_poker_conv_full_output import predict_model # outputs result for [BATCH x data]
-from draw_poker_conv_full_output import evaluate_single_hand # single hand... returns 32-point vector
-from draw_poker_conv_full_output import evaluate_batch_hands # much faster to evaluate a batch of hands
+from triple_draw_poker_full_output import build_model
+from triple_draw_poker_full_output import build_fully_connected_model
+from triple_draw_poker_full_output import build_fat_model
+from triple_draw_poker_full_output import predict_model # outputs result for [BATCH x data]
+from triple_draw_poker_full_output import evaluate_single_hand # single hand... returns 32-point vector
+from triple_draw_poker_full_output import evaluate_batch_hands # much faster to evaluate a batch of hands
+
+
+print('parsing command line args %s' % sys.argv)
+parser = argparse.ArgumentParser(description='Play draw video poker, with pre-computed model or rules-based player.')
+parser.add_argument('-draw_model', '--draw_model', default=None, help='neural net model for draw poker. Leave empty for rules-based player') # draws, from 32-length array
+parser.add_argument('-output', '--output', help='output CSV') # CSV output file, in append mode.
+parser.add_argument('-num_hands', '--num_hands', default=None, help='how many hands to run for this model?')
+args = parser.parse_args()
 
 """
 Author: Nikolai Yakovenko
@@ -48,6 +59,10 @@ AI training:
 POKER_GAME_HEADER = ['dealt_cards', 'held_cards', 'discards', 'draw_cards', 'final_hand', 'rank', 'category', 'category_name', 'reward']
 
 BATCH_SIZE = 100 # Across all cases
+
+# Use parameters, if we want to apply alternative model shape
+USE_FAT_MODEL = False # True # False # True
+USE_FULLY_CONNECTED_MODEL = False # True # False
 
 # Interface for AI to select moves
 # NOTE: move(hand) operates directly on hand, and makes draw.
@@ -88,6 +103,91 @@ class ManualPlayer(CardPlayer):
     def move(self, hand, deck):
         # TODO
         raise NotImplementedError()
+
+# Simple "one-rule" player.
+# Rule: Keep any pair or better. Otherwise, toss all 5 cards.
+# Why toss all cards if not keeping a pair? New cards are random, random draw is not...
+class OneRuleNaivePlayer(CardPlayer):
+    def move(self, hand, deck):
+        # What do we have? 
+        # print('evaluating hand for Naive play: %s' % hand_string(hand.dealt_cards))
+        rank = hand_rank_five_card(hand.dealt_cards)
+        category = hand_category(rank)
+        if category in set([ROYAL_FLUSH, STRAIGHT_FLUSH, FOUR_OF_A_KIND, FULL_HOUSE, FLUSH, STRAIGHT]):
+            print('--> pat hand. Take our bonus.')
+            # Now, complete the [empty] draw!
+            discards = hand.draw('')
+            deck.take_discards(discards)
+            new_cards = deck.deal(len(discards))
+            hand.deal(new_cards, final_hand=True)
+            return jacks_or_better_table_976_9_6[category]
+
+        # Compute frequency for all ranks and suits
+        values_count = {value: 0 for value in ranksArray}
+        suits_count = {suit: 0 for suit in suitsArray}
+        for card in hand.dealt_cards:
+            values_count[card.value] += 1
+            suits_count[card.suit] += 1
+        #print(values_count)
+        #print(suits_count)
+
+        # TODO: Flush draw? 3-card royal draw
+        has_four_flush = False
+        has_three_card_royal = False
+        for suit in suitsArray:
+            if suits_count[suit] > 3:
+                print('--> we has a flush draw')
+                has_four_flush = True
+            elif suits_count[suit] == 3 and all((card.value in royalRanksSet) or (card.suit != suit) for card in hand.dealt_cards):
+                print('--> we has a 3-card royal flush draw')
+                has_three_card_royal = True
+                
+        draw_string = ''
+        if category in set([THREE_OF_A_KIND, TWO_PAIR, JACKS_OR_BETTER]):
+            print('good pair+ hand. Keep the pair and freeroll...')
+            # Toss any cards not part of a pair/trips
+            for i in range(0,5):
+                card = hand.dealt_cards[i]
+                if values_count[card.value] < 2:
+                    #print('Card not part of pair+ %s' % card)
+                    draw_string += '%d' % i
+        
+        # If no pair, draw to a flush, or a 3-card royal
+        if not draw_string and (has_four_flush or has_three_card_royal):
+            print('drawing for a flush')
+            for i in range(0,5):
+                card = hand.dealt_cards[i]
+                if suits_count[card.suit] < 3:
+                    #print('Card not part of flush draw %s' % card)
+                    draw_string += '%d' % i
+
+        # If no big pair or flush draw, keep a small pair (like 33). Flush is better than small pair.
+        if not draw_string and category in set([ONE_PAIR]):
+            print('small pair hand. Keep the pair and freeroll...')
+            # Toss any cards not part of pair
+            for i in range(0,5):
+                card = hand.dealt_cards[i]
+                if values_count[card.value] < 2:
+                    #print('Card not part of small pair %s' % card)
+                    draw_string += '%d' % i
+            
+
+        # If no clear draw, toss all cards and get fresh hand.
+        if not draw_string:
+            draw_string = '01234'
+
+        # Now, complete the draw!
+        discards = hand.draw(draw_string)
+        deck.take_discards(discards)
+        new_cards = deck.deal(len(discards))
+        hand.deal(new_cards, final_hand=True)
+
+        expected_payout = jacks_or_better_table_976_9_6[category]
+        if expected_payout == 0:
+            expected_payout = RANDOM_PAYOUT
+        return expected_payout
+        
+
 
 """
 # Uses logic to read the hand, pre-process for structures like 4-flush, pairs, etc.
@@ -134,8 +234,9 @@ class WizardJacksPlayer(RuleBasedPlayer):
 # NOTE: All sizes & functions must match.
 class TrainedModelPlayer(CardPlayer):
     # Network, with weights already put in.
-    def __init__(self, output_layer, test_batch):
+    def __init__(self, output_layer, test_batch, input_layer=None):
         self.output_layer = output_layer
+        self.input_layer = input_layer
         #self.test_batch = test_batch
 
     # From here, will just push to the back of the batch...
@@ -156,7 +257,10 @@ class TrainedModelPlayer(CardPlayer):
 
         string_cases = [hand_string(hand.dealt_cards) for hand in self.draw_hands]
         assert(len(string_cases) == BATCH_SIZE)
-        hand_draws_matrix = evaluate_batch_hands(self.output_layer, string_cases)
+
+        # print('About to evaluate batch hands on %s' % string_cases)
+
+        hand_draws_matrix = evaluate_batch_hands(self.output_layer, string_cases, input_layer=self.input_layer)
 
         print('returned cases: %s' % str(hand_draws_matrix.shape))
 
@@ -224,6 +328,8 @@ class TrainedModelPlayer(CardPlayer):
 # To avoid un-unnecessary computations... batch the evaluations.
 # Everything else is very inexpensive.
 def game_batch(round, cashier, player):
+    print('starting bactch for round %s' % round)
+
     # For each batch number, create deck, hand, and cache your request with the AI player
     batches = []
 
@@ -294,7 +400,8 @@ def game(round, cashier, player=None):
     # Now hand is dealt. Use an agent to choose what do discard.
     #player = DeadPlayer() # asleep at the wheel
     if not player:
-        player = RandomPlayer() # random draw
+        # player = RandomPlayer() # random draw
+        player = OneRuleNaivePlayer() # keeps any pair, straight, flush, etc.
 
     # Optionally, player also returns is expectation of the value...
     expected_payout = player.move(hand=draw_hand, deck=deck)
@@ -345,13 +452,26 @@ def play(sample_size, output_file_name, model_filename=None):
         all_param_values_from_file = np.load(model_filename)
         
         # Size must match exactly!
-        output_layer = build_model(
-            17, # 15, #input_height=dataset['input_height'],
-            17, # 15, #input_width=dataset['input_width'],
-            32, #output_dim=dataset['output_dim'],
-        )
+        if USE_FAT_MODEL:
+            output_layer, input_layer, layers  = build_fat_model(
+                HAND_TO_MATRIX_PAD_SIZE, 
+                HAND_TO_MATRIX_PAD_SIZE,
+                32,
+                )
+        elif USE_FULLY_CONNECTED_MODEL:
+            output_layer, input_layer, layers  = build_fully_connected_model(
+                HAND_TO_MATRIX_PAD_SIZE, 
+                HAND_TO_MATRIX_PAD_SIZE,
+                32,
+                )
+        else:
+            output_layer, input_layer, layers  = build_model(
+                HAND_TO_MATRIX_PAD_SIZE, 
+                HAND_TO_MATRIX_PAD_SIZE,
+                32,
+                )
 
-        print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
+        #print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
         lasagne.layers.set_all_param_values(output_layer, all_param_values_from_file)
 
         # Test the model, by giving it dummy inputs
@@ -364,15 +484,15 @@ def play(sample_size, output_file_name, model_filename=None):
         for i in range(BATCH_SIZE - len(test_cases)):
             test_cases.append(test_cases[1])
         test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
-        predict_model(output_layer=output_layer, test_batch=test_batch)
+        predict_model(output_layer=output_layer, input_layer=input_layer , test_batch=test_batch)
 
         print('Cases again %s' % str(test_cases))
 
         print('Creating player, based on this pickled model...')
 
-        player = TrainedModelPlayer(output_layer, test_batch)
+        player = TrainedModelPlayer(output_layer, test_batch, input_layer=input_layer)
     else:
-        player = RandomPlayer() # random draw
+        player = OneRuleNaivePlayer() # RandomPlayer() # random draw
 
     # Run it for each game...
     round = 0
@@ -390,32 +510,50 @@ def play(sample_size, output_file_name, model_filename=None):
     try:
         while round < sample_size:
             sys.stdout.flush()
-            #hand, payout, expected_payout = game(round, cashier, player=player)
-            # Need to batch games. Since network evaluation so expensive!
-            hand_batch, payout_batch, expected_payout_batch = game_batch(round, cashier, player=player)
 
-            # Iterate over the batch...
-            for i in range(BATCH_SIZE):
-                hand = hand_batch[i]
-                payout = payout_batch[i]
-                expected_payout = expected_payout_batch[i]
+            # If AI model, then batch it. Otherwise, just go hand at a time.
+            if isinstance(player, TrainedModelPlayer):
+                # hand, payout, expected_payout = game(round, cashier, player=player)
+                # Need to batch games. Since network evaluation so expensive!
+                hand_batch, payout_batch, expected_payout_batch = game_batch(round, cashier, player=player)
+
+                # Iterate over the batch...
+                for i in range(BATCH_SIZE):
+                    hand = hand_batch[i]
+                    payout = payout_batch[i]
+                    expected_payout = expected_payout_batch[i]
                 
-                results.append(payout)
-                expected_results.append(expected_payout)
+                    results.append(payout)
+                    expected_results.append(expected_payout)
 
-                # Save hand to CSV, if output supplied.
-                if csv_writer:
-                    hand_csv_row = output_hand_csv(poker_hand=hand, header_map=csv_header_map)
-                    csv_writer.writerow(hand_csv_row)
+                    # Save hand to CSV, if output supplied.
+                    if csv_writer:
+                        hand_csv_row = output_hand_csv(poker_hand=hand, header_map=csv_header_map)
+                        csv_writer.writerow(hand_csv_row)
 
-                # Hack, to show matrix for final hand.
-                # print hand_to_matrix(hand.final_hand)
-                print(hand_string(hand.final_hand))
-                pretty_print_hand_matrix(hand.final_hand)
+                    # Hack, to show matrix for final hand.
+                    # print hand_to_matrix(hand.final_hand)
+                    # print(hand_string(hand.final_hand))
+                    # pretty_print_hand_matrix(hand.final_hand)
 
-                round += 1
+                    round += 1
+            else:
+                for i in range(BATCH_SIZE):
+                    hand, payout, expected_payout = game(round, cashier, player=player)
+
+                    results.append(payout)
+                    expected_results.append(expected_payout)
+                    
+                    # Save hand to CSV, if output supplied.
+                    if csv_writer:
+                        hand_csv_row = output_hand_csv(poker_hand=hand, header_map=csv_header_map)
+                        csv_writer.writerow(hand_csv_row)
+
+                    round += 1
             
-            print('\n%d hands took %.2fs. Running return: %.3f. Expected return: %.3f' % (len(results), 
+            # Print the best 100 results. Why? Shows skew at the top. 
+            print '\npaid %s' % sorted(results, reverse=True)[0:100]
+            print('\n%d hands took %.2fs. Running return: %.5f. Expected return: %.5f' % (len(results), 
                                                                                           time.time() - now, 
                                                                                           np.mean(results), 
                                                                                           np.mean(expected_results)))
@@ -430,8 +568,10 @@ def play(sample_size, output_file_name, model_filename=None):
 
     print '\npaid %s' % sorted(results, reverse=True)[0:100]
     print '\nexpected %s' % sorted(expected_results, reverse=True)[0:100]
-    print '\nstats:\tave: %.3f\tstdev: %.2f\tskew: %.2f' % (np.mean(results), np.std(results), ss.skew(results))
-    print '\nexpected:\tave: %.3f\tstdev: %.2f\tskew: %.2f' % (np.mean(expected_results), np.std(expected_results), ss.skew(expected_results))
+    
+    # What do we expect with these hands? And more importantly, how did we make out?
+    print '\nexpected:\tave: %.5f\tstdev: %.5f\tskew: %.5f' % (np.mean(expected_results), np.std(expected_results), ss.skew(expected_results))
+    print '\nstats(%d):\tave: %.5f\tstdev: %.5f\tskew: %.5f' % (len(results), np.mean(results), np.std(results), ss.skew(results))
 
     sys.stdout.flush()
 
@@ -441,12 +581,19 @@ if __name__ == '__main__':
 
     # Input model filename if given
     # TODO: set via command line flagz
-    model_filename = None
+    model_filename = args.draw_model
+    if args.num_hands:
+        samples = int(args.num_hands)
+    if args.output:
+        output_file_name = args.output
+
+    """
     if len(sys.argv) >= 2:
         model_filename = sys.argv[1]
 
         # Uniquely ID details
-        output_file_name = '%d_samples_model_choices_%s.csv' % (samples, model_filename)
+        output_file_name = '%d_samples_model_choices.csv' % (samples)
+        """
 
     # TODO: Take num samples from command line.
     play(sample_size=samples, output_file_name=output_file_name, model_filename=model_filename)
