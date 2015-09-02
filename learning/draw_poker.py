@@ -89,8 +89,8 @@ FULL_INPUT_LENGTH = 5 + 1 + 3 + CONTEXT_LENGTH
 
 #######################
 ## HACK for 'video' ###
-CONTEXT_LENGTH = 0
-FULL_INPUT_LENGTH = 5 + CONTEXT_LENGTH
+# CONTEXT_LENGTH = 0
+# FULL_INPUT_LENGTH = 5 + CONTEXT_LENGTH
 #######################
 
 CONTEXT_ALL_ZERO = False # True # Set true, to map "xPos, xPot, ..." to x0 of same length. Useful for getting baseline for hands, values first
@@ -115,7 +115,7 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.2 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.5 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 IMPORTANT_CASES_SAMPLE_RATE = min(3.0 * SAMPLE_RATE_DEUCE_EVENTS, 1.0)
 
 # Are the some cases that are important, and should always be selected?

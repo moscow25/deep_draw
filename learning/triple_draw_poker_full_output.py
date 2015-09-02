@@ -23,10 +23,10 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-TRAINING_FORMAT = 'video' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'deuce' # 'deuce_events' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
 USE_FAT_MODEL = False # True # False # True
-USE_FULLY_CONNECTED_MODEL = False # True # False
+USE_FULLY_CONNECTED_MODEL = True # False
 
 DATA_FILENAME = None
 if TRAINING_FORMAT == 'deuce_events':
@@ -53,13 +53,13 @@ elif TRAINING_FORMAT == 'video':
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 220000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 20000
+MAX_INPUT_SIZE = 22000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 2000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 200 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
-NUM_FILTERS = 16 # 24 # 16 # 32 # 16 # increases 2x at higher level
+NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.02 # 0.1 # 0.02 # 0.1 # 0.05
 MOMENTUM = 0.9
