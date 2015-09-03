@@ -15,12 +15,16 @@ holdem_values_model = '../learning/holdem_conv_24_filter_xCards_xNumDraws_x0_983
 holdem_bets_model = '../learning/holdem_events_conv_24_filter_xCards_xCommunity_xContext_0.02_CNN_1_3_trained_on_CNN_1_2_700k.pickle'
 video_poker_model = '../poker-lib/archive/draw_poker_conv_0.10_learn_rate_10_epoch_adaptive_16_filters_valid_border_model-81-percent.pickle'
 
+# 
+video_poker_model_retrain = '../learning/videotriple_draw_conv_0.10_learn_rate_20_epoch_adaptive_24_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle'
+video_poker_5_5_maxpool_model = '../learning/video_conv_12_filter_fat_x0_7621_150k.pickle'
+
 # experimental
 holdem_values_5_5_maxpool_model = '../learning/holdem_conv_12_filter_fat_x0_9354_50k.pickle' # 5x5 filter, 4-layer network (also one maxPool)
 #holdem_values_5_5_shallow_model = '../learning/holdem_conv_0.10_learn_rate_20_epoch_adaptive_12_filters_valid_border_1_num_draws_full_hand_hand_context_model.pickle' # 5x5, 3-layer network with no maxpool
 deuce_values_5_5_maxpool_model = '../learning/deuce_conv_12_filter_fat_x0_5398_50k.pickle' # 5x5 filter, 4-layer network (also one maxPool)
 
-fn = holdem_bets_model # deuce_values_5_5_maxpool_model # holdem_values_5_5_maxpool_model # holdem_values_model # deuce_draws_model # deuce_bets_model
+fn = video_poker_5_5_maxpool_model # deuce_values_5_5_maxpool_model # holdem_values_5_5_maxpool_model # holdem_values_model # deuce_draws_model # deuce_bets_model
 with open(fn,'rb') as fp:
 	data = pickle.load(fp)
 	print dir(data), type(data)
@@ -32,11 +36,11 @@ for i, l in enumerate(data):
 a = data[0]
 print a.shape
 
-ncols = 12 # 24 # 3 # how many filters to show (all random)
+ncols = 2 # 12 # 24 # 3 # how many filters to show (all random)
 # For Holdem: [0] = 2 private cards, [1] = flop [2] = turn [3] = river, [4] = all public cards [5] = all cards
 # 3x Draw: [0-4] = individual cards [5] = all cards
 # Video poker: [0-4] = individual cards
-nrow = 6 # bit (out of 31 inputs)
+nrow = 5 # 6 # bit (out of 31 inputs)
 
 print a[np.random.randint(ncols),np.random.randint(nrow),:,:]
 print a[np.random.randint(ncols),np.random.randint(nrow),:,:]

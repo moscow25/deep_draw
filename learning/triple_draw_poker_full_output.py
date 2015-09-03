@@ -23,9 +23,10 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-TRAINING_FORMAT = 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'deuce' # 'deuce_events' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
-USE_FAT_MODEL = False # True
+USE_FAT_MODEL = False # True # False # True
+USE_FULLY_CONNECTED_MODEL = True # False
 
 DATA_FILENAME = None
 if TRAINING_FORMAT == 'deuce_events':
@@ -36,6 +37,8 @@ elif TRAINING_FORMAT == 'holdem':
     DATA_FILENAME = '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
 elif TRAINING_FORMAT == 'deuce':
     DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values for 'deuce' (draws)
+elif TRAINING_FORMAT == 'video':
+    DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
 #'../data/holdem/holdem_sim_examples_50k.csv' # 'holdem_events' Small-ish dataset of simulated Hold'em hands (heuristic stochastic model). Bets in various context, ad results.
 # '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
 # '../data/holdem/100k_holdem_values.csv' # 'holdem' 100k holdem hand values. Cards, possible flop, turn and river. Odds vs random hand, and odds to make hand categories.
@@ -50,10 +53,10 @@ elif TRAINING_FORMAT == 'deuce':
 # '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
 # '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
-MAX_INPUT_SIZE = 95000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 5000
+MAX_INPUT_SIZE = 22000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 2000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -64,9 +67,13 @@ MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
 ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
+
+NUM_FAT_FILTERS = NUM_FILTERS / 2
 if USE_FAT_MODEL:
-    NUM_FILTERS /= 2
-    LEARNING_RATE *= 5
+    NUM_FILTERS = NUM_FAT_FILTERS
+
+if (USE_FAT_MODEL or USE_FULLY_CONNECTED_MODEL) and not TRAINING_FORMAT == 'deuce_events':
+    LEARNING_RATE = 0.1 # *= 5
 
 # Here, we get into growing input information, beyond the 5-card hand.
 INCLUDE_NUM_DRAWS = True # 3 "cards" to encode number of draws left. ex. 2 draws: [0], [1], [1]
@@ -74,6 +81,13 @@ INCLUDE_FULL_HAND = True # add 6th "card", including all 5-card hand... in a sin
 
 CONTEXT_LENGTH = 2 + 5 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBetting]
 FULL_INPUT_LENGTH = 5 + 1 + 3 + CONTEXT_LENGTH
+
+#######################
+## HACK for 'video' ###
+if TRAINING_FORMAT == 'video':
+    LEARNING_RATE = 0.1
+    CONTEXT_LENGTH = 0
+    FULL_INPUT_LENGTH = 5 + CONTEXT_LENGTH
 
 # Do we use linear loss? Why? If cases uncertain or small sample, might be better to approximate the average...
 LINEAR_LOSS_FOR_MASKED_OBJECTIVE = False # True # False # True
@@ -245,7 +259,7 @@ def load_data():
     print('About to load up to %d items of data, for training format %s' % (MAX_INPUT_SIZE, TRAINING_FORMAT))
     # Do *not* bias the data, or smooth out big weight values, as we would for video poker.
     # 'deuce' has its own adjustments...
-    data = _load_poker_csv(filename=DATA_FILENAME, max_input = MAX_INPUT_SIZE, keep_all_data=True, format=TRAINING_FORMAT, include_num_draws = INCLUDE_NUM_DRAWS, include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT)
+    data = _load_poker_csv(filename=DATA_FILENAME, max_input = MAX_INPUT_SIZE, keep_all_data=(TRAINING_FORMAT != 'video'), format=TRAINING_FORMAT, include_num_draws = INCLUDE_NUM_DRAWS, include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT)
 
     # num_hands = total loaded, X = input, y = best cateogy, z = all categories, m = mask on all categories (if applicable)
     num_hands, X_all, y_all, z_all, m_all = data
@@ -330,6 +344,57 @@ def load_data():
         output_dim=32, # output cases
     )
 
+# Alternatively, compare to same input... but two fully connected layers
+def build_fully_connected_model(input_width, input_height, output_dim,
+                                batch_size=BATCH_SIZE, input_var = None):
+    print('building fat model, layer by layer...')
+    num_input_cards = FULL_INPUT_LENGTH
+
+    # Track all layers created, and return the full stack
+    layers = []
+    l_in = lasagne.layers.InputLayer(
+        shape=(batch_size, num_input_cards, input_height, input_width),
+        input_var = input_var,
+        )
+    layers.append(l_in)
+    print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
+
+    l_hidden0 = lasagne.layers.DenseLayer(
+        l_in, # l_conv2_2, #l_pool2,
+        num_units=NUM_HIDDEN_UNITS, # NUM_HIDDEN_UNITS/2,
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_hidden0)
+    print('hidden layer l_hidden0. Shape %s' % str(l_hidden0.output_shape))
+
+    l_hidden1 = lasagne.layers.DenseLayer(
+        l_hidden0, # l_conv2_2, #l_pool2,
+        num_units=NUM_HIDDEN_UNITS,
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_hidden1)
+    print('hidden layer l_hidden1. Shape %s' % str(l_hidden1.output_shape))
+
+    l_hidden1_dropout = lasagne.layers.DropoutLayer(l_hidden1, p=0.5)
+    layers.append(l_hidden1_dropout)
+    print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.output_shape))
+
+    l_out = lasagne.layers.DenseLayer(
+        l_hidden1_dropout,
+        num_units=output_dim,
+        nonlinearity=lasagne.nonlinearities.rectify, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_out)
+
+    print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.output_shape)))
+    print('produced network of %d layers. TODO: name \'em!' % len(layers))
+
+    # Don't really need l_out... but easy to access that way
+    return (l_out, l_in, layers)
+
 # Alternatively, but model with 5x5 filter on the bottom. Better visualization(?)
 def build_fat_model(input_width, input_height, output_dim,
                     batch_size=BATCH_SIZE, input_var = None):
@@ -346,7 +411,7 @@ def build_fat_model(input_width, input_height, output_dim,
     print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
     l_conv1 = lasagne.layers.Conv2DLayer(
         l_in,
-        num_filters=NUM_FILTERS,
+        num_filters=NUM_FAT_FILTERS,
         filter_size=(5,5),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -355,7 +420,7 @@ def build_fat_model(input_width, input_height, output_dim,
     print('convolution layer l_conv1. Shape %s' % str(l_conv1.output_shape))
     l_conv1_1 = lasagne.layers.Conv2DLayer(
         l_conv1,
-        num_filters=NUM_FILTERS,
+        num_filters=NUM_FAT_FILTERS,
         filter_size=(3,3),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -369,7 +434,7 @@ def build_fat_model(input_width, input_height, output_dim,
 
     l_conv2 = lasagne.layers.Conv2DLayer(
         l_pool1,
-        num_filters=NUM_FILTERS*2, 
+        num_filters=NUM_FAT_FILTERS*2, 
         filter_size=(3,3),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -380,7 +445,7 @@ def build_fat_model(input_width, input_height, output_dim,
     # Add 4th convolution layer...
     l_conv2_2 = lasagne.layers.Conv2DLayer(
         l_conv2,
-        num_filters=NUM_FILTERS*2,
+        num_filters=NUM_FAT_FILTERS*2,
         filter_size=(3,3),
         nonlinearity=lasagne.nonlinearities.rectify,
         W=lasagne.init.GlorotUniform(),
@@ -765,10 +830,18 @@ def evaluate_batch_hands(output_layer, test_cases, include_hand_context = INCLUD
         test_cases.append(test_cases[0])
     
     # case = [hand_string, int(num_draws)]
-    test_batch = np.array([cards_input_from_string(hand_string=case[0],
-                                                   include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], 
-                                                   include_full_hand = INCLUDE_FULL_HAND,
-                                                   include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], TRAINING_INPUT_TYPE)
+    #print(test_cases)
+    if TRAINING_FORMAT == 'video' and isinstance(test_cases[0], basestring):
+        # for 'video', consider case where 'case' just includes a card string.
+        test_batch = np.array([cards_input_from_string(hand_string=case,
+                                                       include_num_draws = False,
+                                                       include_full_hand = False,
+                                                       include_hand_context = False) for case in test_cases], TRAINING_INPUT_TYPE)
+    else:
+        test_batch = np.array([cards_input_from_string(hand_string=case[0],
+                                                       include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], 
+                                                       include_full_hand = INCLUDE_FULL_HAND,
+                                                       include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], TRAINING_INPUT_TYPE)
 
     # print('%.2fs to create BATCH_SIZE input' % (time.time() - now))
     #now = time.time()
@@ -893,7 +966,14 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
     # Pass this reference, to compute theano graph
     input_var = T.tensor4('inputs')
-    if USE_FAT_MODEL:
+    if USE_FULLY_CONNECTED_MODEL:
+        output_layer, input_layer, layers = build_fully_connected_model(
+            input_height=dataset['input_height'],
+            input_width=dataset['input_width'],
+            output_dim=dataset['output_dim'],
+            input_var = input_var,
+            )
+    elif USE_FAT_MODEL:
         output_layer, input_layer, layers = build_fat_model(
             input_height=dataset['input_height'],
             input_width=dataset['input_width'],
@@ -1004,7 +1084,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     # Test_batch... 5 cards, no 3-card "round" encoding.
     # test_batch = np.array([cards_input_from_string(case) for case in test_cases], np.int32)
     if TRAINING_FORMAT == 'video' or TRAINING_FORMAT == 'deuce':
-        test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
+        test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=(INCLUDE_NUM_DRAWS and TRAINING_FORMAT != 'video'), num_draws=case[1], include_full_hand = (INCLUDE_FULL_HAND and TRAINING_FORMAT != 'video'), include_hand_context = (INCLUDE_HAND_CONTEXT and TRAINING_FORMAT != 'video')) for case in test_cases], np.int32)
     elif TRAINING_FORMAT == 'deuce_events':
         # TODO:  Add context, if made available...
         test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)

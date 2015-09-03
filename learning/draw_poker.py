@@ -86,6 +86,13 @@ NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape.
 PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
 CONTEXT_LENGTH = 2 + 5 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBetting]
 FULL_INPUT_LENGTH = 5 + 1 + 3 + CONTEXT_LENGTH
+
+#######################
+## HACK for 'video' ###
+# CONTEXT_LENGTH = 0
+# FULL_INPUT_LENGTH = 5 + CONTEXT_LENGTH
+#######################
+
 CONTEXT_ALL_ZERO = False # True # Set true, to map "xPos, xPot, ..." to x0 of same length. Useful for getting baseline for hands, values first
 CARDS_INPUT_ALL_ZERO = False # True # Set true, to map xCards to x0. Why? To train a decision baseline that has to focus on betting & pot odds for a minute.
 
@@ -108,7 +115,7 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.2 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.5 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 IMPORTANT_CASES_SAMPLE_RATE = min(3.0 * SAMPLE_RATE_DEUCE_EVENTS, 1.0)
 
 # Are the some cases that are important, and should always be selected?
@@ -135,7 +142,7 @@ def cards_inputs_from_string(hand_string, pad_to_fit = PAD_INPUT, max_inputs=50,
 
     # Now turn the array of Card abbreviations into numpy array of of input
     cards_array_original = [card_from_string(card_str) for card_str in hand_array]
-    assert(len(cards_array_original) == 5)
+    assert len(cards_array_original) == 5, hand_string
 
     # If we also for "full hand", also include a 6th "card" that's matrix of the entire hand.
     # NOTE: We do *not* support permutations. If we want permutations... should permute this also.
@@ -507,13 +514,18 @@ def sample_rate_for_hold_value(hold_value):
 # if output_best_class==TRUE, instead outputs index 0-32 of the best value (for softmax category output)
 # Why? A. Easier to train B. Can re-use MNIST setup.
 def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_draws = False, include_full_hand = False, include_hand_context = False):
+    #print(data_array)
     # array of equivalent inputs (if we choose to create more data by permuting suits)
     # NOTE: Usually... we don't do that.
     # NOTE: We can also, optionally, expand input to include other data, like number of draws made.
     # It might be more proper to append this... but logically, easier to place in the original np.array
-    cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
-                                            include_num_draws=include_num_draws, num_draws=data_array[csv_key_map['draws_left']], 
-                                            include_full_hand = include_full_hand, include_hand_context = include_hand_context)
+    if adjust_floats == 'video':
+        cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
+                                                include_num_draws=False, include_full_hand = False, include_hand_context = False)
+    else:
+        cards_inputs = cards_inputs_from_string(data_array[csv_key_map['hand']], max_inputs=1, 
+                                                include_num_draws=include_num_draws, num_draws=data_array[csv_key_map['draws_left']], 
+                                                include_full_hand = include_full_hand, include_hand_context = include_hand_context)
 
     #print(cards_inputs[0])
     #print((cards_inputs[0]).shape)

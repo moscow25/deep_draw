@@ -26,6 +26,7 @@ POKER_GAME_HEADER = ['dealt_cards', 'held_cards', 'discards', 'draw_cards', 'fin
 ERROR_HAND_HEADER = ['error', 'dealt_hand_string', 'best_result_string', 'best_result_value', 'ai_draw_string', 'ai_draw_value']
 
 # thresholds for error types...
+TRIVIAL_ERROR_THRESHOLD = 0.005 # No error at all
 TINY_ERROR_THRESHOLD = 0.08 # seems large, but can still be in the noise
 SMALL_ERROR_THRESHOLD = 0.25 # anything bigger, is a major error
 
@@ -33,10 +34,16 @@ SMALL_ERROR_THRESHOLD = 0.25 # anything bigger, is a major error
 SKIP_LINE_PROBABILITY = 0.80
 
 # How many errors in debug?
-NUM_SHOW_ERRORS = 25 
+NUM_SHOW_ERRORS = 100 
 
 # Get relevant data, simulate draw, and notice differences.
 def evaluate_draw_line(line, csv_key_map, tries_per_draw, cashier):
+    ########################################
+    # HACK: Use this to look at a hand... if we want to
+    # line[csv_key_map['dealt_cards']] = '[8s,4c,5c,3c,Ac]' # Hand we look at
+    # line[csv_key_map['held_cards']] = '[4c,5c,3c]' # draw made by AI
+    ########################################
+
     dealt_hand_string = line[csv_key_map['dealt_cards']]
     print('Evaluating dealt hand: %s' % dealt_hand_string)
     hand_array = hand_string_to_array(dealt_hand_string)
@@ -183,8 +190,8 @@ def evaluate_draws(input_filename, output_filename, tries_per_draw, max_input=50
 
 
 if __name__ == '__main__':
-    tries_per_draw = 2000
-    max_input = 2000 # hands to examine
+    tries_per_draw = 2000 
+    max_input = 3000 # hands to examine
     # Load CSV with POKER_GAME_HEADER header.
     if len(sys.argv) >= 2:
         input_filename = sys.argv[1]
