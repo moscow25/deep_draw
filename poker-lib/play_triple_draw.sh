@@ -34,9 +34,14 @@ USER_NAME=$USER
 tmp_pass=`head -c 10 /dev/random | base64`
 RANDOM_SESSION_ID="${tmp_pass:0:10}" #cut to 10 characters after base64 conversion
 
+# First (best) model
 #python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN76-$RANDOM_SESSION_ID.csv"
-#python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL -CNN_old_model $OLDER_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN76-$RANDOM_SESSION_ID.csv"
-python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL -CNN_old_model $OLDER_VALUES_MODEL -CNN_other_old_model $OTHER_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN76-$RANDOM_SESSION_ID.csv"
+
+# Mix in second-best
+python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL -CNN_old_model $OLDER_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN76-$RANDOM_SESSION_ID.csv"
+
+# Include third, possibly bad, model
+#python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL -CNN_old_model $OLDER_VALUES_MODEL -CNN_other_old_model $OTHER_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN76-$RANDOM_SESSION_ID.csv"
 
 echo $python_cmd
 
