@@ -56,7 +56,7 @@ elif TRAINING_FORMAT == 'video':
 MAX_INPUT_SIZE = 22000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 50 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
@@ -72,7 +72,7 @@ NUM_FAT_FILTERS = NUM_FILTERS / 2
 if USE_FAT_MODEL:
     NUM_FILTERS = NUM_FAT_FILTERS
 
-if USE_FAT_MODEL or USE_FULLY_CONNECTED_MODEL:
+if (USE_FAT_MODEL or USE_FULLY_CONNECTED_MODEL) and not TRAINING_FORMAT == 'deuce_events':
     LEARNING_RATE = 0.1 # *= 5
 
 # Here, we get into growing input information, beyond the 5-card hand.
