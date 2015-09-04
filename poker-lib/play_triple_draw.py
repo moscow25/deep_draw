@@ -23,6 +23,7 @@ from draw_poker import cards_input_from_string
 from draw_poker import hand_input_from_context
 from draw_poker import holdem_cards_input_from_string
 from triple_draw_poker_full_output import build_model
+from triple_draw_poker_full_output import build_fully_connected_model
 from triple_draw_poker_full_output import predict_model # outputs result for [BATCH x data]
 from triple_draw_poker_full_output import evaluate_single_hand # single hand... returns 32-point vector
 from triple_draw_poker_full_output import evaluate_single_event # just give it the 26x17x17 bits... and get a vector back
@@ -756,10 +757,16 @@ class TripleDrawAIPlayer():
                             adjusted_values_to_fix_impossibility = True
                     elif action == CALL_BIG_STREET:
                         # C. Call has value > pot, and we are closing the action (calling final bet)
-                        if value > (pot_size + BIG_BET_SIZE) / 1000.0 and round == DRAW_3_BET_ROUND:
+                        if value > (pot_size + BIG_BET_SIZE) / 1000.0 * 0.95 and round == DRAW_3_BET_ROUND:
                             if debug:
                                 print('--> reset call-down value to pot size plus bet, if we calling on the river')
-                            prediction[0] = (pot_size + BIG_BET_SIZE) / 1000.0
+                            prediction[0] = (pot_size + BIG_BET_SIZE) / 1000.0 * 0.95
+                            adjusted_values_to_fix_impossibility = True
+                    elif action == BET_BIG_STREET or action == RAISE_BIG_STREET:
+                        # D. If bet/raise action is > 90% pot... use values, not action %. Until act% improves, just take greedy action.
+                        if value > (pot_size + BIG_BET_SIZE) / 1000.0 * 0.90 and round == DRAW_3_BET_ROUND:
+                            if debug:
+                                print('--> bet/raise value is > 90%% pot size (%.3f vs %.1f). So use greedy bet action' % (value, pot_size))
                             adjusted_values_to_fix_impossibility = True
             value_predictions.sort(reverse=True)
 
@@ -769,7 +776,8 @@ class TripleDrawAIPlayer():
                 for prediction in value_predictions:
                     action = prediction[1]
                     value = prediction[0]
-                    if action == CALL_BIG_STREET and value < 0.0:
+                    # NOTE: Use figure slightly less than 0.0 as cutoff... since it's really about clear lossses, not really marginal calls at 0.0
+                    if action == CALL_BIG_STREET and value < -0.025:
                         negative_river_call_value = True
 
             #if adjusted_values_to_fix_impossibility:
@@ -1352,6 +1360,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     if draw_model_filename and os.path.isfile(draw_model_filename):
         print('\nExisting model in file %s. Attempt to load it!\n' % draw_model_filename)
         all_param_values_from_file = np.load(draw_model_filename)
+        print('loaded %s params' % len(all_param_values_from_file))
         expand_parameters_input_to_match(all_param_values_from_file, zero_fill = True)
 
         # Size must match exactly!
@@ -1404,14 +1413,23 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     if bets_model_filename and os.path.isfile(bets_model_filename):
         print('\nExisting *bets* model in file %s. Attempt to load it!\n' % bets_model_filename)
         bets_all_param_values_from_file = np.load(bets_model_filename)
+        print('loaded %s params' % len(bets_all_param_values_from_file))
         expand_parameters_input_to_match(bets_all_param_values_from_file, zero_fill = True)
 
         # Size must match exactly!
-        bets_output_layer, bets_input_layer, bets_layers  = build_model(
-            HAND_TO_MATRIX_PAD_SIZE, 
-            HAND_TO_MATRIX_PAD_SIZE,
-            32,
-        )
+        # HACK: Automatically switch to Dense (DNN) model, if size of input...
+        if len(bets_all_param_values_from_file) == 6:
+             bets_output_layer, bets_input_layer, bets_layers  = build_fully_connected_model(
+                 HAND_TO_MATRIX_PAD_SIZE, 
+                 HAND_TO_MATRIX_PAD_SIZE,
+                 32,
+                 )
+        else:
+            bets_output_layer, bets_input_layer, bets_layers  = build_model(
+                HAND_TO_MATRIX_PAD_SIZE, 
+                HAND_TO_MATRIX_PAD_SIZE,
+                32,
+                )
 
         #print('filling model with shape %s, with %d params' % (str(bets_output_layer.get_output_shape()), len(bets_all_param_values_from_file)))
         lasagne.layers.set_all_param_values(bets_output_layer, bets_all_param_values_from_file)
