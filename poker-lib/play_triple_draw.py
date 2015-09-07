@@ -40,6 +40,7 @@ parser.add_argument('-output', '--output', help='output CSV') # CSV output file,
 parser.add_argument('--human_player', action='store_true', help='pass for p2 = human player') # Declare if we want a human competitor? (as player_2)
 parser.add_argument('-CNN_old_model', '--CNN_old_model', default=None, help='pass for p2 = old model (or second model)') # useful, if we want to test two CNN models against each other.
 parser.add_argument('-CNN_other_old_model', '--CNN_other_old_model', default=None, help='pass for p2 = other old model (or 3rd model)') # and a third model, 
+parser.add_argument('-compare_models', '--compare_models', action='store_true', help="pass for model A vs model B. Needs to input exactly two models") # Useful for A/B testing. Should auto-detect when a model is DNN or CNN. Leave model_2 empty for comp with heuristic. Crashes if 3 models given.
 args = parser.parse_args()
 
 """
@@ -121,9 +122,11 @@ SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playi
 USE_MIXED_MODEL_WHEN_AVAILABLE = True # When possible, including against human, use 2 or 3 models, and choose randomly which one decides actions.
 RETRY_FOLD_ACTION = True # If we get a model that says fold preflop... try again. But just once. We should avoid raise/fold pre
 ADJUST_VALUES_TO_FIX_IMPOSSIBILITY = True # Do we fix impossible values? Like check < 0.0, or calling on river > pot + bet
-USE_NEGATIVE_RIVER_CALL_VALUE = True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
 
-# From experiments & guesses... what contitutes an 'average hand' (for our opponent), at this point?
+# Turn this on... only if we are not vulnerable to super-aggro patting machine. In the end... should be off. Gotta pay off sometimes.
+USE_NEGATIVE_RIVER_CALL_VALUE = False # True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
+
+# From experiments & guesses... what contitutes an 'average hand' (for our opponen), at this point?
 # TODO: Consider action so far (# of bets made this round)
 # TODO: Consider # of cards drawn by opponent
 # TODO: Consider other action so far...
@@ -215,6 +218,7 @@ class TripleDrawAIPlayer():
         self.other_old_bets_output_model = False # the "other" old bets model [CNN3 vs CNN5, etc]
         self.bets_output_array = [] # if we use *multiple* models, and choose randomly between them
         self.use_action_percent_model = False # Make moves from CNN action-values (with noise added), or from action percentages from CNN?
+        self.is_dense_model = False # neural network is DNN?
         self.is_human = False
 
         # Current 0-1000 value, based on cards held, and approximation of value from draw model.
@@ -237,7 +241,9 @@ class TripleDrawAIPlayer():
         elif self.use_learning_action_model and self.bets_output_layer:
             # Backward-compatibility hack, to allow support for "old" model used for NIPS paper (CNN)
             # NOTE: Will be deprecated...
-            if self.bets_output_array and len(self.bets_output_array) > 0:
+            if self.is_dense_model:
+                name = 'DNN_2'
+            elif self.bets_output_array and len(self.bets_output_array) > 0:
                 name = 'CNN_76' # we sample from multiple models!
             elif self.other_old_bets_output_model:
                 name = 'CNN_5'
@@ -313,7 +319,7 @@ class TripleDrawAIPlayer():
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted pat draw by %.3f' % (noise))
-                    # Also demote 3,4,5 card draws. Look for other alteratives, even in a tough spot. Especially late in the hand.
+                    # Also demote 3,4,5 card draws (and 2-card draw on final round). Look for other alteratives, even in a tough spot. Especially late in the hand.
                     if (num_draws < 3) and (action == KEEP_2_CARDS) and drawCategoryNumCardsKept[action] != default_num_kept:
                         noise = draw_many_value_boost()
                         prediction[0] += noise
@@ -322,6 +328,12 @@ class TripleDrawAIPlayer():
                     elif (num_draws < 3) and (action == KEEP_0_CARDS or action == KEEP_1_CARDS) and drawCategoryNumCardsKept[action] != default_num_kept:
                         # Almost no reason at all to draw 4+ cards. Strongly consider any other option
                         noise = draw_very_many_value_boost()
+                        prediction[0] += noise
+                        if debug:
+                            print('\tBoosted %d-draw by %.3f' % (5-drawCategoryNumCardsKept[action], noise))
+                    elif (num_draws == 1) and (action == KEEP_3_CARDS) and drawCategoryNumCardsKept[action] != default_num_kept:
+                        # Demote 2-card draw on the final round. If close... better to stand pat or take 1 card. 
+                        noise = pat_draw_value_boost()
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted %d-draw by %.3f' % (5-drawCategoryNumCardsKept[action], noise))
@@ -505,6 +517,8 @@ class TripleDrawAIPlayer():
             
             # Now hand context
             if debug:
+                if self.is_dense_model:
+                    print('~ DNN model ~')
                 print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept, all_rounds_bets_string]))
             hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
                                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
@@ -687,6 +701,8 @@ class TripleDrawAIPlayer():
             
             # Now hand context
             if debug:
+                if self.is_dense_model:
+                    print('~ DNN model ~')
                 if FORMAT == 'holdem':
                     print('context %s' % ([cards_string, flop_string, turn_string, river_string, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
                 else:
@@ -1301,7 +1317,7 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
 # Play a bunch of hands.
 # For now... just rush toward full games, and skip details, or fill in with hacks.
 def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_model_filename=None,
-         bets_model_filename=None, old_bets_model_filename=None, other_old_bets_model_filename=None, human_player=None):
+         bets_model_filename=None, old_bets_model_filename=None, other_old_bets_model_filename=None, human_player=None, compare_models=None):
     # Compute hand values, or compare hands.
     if FORMAT == 'holdem':
         cashier = HoldemCashier() # Compares by Hold'em (poker high hand) rules
@@ -1418,6 +1434,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
 
         # Size must match exactly!
         # HACK: Automatically switch to Dense (DNN) model, if size of input...
+        # TODO: Not that this is dense model!
         if len(bets_all_param_values_from_file) == 6:
              bets_output_layer, bets_input_layer, bets_layers  = build_fully_connected_model(
                  HAND_TO_MATRIX_PAD_SIZE, 
@@ -1447,11 +1464,20 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
         expand_parameters_input_to_match(old_bets_all_param_values_from_file, zero_fill = True)
 
         # Size must match exactly!
-        old_bets_output_layer, old_bets_input_layer, old_bets_layers = build_model(
-            HAND_TO_MATRIX_PAD_SIZE, 
-            HAND_TO_MATRIX_PAD_SIZE,
-            32,
-        )
+        # HACK: Automatically switch to Dense (DNN) model, if size of input...
+        # TODO: Not that this is dense model!
+        if len(old_bets_all_param_values_from_file) == 6:
+             old_bets_output_layer, old_bets_input_layer, old_bets_layers  = build_fully_connected_model(
+                 HAND_TO_MATRIX_PAD_SIZE, 
+                 HAND_TO_MATRIX_PAD_SIZE,
+                 32,
+                 )
+        else:
+            old_bets_output_layer, old_bets_input_layer, old_bets_layers = build_model(
+                HAND_TO_MATRIX_PAD_SIZE, 
+                HAND_TO_MATRIX_PAD_SIZE,
+                32,
+                )
         #print('filling model with shape %s, with %d params' % (str(old_bets_output_layer.get_output_shape()), len(old_bets_all_param_values_from_file)))
         lasagne.layers.set_all_param_values(old_bets_output_layer, old_bets_all_param_values_from_file)
         predict_model(output_layer=old_bets_output_layer, test_batch=test_batch)
@@ -1468,11 +1494,18 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
         expand_parameters_input_to_match(other_old_bets_all_param_values_from_file, zero_fill = True)
 
         # Size must match exactly!
-        other_old_bets_output_layer, other_old_bets_input_layer, other_old_bets_layers = build_model(
-            HAND_TO_MATRIX_PAD_SIZE, 
-            HAND_TO_MATRIX_PAD_SIZE,
-            32,
-        )
+        if len(other_old_bets_all_param_values_from_file) == 6:
+             other_old_bets_output_layer, other_old_bets_input_layer, other_old_bets_layers = build_fully_connected_model(
+                 HAND_TO_MATRIX_PAD_SIZE, 
+                 HAND_TO_MATRIX_PAD_SIZE,
+                 32,
+                 )
+        else:
+            other_old_bets_output_layer, other_old_bets_input_layer, other_old_bets_layers = build_model(
+                HAND_TO_MATRIX_PAD_SIZE, 
+                HAND_TO_MATRIX_PAD_SIZE,
+                32,
+                )
         #print('filling model with shape %s, with %d params' % (str(other_old_bets_output_layer.get_output_shape()), len(other_old_bets_all_param_values_from_file)))
         lasagne.layers.set_all_param_values(other_old_bets_output_layer, other_old_bets_all_param_values_from_file)
         predict_model(output_layer=other_old_bets_output_layer, test_batch=test_batch)
@@ -1496,7 +1529,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     
     # Add model, to players.
 
-    # Player 1 plays the latest model... or a mixed bag of models, if provided.
+    # Player 1 plays the latest model... or a mixed bag of models, if provided. (unless we do A/B testing, in which case latest model only)
     # TODO: Perform massive cleanup, removing passing input, output layers for everything... just layers[0] and layers[-1] should suffice.
     player_one.output_layer = output_layer
     player_one.input_layer = input_layer
@@ -1504,6 +1537,11 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     player_one.holdem_input_layer = holdem_input_layer
     player_one.bets_output_layer = bets_output_layer
     player_one.bets_input_layer = bets_input_layer
+
+    # HACK: Are we using a dense model, for A vs B comparison (or A vs human)
+    if len(bets_layers) <= 6:
+        player_one.is_dense_model = True
+
     # enable, to make betting decisions with learned model (instead of heurstics)
     player_one.use_learning_action_model = True
 
@@ -1514,7 +1552,12 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
         # HACK: What if we want both players to use action percentage model?
         # TODO: Fix this better, or from command line.
         player_one.use_action_percent_model = True
-    if USE_MIXED_MODEL_WHEN_AVAILABLE and (old_bets_output_layer or other_old_bets_output_layer):
+
+    # Use array of all three models... unless we are comparing A vs B
+    if compare_models:
+        print('In compare_models mode, player_one uses the bets output layer only.')
+        assert not human_player, 'Can not have both compare_models and human player.'
+    elif USE_MIXED_MODEL_WHEN_AVAILABLE and (old_bets_output_layer or other_old_bets_output_layer):
         player_one.bets_output_array = []
         player_one.bets_output_array.append([bets_output_layer, bets_input_layer]) # lastest model
         if old_bets_output_layer:
@@ -1530,8 +1573,9 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     player_two.input_layer = input_layer
     player_two.holdem_output_layer = holdem_output_layer
     player_two.holdem_input_layer = holdem_input_layer
-    player_two.bets_output_layer = bets_output_layer
-    player_two.bets_input_layer = bets_input_layer
+    if not compare_models:
+        player_two.bets_output_layer = bets_output_layer
+        player_two.bets_input_layer = bets_input_layer
     # enable, to make betting decisions with learned model (instead of heurstics)
     player_two.use_learning_action_model = True
 
@@ -1547,11 +1591,19 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
         player_two.bets_input_layer = old_bets_input_layer
         player_two.old_bets_output_model = True
 
+        # Are we using dense model (DNN) for A vs B comparison?
+        if len(old_bets_layers) <= 6:
+            player_two.is_dense_model = True
+
     # Use the "other" "old" model, if provided
     if (not human_player) and other_old_bets_output_layer and (not player_one.bets_output_array):
         player_two.bets_output_layer = other_old_bets_output_layer
         player_two.bets_input_layer = other_old_bets_input_layer
         player_two.other_old_bets_output_model = True
+
+        # Are we using dense model (DNN) for A vs B comparison?
+        if len(old_bets_layers) <= 6:
+            player_two.is_dense_model = True
 
     # Run a bunch of individual hands.
     # Hack: Player one is always on the button...
@@ -1619,6 +1671,7 @@ if __name__ == '__main__':
     old_bets_model_filename = None # use "old" model if we want to compare CNN vs CNN
     other_old_bets_model_filename = None # a third "old" model
     human_player = False # do we want one player to be human?
+    compare_models = False # do we want an A/B test instead of latest model vs trailing average?
 
     # Now fill in these values from command line parameters...
     # TODO: better organize, what game we are playing, and whether against human, etc. 
@@ -1631,6 +1684,8 @@ if __name__ == '__main__':
         output_file_name = args.output
     if args.human_player:
         human_player = True
+    if args.compare_models:
+        compare_models = True
 
     # TODO: Take num samples from command line.
     play(sample_size=samples, output_file_name=output_file_name,
@@ -1639,4 +1694,5 @@ if __name__ == '__main__':
          bets_model_filename=bets_model_filename, 
          old_bets_model_filename=old_bets_model_filename, 
          other_old_bets_model_filename=other_old_bets_model_filename, 
-         human_player=human_player)
+         human_player=human_player,
+         compare_models=compare_models)
