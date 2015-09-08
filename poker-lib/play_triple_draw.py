@@ -245,13 +245,13 @@ class TripleDrawAIPlayer():
             if self.is_dense_model:
                 name = 'DNN_2'
             elif self.bets_output_array and len(self.bets_output_array) > 0:
-                name = 'CNN_76' # we sample from multiple models!
+                name = 'CNN_87' # we sample from multiple models!
             elif self.other_old_bets_output_model:
-                name = 'CNN_5'
-            elif self.old_bets_output_model:
                 name = 'CNN_6'
-            else:
+            elif self.old_bets_output_model:
                 name = 'CNN_7'
+            else:
+                name = 'CNN_8'
 
             # To help remember
             if self.use_action_percent_model:

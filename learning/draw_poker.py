@@ -124,7 +124,7 @@ PAT_DRAWS_ARE_IMPORTANT = True
 
 # Betting decisions. Train on these... but don't over-train. Be careful.
 RIVER_CALLS_ARE_IMPORTANT = False
-RIVER_RAISES_ARE_IMPORTANT = False
+RIVER_RAISES_ARE_IMPORTANT = True # False [river raises are greats, since we also get the 'call' counter-factuals]
 
 # For HE, boost other cases also
 HOLDEM_TWO_PAIR_ARE_IMPORTANT = True # 'big hands,' whether that be big board w/o private cards, or hand that helps
