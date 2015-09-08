@@ -115,7 +115,7 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.5 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 IMPORTANT_CASES_SAMPLE_RATE = min(3.0 * SAMPLE_RATE_DEUCE_EVENTS, 1.0)
 
 # Are the some cases that are important, and should always be selected?
@@ -131,6 +131,8 @@ HOLDEM_TWO_PAIR_ARE_IMPORTANT = True # 'big hands,' whether that be big board w/
 HOLDEM_RIVER_PLAY_BOARD_ARE_IMPORTANT = True # same category as the "board" cards (could be Ace-high though)
 
 # Use this to train only on results of intelligent players, if different versions available
+# Question: Do we include "DNN_2_per" hands? DNN is a good aggro opponent, but we don't necessarily want to learn its actions. 
+# It provides a challenge, since DNN pats a lot, and over-bets weak hands. We need to learn how to call down with mediocre hands in response.
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'CNN_76_per', 'man']) # learn only from better models, or man's actions
 # set(['CNN', 'CNN_2', 'CNN_3', 'man', 'sim']) # Incude 'sim' and ''?
 
@@ -596,7 +598,7 @@ def read_holdem_poker_line(data_array, csv_key_map):
 # Thus, we can train on the same model as 3-round draw decisions... resulting good initialization.
 def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_to_fit = PAD_INPUT, include_hand_context = False, 
                           num_draw_out_position = 0, num_draw_in_position = 0, actions_this_round = ''): 
-    #print(data_array)
+    #print(data_array) 
 
     # If we are told which player agent made this move, skip moves from players except those whom we trust.
     if format == 'deuce_events' and csv_key_map.has_key('bet_model') and PLAYERS_INCLUDE_DEUCE_EVENTS:
@@ -862,6 +864,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
     # B. Opponent information must be present, both in CSV key, and in data (check length of input, to backward-compatible)
     # C. Call instead of fold
     # D. Check/call instead of bet/raise. 
+    #print([bets_action, num_draws, csv_key_map.has_key('oppn_hand'), len(data_array), csv_key_map['oppn_hand']])
     if bets_action and num_draws == 0 and csv_key_map.has_key('oppn_hand') and len(data_array) > csv_key_map['oppn_hand']:
         #print('\nconsidering counter-factual information, given opponent hand...')
         #print(data_array)
@@ -869,19 +872,21 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         if action_taken == FOLD_HAND:
             # 0.5 result == may indicate default value. Until/unless fixed, ignore it.
             if csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5:
-                # print('--> consider counter-factual of call instead of FOLD')
+                #print('--> consider counter-factual of call instead of FOLD')
                 call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
                 if call_result == 0.0:
                     call_result = -1.0 * BIG_BET_SIZE
-                # print('we would win %.1f by calling... ' % call_result)
+                #print('we would win %.1f by calling... ' % call_result)
                 call_marginal_value = adjust_float_value(call_result, mode=format)
                 output_array[CALL_CATEGORY] = call_marginal_value
                 output_mask_classes[CALL_CATEGORY] = 1.0
         elif action_taken in ALL_BETS_SET:
             #print('consider counter-factual of check/call instead of bet/raise...')
+            check_call_result_valid = True
             if output_category == BET_CATEGORY and not position:
                 # NOTE: This is not technically accurate, so we are excluding from training.
                 # Check-fold is also possible, as is opponent betting a hand that we can beat, etc.
+                #print('We bet first to act... so counter-factual would be check/call')
                 """
                 #print('We bet first to act... so counter-factual is check/call')
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
@@ -890,7 +895,8 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                 if check_call_result == 0.0:
                     check_call_result = -1.0 * BIG_BET_SIZE
                     """
-                check_call_result = -1
+                check_call_result = 0.0
+                check_call_result_valid = False
             elif output_category == BET_CATEGORY:
                 #print('We bet, when could have checked behind')
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
@@ -902,9 +908,10 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
                 if check_call_result == 0.0:
                     check_call_result = -1.0 * BIG_BET_SIZE
+
             # Again, skip 0.5 win result, as this may be a data error. 
             #print('we would win %.1f by check/calling... ' % check_call_result)
-            if csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5 and check_call_result >= 0.0:
+            if csv_key_map.has_key('current_hand_win') and float(data_array[csv_key_map['current_hand_win']]) != 0.5 and check_call_result_valid:
                 check_call_margin_value = adjust_float_value(check_call_result, mode=format)
                 if output_category == BET_CATEGORY:
                     output_array[CHECK_CATEGORY] = check_call_margin_value
@@ -913,13 +920,18 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                     output_array[CALL_CATEGORY] = check_call_margin_value
                     output_mask_classes[CALL_CATEGORY] = 1.0
             #else:
-                #print('since we bet out and could have checked, no counter-factual information')
+                #print('since we bet out and could have checked, no counter-factual information. check_call_result == %.2f' % check_call_result)
+
         elif output_category == CALL_CATEGORY:
+            #print('we called, and could have folded')
             if RIVER_CALLS_ARE_IMPORTANT:
                 #print('including river call as significant action for training')
                 important_training_case = True
         #else:
             #print('no possible counter-factual to action taken |%s|... yet' % action_taken)
+
+        #print(output_mask_classes)
+        #print(output_array)
             
     """
     print(data_array)

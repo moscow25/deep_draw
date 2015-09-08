@@ -124,7 +124,7 @@ RETRY_FOLD_ACTION = True # If we get a model that says fold preflop... try again
 ADJUST_VALUES_TO_FIX_IMPOSSIBILITY = True # Do we fix impossible values? Like check < 0.0, or calling on river > pot + bet
 
 # Turn this on... only if we are not vulnerable to super-aggro patting machine. In the end... should be off. Gotta pay off sometimes.
-USE_NEGATIVE_RIVER_CALL_VALUE = False # True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
+USE_NEGATIVE_RIVER_CALL_VALUE = True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponen), at this point?
 # TODO: Consider action so far (# of bets made this round)
