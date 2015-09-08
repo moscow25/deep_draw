@@ -333,7 +333,7 @@ class TripleDrawAIPlayer():
                             print('\tBoosted %d-draw by %.3f' % (5-drawCategoryNumCardsKept[action], noise))
                     elif (num_draws == 1) and (action == KEEP_3_CARDS) and drawCategoryNumCardsKept[action] != default_num_kept:
                         # Demote 2-card draw on the final round. If close... better to stand pat or take 1 card. 
-                        noise = draw_many_value_boost()
+                        noise = pat_draw_value_boost()
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted %d-draw by %.3f' % (5-drawCategoryNumCardsKept[action], noise))
