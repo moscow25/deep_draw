@@ -125,7 +125,7 @@ ADJUST_VALUES_TO_FIX_IMPOSSIBILITY = True # Do we fix impossible values? Like ch
 
 # Turn this on... only if we are not vulnerable to super-aggro patting machine. In the end... should be off. Gotta pay off sometimes.
 USE_NEGATIVE_RIVER_CALL_VALUE = True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
-NEGATIVE_RIVE_CALL_CUTOFF = -0.05 # try to reduce *really bad* calls, like straights, big pairs, other hopeless. 
+NEGATIVE_RIVE_CALL_CUTOFF = -0.05 # try to reduce *really bad* calls, like straights, big pairs, other hopeless hands.  
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponen), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -1427,6 +1427,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     # If supplied, also load the bets model. conv(xCards + xNumDraws + xContext) --> values for all betting actions
     bets_output_layer = None
     bets_input_layer = None
+    bets_layers = None
     if bets_model_filename and os.path.isfile(bets_model_filename):
         print('\nExisting *bets* model in file %s. Attempt to load it!\n' % bets_model_filename)
         bets_all_param_values_from_file = np.load(bets_model_filename)
@@ -1459,6 +1460,8 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
 
     # If supplied "old" bets layer supplied... then load it as well.
     old_bets_output_layer = None
+    old_bets_input_layer = None
+    old_bets_layers = None
     if old_bets_model_filename and os.path.isfile(old_bets_model_filename):
         print('\nExisting *old bets* model in file %s. Attempt to load it!\n' % old_bets_model_filename)
         old_bets_all_param_values_from_file = np.load(old_bets_model_filename)
@@ -1489,6 +1492,8 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
 
     # Lastly, load a third model...
     other_old_bets_output_layer = None
+    other_old_bets_input_layer = None
+    other_old_bets_layers = None
     if other_old_bets_model_filename and os.path.isfile(other_old_bets_model_filename):
         print('\nExisting *old bets* model in file %s. Attempt to load it!\n' % other_old_bets_model_filename)
         other_old_bets_all_param_values_from_file = np.load(other_old_bets_model_filename)
@@ -1540,7 +1545,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     player_one.bets_input_layer = bets_input_layer
 
     # HACK: Are we using a dense model, for A vs B comparison (or A vs human)
-    if len(bets_layers) <= 6:
+    if bets_layers and len(bets_layers) <= 6:
         player_one.is_dense_model = True
 
     # enable, to make betting decisions with learned model (instead of heurstics)
@@ -1593,7 +1598,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
         player_two.old_bets_output_model = True
 
         # Are we using dense model (DNN) for A vs B comparison?
-        if len(old_bets_layers) <= 6:
+        if old_bets_layers and len(old_bets_layers) <= 6:
             player_two.is_dense_model = True
 
     # Use the "other" "old" model, if provided
@@ -1603,7 +1608,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
         player_two.other_old_bets_output_model = True
 
         # Are we using dense model (DNN) for A vs B comparison?
-        if len(old_bets_layers) <= 6:
+        if old_bets_layers and len(old_bets_layers) <= 6:
             player_two.is_dense_model = True
 
     # Run a bunch of individual hands.
