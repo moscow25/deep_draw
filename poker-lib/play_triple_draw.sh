@@ -24,9 +24,19 @@ DRAW_MODEL="$DEEP_DRAW_PATH/learning/deuce_triple_draw_conv_24_filter_xCards_xNu
 #OTHER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_6_draws_model_300k.pickle"
 
 # Three similar versions of model with disconnecte gradient actions. A bit passive, and pays off river too much. But plays good, and snows sometimes.
-LATEST_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_77_Randy_edits_action_percentage_700k.pickle" # Aggro. Very good draw model. Trained on games that play really well, with bounding of impossible actions. Kind of vulnerable to being bluffed though. Makes too many nitty folds.
-OLDER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_action_percentage_700k.pickle" # Too passive. 
-OTHER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_bets_percent_overtrained_500k.pickle" # Folds too much (overtrained)
+CNN_77_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_77_Randy_edits_action_percentage_700k.pickle" # Aggro. Very good draw model. Trained on games that play really well, with bounding of impossible actions. Kind of vulnerable to being bluffed though. Makes too many nitty folds.
+CNN_7_ACTION_FULL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_action_percentage_700k.pickle" # Too passive. 
+CNN_7_ACTION="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_bets_percent_overtrained_500k.pickle" # Folds too much (overtrained)
+
+# CNN_8 -- trained with (some) examples vs DNN
+CNN_8_VS_DNN="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_8_actions_DNN2_full_run_700k.pickle" # A bit messy
+CNN_8_W_DNN_MOVES="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_8_inc_DNN2_actions_700k.pickle" # Big improvement on aggressive patting, and big pots. Calls down kind of loose, but generally a good thing.
+
+# Up to three models that we can use.
+# TODO: It's ok to use CNN_8 with DNN moves..... if we do draws model with 1/3 choice also. Otherwise... the crazy pats are too predictable
+LATEST_VALUES_MODEL=$CNN_8_VS_DNN # $CNN_8_W_DNN_MOVES
+OLDER_VALUES_MODEL=$CNN_77_MODEL
+OTHER_VALUES_MODEL=$CNN_7_ACTION_FULL
 
 # Two-layer DNN. Play kind-of ok, but very aggresssive, stands pat a lot, and overplays every hand. Need to handle that, to avoid getting run over.
 DENSE_MODEL="$DEEP_DRAW_PATH/learning/deuce_bets_dense_2_layer_dropout_x0_5308_init_w_deuce_draws_700k.pickle"
@@ -45,13 +55,13 @@ tmp_pass=`head -c 10 /dev/random | base64`
 RANDOM_SESSION_ID="${tmp_pass:0:10}" #cut to 10 characters after base64 conversion
 
 # First (best) model
-#python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN76-$RANDOM_SESSION_ID.csv"
+#python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN87-$RANDOM_SESSION_ID.csv"
 
 # Mix in second-best
-#python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL -CNN_old_model $OLDER_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN76-$RANDOM_SESSION_ID.csv"
+#python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL -CNN_old_model $OLDER_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN97-$RANDOM_SESSION_ID.csv"
 
 # Include third, possibly bad, model
-python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL -CNN_old_model $OLDER_VALUES_MODEL -CNN_other_old_model $OTHER_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN76-$RANDOM_SESSION_ID.csv"
+python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $LATEST_VALUES_MODEL -CNN_old_model $OLDER_VALUES_MODEL -CNN_other_old_model $OTHER_VALUES_MODEL --human_player -output=./$USER_NAME-vs-CNN87-$RANDOM_SESSION_ID.csv"
 
 # Self-play DNN model.
 #python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $DENSE_MODEL"
