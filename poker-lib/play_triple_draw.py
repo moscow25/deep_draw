@@ -306,9 +306,12 @@ class TripleDrawAIPlayer():
                     action = prediction[1]
                     # Boost the value by fixed positive but noisy amount (noise only on the upside)
                     # This will reduce randomly choosing an inferior draw. But not every time. And *much better* draw action wins easily.
-                    # NOTE: DO *not* boost the pat move, when model recommends breaking. 
-                    if drawCategoryNumCardsKept[action] == default_num_kept and action != KEEP_5_CARDS:
-                        noise = best_draw_value_boost()
+                    # NOTE: Boost the pat draw... but less... if model recommends breaking.
+                    if drawCategoryNumCardsKept[action] == default_num_kept:
+                        if action == KEEP_5_CARDS:
+                            noise = abs(pat_draw_value_boost())
+                        else:
+                            noise = best_draw_value_boost()
                         prediction[0] += noise
                         if debug:
                             print('\tBoosted %d-card draw by %.3f' % (5-default_num_kept, noise))
@@ -474,10 +477,26 @@ class TripleDrawAIPlayer():
         # Reduce debug, if opponent is human, and could see.
         if (self.opponent and self.opponent.is_human and (not SHOW_MACHINE_DEBUG_AGAINST_HUMAN)) or self.is_human:
             debug = False
-
+        
+        """
         # If we have context and bets model that also outputs draws... at least give it a look.
         bets_layer = self.bets_output_layer # use latest "bets" layer, even if multiple available.
         bets_input_layer = self.bets_input_layer
+        """
+        # Either use bets model... or if given several... choose one at random to apply
+        # NOTE: We do not want to average the *values* in models, but the actual choices. Thus we'll be stochastic & unpredicatable.
+        # NOTE: We want to use all possible draws models... since otherwise not enough exploration if single model over or under-does something.
+        bets_layer = None
+        bets_input_layer = None
+        if self.bets_output_array:
+            # TODO: Also track input layer, for faster evaluation...
+            index = random.randrange(0, len(self.bets_output_array))
+            bets_layer, bets_input_layer = self.bets_output_array[index]
+            if debug:
+                print('chose draws model %d in %d-length models index...' % (index, len(self.bets_output_array)))
+        else:
+            bets_layer = self.bets_output_layer
+            bets_input_layer = self.bets_input_layer
         value_predictions = None
         if bets_layer and self.use_learning_action_model:
             if debug:

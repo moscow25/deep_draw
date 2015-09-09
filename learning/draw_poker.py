@@ -134,6 +134,7 @@ HOLDEM_RIVER_PLAY_BOARD_ARE_IMPORTANT = True # same category as the "board" card
 # Question: Do we include "DNN_2_per" hands? DNN is a good aggro opponent, but we don't necessarily want to learn its actions. 
 # It provides a challenge, since DNN pats a lot, and over-bets weak hands. We need to learn how to call down with mediocre hands in response.
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'CNN_76_per', 'man']) # learn only from better models, or man's actions
+PLAYERS_INCLUDE_DEUCE_EVENTS.add('DNN_2_per') # experimentally, try to train also will aggro DNN player. Why? to see what betting strong, especially on river, feels like. Also, what are the results of aggro draws & pats?
 # set(['CNN', 'CNN_2', 'CNN_3', 'man', 'sim']) # Incude 'sim' and ''?
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
