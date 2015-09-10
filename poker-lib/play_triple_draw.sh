@@ -73,7 +73,7 @@ python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DR
 #python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $DENSE_MODEL"
 
 # Human play against "intermediate" CNN_6 model
-#python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $CNN_7_FIRST_PREV_BETS --human_player -output=./$USER_NAME-vs-CNN87-$RANDOM_SESSION_ID.csv"
+#python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $CNN_7_DISCONNECT_GRAD --human_player -output=./$USER_NAME-vs-CNN87-$RANDOM_SESSION_ID.csv"
 
 echo $python_cmd
 
