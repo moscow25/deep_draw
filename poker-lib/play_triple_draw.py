@@ -61,6 +61,8 @@ models and final hand evaluations, to accomodate any other draw game.
 # Better yet, outside global constants class (modified from command line, etc)
 # [default format is 'deuce']
 FORMAT = 'deuce' # 'holdem' # 'deuce'
+if args.holdem_model:
+    FORMAT = 'holdem'
 
 USE_ACTION_PERCENTAGE = True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
 USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage... can be useful for Hold'em. Good for exploratory moves
@@ -70,7 +72,7 @@ USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage..
 if FORMAT == 'deuce':
     ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 elif FORMAT == 'holdem':
-    ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with not enough explore
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.3 # 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with not enough explore
 else:
     ACTION_PERCENTAGE_CHOICE_RATE = 0.0
 

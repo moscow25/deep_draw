@@ -23,6 +23,12 @@ DRAW_MODEL="$DEEP_DRAW_PATH/learning/deuce_triple_draw_conv_24_filter_xCards_xNu
 #OLDER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_6_mixed_draws_model_700k.pickle"
 #OTHER_VALUES_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_6_draws_model_300k.pickle"
 
+# Useful choice for intermediate model. Much better than early CNN model, and also uses/outputs the full mix, including action% and num_draws.
+# At the same time, gets beat handily by the later, more aggressive CNN models. 
+CNN_6_PREV_BETS="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_6_testing_prev_betting_context_50k.pickle"
+CNN_7_FIRST_PREV_BETS="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_prev_betting_context_500k.pickle" # July 20th. [before all other CNN_7+
+CNN_7_DISCONNECT_GRAD="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_disconnect_grad_bet_percent_full_run_500k.pickle" # July 27th. First model to use full disconnected gradient (hence action% not over-fold)
+
 # Three similar versions of model with disconnecte gradient actions. A bit passive, and pays off river too much. But plays good, and snows sometimes.
 CNN_77_MODEL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_77_Randy_edits_action_percentage_700k.pickle" # Aggro. Very good draw model. Trained on games that play really well, with bounding of impossible actions. Kind of vulnerable to being bluffed though. Makes too many nitty folds.
 CNN_7_ACTION_FULL="$DEEP_DRAW_PATH/learning/deuce_events_conv_24_filter_xCards_xNumDraws_xContext_0.02_CNN_7_important_river_action_percentage_700k.pickle" # Too passive. 
@@ -65,6 +71,9 @@ python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DR
 
 # Self-play DNN model.
 #python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $DENSE_MODEL"
+
+# Human play against "intermediate" CNN_6 model
+#python_cmd="python $DEEP_DRAW_PATH/poker-lib/play_triple_draw.py -draw_model $DRAW_MODEL -CNN_model $CNN_7_FIRST_PREV_BETS --human_player -output=./$USER_NAME-vs-CNN87-$RANDOM_SESSION_ID.csv"
 
 echo $python_cmd
 
