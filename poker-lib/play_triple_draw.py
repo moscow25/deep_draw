@@ -72,7 +72,7 @@ USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage..
 if FORMAT == 'deuce':
     ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 elif FORMAT == 'holdem':
-    ACTION_PERCENTAGE_CHOICE_RATE = 0.3 # 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with not enough explore
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with not enough explore
 else:
     ACTION_PERCENTAGE_CHOICE_RATE = 0.0
 
@@ -123,11 +123,13 @@ SHOW_HUMAN_DEBUG = True # Show debug, based on human player...
 SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playing (will reveal hand)
 USE_MIXED_MODEL_WHEN_AVAILABLE = True # When possible, including against human, use 2 or 3 models, and choose randomly which one decides actions.
 RETRY_FOLD_ACTION = True # If we get a model that says fold preflop... try again. But just once. We should avoid raise/fold pre
-ADJUST_VALUES_TO_FIX_IMPOSSIBILITY = True # Do we fix impossible values? Like check < 0.0, or calling on river > pot + bet
+ADJUST_VALUES_TO_FIX_IMPOSSIBILITY = True # Do we fix impossile values? Like check < 0.0, or calling on river > pot + bet
 
 # Turn this on... only if we are not vulnerable to super-aggro patting machine. In the end... should be off. Gotta pay off sometimes.
 USE_NEGATIVE_RIVER_CALL_VALUE = True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
-NEGATIVE_RIVE_CALL_CUTOFF = -0.05 # try to reduce *really bad* calls, like straights, big pairs, other hopeless hands.  
+NEGATIVE_RIVER_CALL_CUTOFF = -0.05 # try to reduce *really bad* calls, like straights, big pairs, other hopeless hands.  
+if FORMAT == 'holdem':
+    NEGATIVE_RIVER_CALL_CUTOFF = -0.01 # Holdem is tighter. Don't auto-bet with bad hands...
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponen), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -815,7 +817,7 @@ class TripleDrawAIPlayer():
                     action = prediction[1]
                     value = prediction[0]
                     # NOTE: Use figure slightly less than 0.0 as cutoff... since it's really about clear lossses, not really marginal calls at 0.0
-                    if action == CALL_BIG_STREET and value < NEGATIVE_RIVE_CALL_CUTOFF:
+                    if action == CALL_BIG_STREET and value < NEGATIVE_RIVER_CALL_CUTOFF:
                         negative_river_call_value = True
 
             #if adjusted_values_to_fix_impossibility:
