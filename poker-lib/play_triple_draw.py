@@ -253,7 +253,9 @@ class TripleDrawAIPlayer():
             elif self.other_old_bets_output_model:
                 name = 'CNN_6'
             elif self.old_bets_output_model:
-                name = 'CNN_7'
+                name = 'CNN_1' # Hack here if we have AI1 vs AI2
+                # Another hack, to turn off bet-action for CNN_1 [unless we want it on to explore]
+                self.use_action_percent_model = False;
             else:
                 name = 'CNN_8'
 
@@ -301,7 +303,9 @@ class TripleDrawAIPlayer():
         if NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW:
             # reduce frequency of num_draws model use... as we go earlier in the hand.
             draw_model_rate -= (num_draws - 1) * NUM_DRAW_MODEL_RATE_REDUCE_BY_DRAW
-        if draw_recommendations and USE_NUM_DRAW_MODEL and random.random() <= draw_model_rate:
+
+        # Another hack. Don't use draw model with CNN_1 (remove if we want to build from it)
+        if draw_recommendations and USE_NUM_DRAW_MODEL and self.player_tag() != 'CNN_1' and self.player_tag() != 'CNN_1_per' and random.random() <= draw_model_rate:
             # The point isn't to over-rule 0-32 model in close cases. The point is to look for *clear advantages* to 
             # snowing a hand, or breaking a hand. Therefore, add a bonus to the move already preferred by 0-32 model.
             if FAVOR_DEFAULT_NUM_DRAW_MODEL:
@@ -502,7 +506,7 @@ class TripleDrawAIPlayer():
             bets_layer = self.bets_output_layer
             bets_input_layer = self.bets_input_layer
         value_predictions = None
-        if bets_layer and self.use_learning_action_model:
+        if bets_layer and self.use_learning_action_model and self.player_tag() != 'CNN_1' and self.player_tag() != 'CNN_1_per':
             if debug:
                 print('trying draw model in debug mode...')
             num_draws_left = num_draws
