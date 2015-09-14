@@ -48,7 +48,7 @@ if __name__ == '__main__':
                     player_results_map[name] = [];
                 player_results_map[name].append(margin_result)
                     
-        except (_csv.Error, TypeError, IndexError, ValueError, KeyError, AssertionError):
+        except:
             print('bad line: %s' % line);
 
     # Now iterate over players, and print results
