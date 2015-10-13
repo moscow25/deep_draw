@@ -31,6 +31,7 @@ if __name__ == '__main__':
 
     # Read filename
     csv_reader = csv.reader(open(filename, 'rb'), lineterminator='\n')
+    bad_lines = 0
     for line in csv_reader:
         # print(line)
         try:
@@ -42,18 +43,24 @@ if __name__ == '__main__':
                 #print('------------')
                 #print([name, action, margin_result])
                 #print('------------')
-
                 if not(name in players):
                     players.add(name)
                     player_results_map[name] = [];
                 player_results_map[name].append(margin_result)
+
+                if len(player_results_map[name]) % 50 == 0:
+                    results = np.array(player_results_map[name])
+                    print('------------')
+                    print('%d\tResults for player |%s|' % (results.size, name))
+                    print('\tnum: %d\tave: %.2f\tstdv: %.2f' % (results.size, np.mean(results), np.std(results)))
                     
         except:
-            print('bad line: %s' % line);
+            bad_lines +=1
+            #print('bad line: %s' % line);
 
     # Now iterate over players, and print results
     for player in players:
         results = np.array(player_results_map[player])
-        print('------------')
+        print('\n---------------\n--------------Final-------------------')
         print('%d\tResults for player |%s|' % (results.size, player))
         print('\tnum: %d\tave: %.2f\tstdv: %.2f' % (results.size, np.mean(results), np.std(results)))

@@ -8,6 +8,7 @@ import scipy.stats as ss
 import itertools
 from poker_hashes import *
 from poker_util import *
+import cards_to_python_ext # BOOST.Python for function cards_to_python_ext.canonical_board("7h7dAhKd2h9c",0,2)
 
 """
 Author: Nikolai Yakovenko
@@ -350,12 +351,74 @@ class Card(object):
         self.hashTag = card_hash_tag(suit, value)
 
     # Other TODOs
-
     def __str__(self):
         return '%s%s' % (valueSymbol[self.value], suitSymbol[self.suit])
 
     def __eq__(self, other):
         return (self.suit == other.suit and self.value == other.value)
+
+# Given arrays of cards, some of them empty, return same format, after canonical
+# cards_to_python_ext.canonical_board("7h7dAhKd2h9c",0,2)
+# Valid inputs: empty input, preflop only, preflop + board, board only [turn only not allowed]
+def holdem_cards_canonical_form(cards_array, flop_array, turn_array, river_array):
+    # A. combine all cards in one array
+    all_cards = cards_array + flop_array + turn_array + river_array
+    all_cards_string = ''.join(str(card) for card in all_cards)
+    #print(all_cards_string)
+    if not all_cards_string:
+        return (cards_array, flop_array, turn_array, river_array)
+    # B. recognize bounds (flop to turn?)
+    lower_bound = 0 if cards_array else 1
+    upper_bound = lower_bound
+    if flop_array:
+        if turn_array:
+            if river_array:
+                upper_bound = 3
+            else:
+                upper_bound = 2
+        else:
+            upper_bound = 1
+    else:
+        upper_bound = 0
+
+    # C. Run C-library
+    all_cards_canonical_string = cards_to_python_ext.canonical_board(all_cards_string, lower_bound, upper_bound)
+    #print all_cards_canonical_string
+    
+    # D. Translate back to card arrays
+    all_cards_canonical_array = []
+    for i in range(len(all_cards_canonical_string) / 2):
+        card = card_from_string(all_cards_canonical_string[i*2:i*2+2])
+        all_cards_canonical_array.append(card)
+
+    canonical_index = 0
+    # Preflop, if applies
+    if cards_array:
+        new_cards_array = [all_cards_canonical_array[canonical_index], all_cards_canonical_array[canonical_index+1]]
+        canonical_index += 2
+    else:
+        new_cards_array = []
+
+    if flop_array:
+        new_flop_array = [all_cards_canonical_array[canonical_index], all_cards_canonical_array[canonical_index+1], all_cards_canonical_array[canonical_index+2]]
+        canonical_index += 3
+    else:
+        new_flop_array = []
+
+    if turn_array:
+        new_turn_array = [all_cards_canonical_array[canonical_index]]
+        canonical_index += 1
+    else:
+        new_turn_array = []
+
+    if river_array:
+        new_river_array = [all_cards_canonical_array[canonical_index]]
+        canonical_index += 1
+    else:
+        new_river_array = []
+
+    # Updated arrays... with all cards in canonical formz
+    return (new_cards_array, new_flop_array, new_turn_array, new_river_array)
 
 # card from string Ks
 def card_from_string(card_str):

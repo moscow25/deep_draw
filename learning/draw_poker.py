@@ -86,6 +86,7 @@ NUM_DRAWS_ALL_ZERO = False # True # Set true, to add "num_draws" to input shape.
 PAD_INPUT = True # False # Set False to handle 4x13 input. *Many* things need to change for that, including shape.
 CONTEXT_LENGTH = 2 + 5 + 5 + 5 + 5 # Fast way to see how many zero's to add, if needed. [xPosition, xPot, xBets [this street], xCardsKept, xOpponentKept, xPreviousRoundBetting]
 FULL_INPUT_LENGTH = 5 + 1 + 3 + CONTEXT_LENGTH
+CARDS_CANONICAL_FORM = True # where available, by default, do we map CNN inputs to canonical form?
 
 #######################
 ## HACK for 'video' ###
@@ -235,7 +236,7 @@ def integer_to_card_array(number, max_integer, pad_to_fit = PAD_INPUT):
 # Similarly to the 5-card draw example above, encode holdem hand into bits array, padded out to maximum size.
 # NOTE: Unless needed, just assume variables like yes, we want to inlude "num draws" == betting rounds left. Etc.
 # NOTE: Return one input matrix. None of this invariances bullshit (like switching suits).
-def holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string, pad_to_fit = PAD_INPUT, include_hand_context = True):
+def holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string, pad_to_fit = PAD_INPUT, include_hand_context = True, use_canonical_form = CARDS_CANONICAL_FORM):
     #print('attempting to read hand from %s' % [cards_string, flop_string, turn_string, river_string])
 
     # Turn cards strings inta arrays of cards.
@@ -243,6 +244,15 @@ def holdem_cards_input_from_string(cards_string, flop_string, turn_string, river
     flop_array = [card_from_string(card_str) for card_str in hand_string_to_array(flop_string)]
     turn_array = [card_from_string(card_str) for card_str in hand_string_to_array(turn_string)]
     river_array = [card_from_string(card_str) for card_str in hand_string_to_array(river_string)]
+
+    # TOOD: If we turn cards into canonical form, this is where we do it.
+    # NOTE: Canonical means equivalent inputs map to same exact cards. Therefore, matters how many streets are available.
+    # NOTE: We port this from C++, so will pass and recieve as one long string. Also needed: first and last street.
+    if use_canonical_form:
+        #print('Calculating canonical form...')
+        #print([hand_string(cards_array), hand_string(flop_array), hand_string(turn_array), hand_string(river_array)])
+        (cards_array, flop_array, turn_array, river_array) = holdem_cards_canonical_form(cards_array, flop_array, turn_array, river_array)
+        #print([hand_string(cards_array), hand_string(flop_array), hand_string(turn_array), hand_string(river_array)])
 
     # All cards array (with community and private cards) makes sense for Holdem. Not really for Omaha. So do both.
     all_community_cards_array = flop_array + turn_array + river_array
@@ -1139,6 +1149,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 if (hands % 2500 == 1) and hands != last_hands_print:
                     print('\nLoaded %d hands... (of these %d are important cases)\n' % (hands, important_training_cases))
                     print(line)
+                    print('Loaded in canonical form? %s' % CARDS_CANONICAL_FORM)
                     #print(hand_input)
                     print(hand_input.shape)
 
@@ -1167,7 +1178,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('------------')
                     last_hands_print = hands
 
-                    # time.sleep(5)
+                    time.sleep(5)
 
                 # count class, if item chosen
                 y_count_by_bucket[output_class] += 1

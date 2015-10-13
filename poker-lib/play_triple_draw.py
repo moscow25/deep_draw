@@ -60,6 +60,7 @@ models and final hand evaluations, to accomodate any other draw game.
 # TODO: Do this from command line... but then need to ensure that all done correctly.
 # Better yet, outside global constants class (modified from command line, etc)
 # [default format is 'deuce']
+CARDS_CANONICAL_FORM = True # if available. NOTE: Older models my work better w/o canonical form, new models require it
 FORMAT = 'deuce' # 'holdem' # 'deuce'
 if args.holdem_model:
     FORMAT = 'holdem'
@@ -656,7 +657,7 @@ class TripleDrawAIPlayer():
                 flop_string = hand_string(self.holdem_hand.community.flop)
                 turn_string = hand_string(self.holdem_hand.community.turn)
                 river_string = hand_string(self.holdem_hand.community.river)
-                cards_input = holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string, include_hand_context = False)
+                cards_input = holdem_cards_input_from_string(cards_string, flop_string, turn_string, river_string, include_hand_context = False, use_canonical_form = CARDS_CANONICAL_FORM)
             else:
                 num_draws_left = 3
                 if round == PRE_DRAW_BET_ROUND:

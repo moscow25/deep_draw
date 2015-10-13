@@ -52,9 +52,9 @@ std::string canonical_board(const std::string& string_cards, int low, int high) 
     raw_cards[i] = c;
   }
 
-  OutputNCards(raw_cards, length); printf("\n");
+  // OutputNCards(raw_cards, length); printf("\n");
   CanonicalizeCards(raw_cards, low, high, canon_cards);
-  OutputNCards(canon_cards, length); printf("\n");
+  // OutputNCards(canon_cards, length); printf("\n");
 
   // Now convert back to string...
   string string_canonical = "";
