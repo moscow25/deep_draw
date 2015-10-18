@@ -39,19 +39,6 @@ elif TRAINING_FORMAT == 'deuce':
     DATA_FILENAME = '../data/500k_hands_sample_details_all.csv' # all 32 values for 'deuce' (draws)
 elif TRAINING_FORMAT == 'video':
     DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
-#'../data/holdem/holdem_sim_examples_50k.csv' # 'holdem_events' Small-ish dataset of simulated Hold'em hands (heuristic stochastic model). Bets in various context, ad results.
-# '../data/holdem/500k_holdem_values.csv' # 'holdem' 500k holdem hand values. Cards, possible flop, turn and river.
-# '../data/holdem/100k_holdem_values.csv' # 'holdem' 100k holdem hand values. Cards, possible flop, turn and river. Odds vs random hand, and odds to make hand categories.
-# '../data/100k_hands_triple_draw_events.csv' # 'deuce_events' 4M hands, of the latest model (and some human play)
-# '/Users/kolya/Desktop/poker/triple_draw/code/hands_sample_skew_low_100k.csv' # 0-32 draw results, skewed toward low card hands
-# '../data/100k_hands_triple_draw_events.csv' # 100k hands, of human play, and CNN vs CNN, for CNN3,4,5 and 45 (mix of CNN3, CNN4, CNN5)
-# '../poker-lib/CNN6_mixed-test.csv' # Testing, with data for counter-factual on the river...
-# '../data/40k_hands_triple_draw_events.csv' # 40k hands (a lot more events) from man vs CNN, CNN vs sim, and sim vs sim [need more CNN vs CNN]
-# '../data/60k_triple_draw_events.csv' # 60k 'event's from a few thousand full hands.
-# '../data/500k_hands_sample_details_all.csv' # all 32 values for 'deuce' (draws)
-# '../data/500k_hands_sample_details_all.csv' # all 32 values.
-# '../data/200k_hands_sample_details_all.csv' # all 32 values. Cases for 1, 2 & 3 draws left
-# '../data/60000_hands_sample_details.csv' # 60k triple draw hands... best draw output only
 
 MAX_INPUT_SIZE = 740000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 40000
@@ -65,8 +52,14 @@ LEARNING_RATE = 0.02 # 0.1 # 0.02 # 0.1 # 0.05
 MOMENTUM = 0.9
 # Fix and test, before epoch switch...
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
-ADA_DELTA_EPSILON = 1e-4 # 1e-6 # default is smaller, be more aggressive...
-ADA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
+
+# Model initialization if we use adaptive learning (to start, to to switch to...)
+ADA_DELTA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
+ADA_DELTA_RHO = 0.95 # recommended from the paper
+ADA_DELTA_EPSILON = 1e-6 # 1e-4 # 1e-6 # default from the paper (MNIST dataset) is small. We can be more aggressive... if data is not noisy
+
+# Default to adaptive learning rate. Recommended to train with fixed learning rate first. Don't do adaptive on clean model (too noisy)
+DEFAULT_ADAPTIVE = True # Set on to train adapative. 
 
 NUM_FAT_FILTERS = NUM_FILTERS / 2
 if USE_FAT_MODEL:
@@ -638,7 +631,9 @@ def create_iter_functions_full_output(dataset, output_layer,
                                       input_layer = None,
                                       X_tensor_type=T.tensor4, # T.matrix,
                                       batch_size=BATCH_SIZE,
-                                      learning_rate=LEARNING_RATE, momentum=MOMENTUM):
+                                      learning_rate=LEARNING_RATE, momentum=MOMENTUM,
+                                      ada_learning_rate=ADA_DELTA_LEARNING_RATE, ada_rho = ADA_DELTA_RHO, ada_epsilon = ADA_DELTA_EPSILON
+                                      default_adaptive=DEFAULT_ADAPTIVE):
     """Create functions for training, validation and testing to iterate one
        epoch.
     """
@@ -715,8 +710,10 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     all_params = lasagne.layers.get_all_params(output_layer)
     # Default: Nesterov momentum. Try something else?
-    print('Using updates.nesterov_momentum with learning rate %.2f, momentum %.2f' % (learning_rate, momentum))
+    print('Building updates.nesterov_momentum with learning rate %.2f, momentum %.2f' % (learning_rate, momentum))
     updates_nesterov = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
+    print('Building updates.adadelta with learning rate %.2f, rho %.2f, epsilon %.8f' % (ada_learning_rate, ada_rho, ada_epsilon))
+    updates_adadelta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=ada_learning_rate, rho=ada_rho, epsilon=ada_epsilon)
 
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
@@ -732,8 +729,21 @@ def create_iter_functions_full_output(dataset, output_layer,
         on_unused_input='warn', # We might not need "m_batch" if unmasked input... but pain to deal with conditional compiling
         )
 
-    # Still the default training function
+    # Also, function for adaptive learning, which we may or may not use
+    iter_train_ada_delta = theano.function(
+        [input_layer.input_var, z_batch, m_batch], loss_train,
+        updates=updates_adadelta,
+        givens=givens_train,
+        on_unused_input='warn', # We might not need "m_batch" if unmasked input... but pain to deal with conditional compiling
+        )
+
+    # Fixed learning rate with Nesterov momentum, is still the default training function
     iter_train = iter_train_nesterov
+
+    # Don't do adaptive training on fresh model. needs to run with learning & momentum first. Then... we delta
+    if default_adaptive:
+        print('Using adaptive learning as default training!')
+        iter_train = iter_train_ada_delta 
 
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
@@ -749,7 +759,7 @@ def create_iter_functions_full_output(dataset, output_layer,
     return dict(
         train=iter_train,
         train_nesterov=iter_train_nesterov,
-        #train_ada_delta=iter_train_ada_delta,
+        train_ada_delta=iter_train_ada_delta,
         valid=iter_valid,
         #test=iter_test,
     )
