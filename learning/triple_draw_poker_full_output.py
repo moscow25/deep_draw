@@ -632,7 +632,7 @@ def create_iter_functions_full_output(dataset, output_layer,
                                       X_tensor_type=T.tensor4, # T.matrix,
                                       batch_size=BATCH_SIZE,
                                       learning_rate=LEARNING_RATE, momentum=MOMENTUM,
-                                      ada_learning_rate=ADA_DELTA_LEARNING_RATE, ada_rho = ADA_DELTA_RHO, ada_epsilon = ADA_DELTA_EPSILON
+                                      ada_learning_rate=ADA_DELTA_LEARNING_RATE, ada_rho = ADA_DELTA_RHO, ada_epsilon = ADA_DELTA_EPSILON,
                                       default_adaptive=DEFAULT_ADAPTIVE):
     """Create functions for training, validation and testing to iterate one
        epoch.
