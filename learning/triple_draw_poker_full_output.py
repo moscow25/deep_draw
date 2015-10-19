@@ -27,6 +27,8 @@ TRAINING_FORMAT = 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
 USE_FAT_MODEL = False # True # False # True
 USE_FULLY_CONNECTED_MODEL = False # True # False
+# TODO: Is leaky units compatible with normal ReLu? Old models won't be 100% correct... but can we load them?
+DEFAULT_LEAKY_UNITS = True # False # Use leaky ReLU to avoid saturation at 0.0? [default leakiness 0.01]
 
 DATA_FILENAME = None
 if TRAINING_FORMAT == 'deuce_events':
@@ -59,7 +61,7 @@ ADA_DELTA_RHO = 0.9 # 0.95 recommended from the AdaDelta paper, 0.9 for RMSprop
 ADA_DELTA_EPSILON = 1e-6 # 1e-4 # 1e-6 # default from the paper (MNIST dataset) is small. We can be more aggressive... if data is not noisy (but it's really just a constant)
 
 # Default to adaptive learning rate. Recommended to train with fixed learning rate first. Don't do adaptive on clean model (too noisy)
-DEFAULT_ADAPTIVE = True # Set on to train adapative. 
+DEFAULT_ADAPTIVE = False # True # Set on to train adapative. 
 
 NUM_FAT_FILTERS = NUM_FILTERS / 2
 if USE_FAT_MODEL:
@@ -479,7 +481,9 @@ def build_fat_model(input_width, input_height, output_dim,
 
 # Need to explicitly pass input_var... if we want to feed input into the network, without putting that input into "shared"
 def build_model(input_width, input_height, output_dim,
-                batch_size=BATCH_SIZE, input_var = None):
+                batch_size=BATCH_SIZE, input_var = None,
+                use_leaky_units=DEFAULT_LEAKY_UNITS # small "leak" in ReLu units, to avoid saturation at 0.0?
+                ):
     print('building model, layer by layer...')
     num_input_cards = FULL_INPUT_LENGTH
 
@@ -500,13 +504,18 @@ def build_model(input_width, input_height, output_dim,
 
     print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
 
+    # Do we use rectified linear units, or a leaky version thereof? 
+    # NOTE: Could mix this layer by layer... but better to keep it consistent.
+    nonlinearity = lasagne.nonlinearities.rectify # default. Linear for all values >= 0.0. Negative values to go 0.0
+    if use_leaky_units:
+        print('Initializing with \'leaky\' ReLU units. Leakiness is default (0.01)');
+        nonlinearity = lasagne.nonlinearities.leaky_rectify # default 0.01 leakiness
+
     l_conv1 = lasagne.layers.Conv2DLayer(
         l_in,
         num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        #pad=BORDER_SHAPE,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_conv1)
@@ -519,9 +528,7 @@ def build_model(input_width, input_height, output_dim,
         l_conv1,
         num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        #pad=BORDER_SHAPE,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_conv1_1)
@@ -534,23 +541,11 @@ def build_model(input_width, input_height, output_dim,
 
     print('maxPool layer l_pool1. Shape %s' % str(l_pool1.output_shape))
 
-    # try 3rd conv layer
-    #l_conv1_2 = lasagne.layers.Conv2DLayer(
-    #    l_conv1_1,
-    #    num_filters=16, #16, #32,
-    #    filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-    #    nonlinearity=lasagne.nonlinearities.rectify,
-    #    W=lasagne.init.GlorotUniform(),
-    #    )
-    #l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_2, ds=(2, 2))
-
     l_conv2 = lasagne.layers.Conv2DLayer(
         l_pool1,
         num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
-        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        #pad=BORDER_SHAPE,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_conv2)
@@ -562,9 +557,7 @@ def build_model(input_width, input_height, output_dim,
         l_conv2,
         num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
-        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        #pad=BORDER_SHAPE,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_conv2_2)
@@ -578,20 +571,10 @@ def build_model(input_width, input_height, output_dim,
 
     print('maxPool layer l_pool2. Shape %s' % str(l_pool2.output_shape))
 
-    # Add 3rd convolution layer!
-    #l_conv3 = lasagne.layers.Conv2DLayer(
-    #    l_pool2,
-    #    num_filters=16, #16, #32,
-    #    filter_size=(2,2), #(5,5), # (3,3), #(5, 5),
-    #    nonlinearity=lasagne.nonlinearities.rectify,
-    #    W=lasagne.init.GlorotUniform(),
-    #    )
-    #l_pool3 = lasagne.layers.MaxPool2DLayer(l_conv3, ds=(2, 2))
-
     l_hidden1 = lasagne.layers.DenseLayer(
         l_pool2,
         num_units=NUM_HIDDEN_UNITS,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_hidden1)
@@ -603,17 +586,10 @@ def build_model(input_width, input_height, output_dim,
 
     print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.output_shape))
 
-    #l_hidden2 = lasagne.layers.DenseLayer(
-    #     l_hidden1_dropout,
-    #     num_units=NUM_HIDDEN_UNITS,
-    #     nonlinearity=lasagne.nonlinearities.rectify,
-    #     )
-    #l_hidden2_dropout = lasagne.layers.DropoutLayer(l_hidden2, p=0.5)
-
     l_out = lasagne.layers.DenseLayer(
         l_hidden1_dropout, #l_hidden2_dropout, # l_hidden1_dropout,
         num_units=output_dim,
-        nonlinearity=lasagne.nonlinearities.rectify, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
+        nonlinearity=nonlinearity, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_out)
@@ -756,8 +732,10 @@ def create_iter_functions_full_output(dataset, output_layer,
     if default_adaptive:
         #print('Using adaptive learning (AdaDelta) as default training!')
         #iter_train = iter_train_ada_delta 
-        print('Using adaptive learning (RMSprop) as default training!')
+        print('--> Using adaptive learning (RMSprop) as default training!')
         iter_train = iter_train_rmsprop
+    else:
+        print('--> Using fixed learning rate with Nesterov momentum as default training.')
 
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
