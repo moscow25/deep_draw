@@ -54,9 +54,9 @@ MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 
 # Model initialization if we use adaptive learning (to start, to to switch to...)
-ADA_DELTA_LEARNING_RATE = 1.0 # 0.5 # algorithm confuses this
-ADA_DELTA_RHO = 0.95 # recommended from the paper
-ADA_DELTA_EPSILON = 1e-6 # 1e-4 # 1e-6 # default from the paper (MNIST dataset) is small. We can be more aggressive... if data is not noisy
+ADA_DELTA_LEARNING_RATE = 0.001 # 1.0 # 1.0 learning rate for AdaDelta... 0.01 recommended for RMSProp (very sensitive)
+ADA_DELTA_RHO = 0.9 # 0.95 recommended from the AdaDelta paper, 0.9 for RMSprop
+ADA_DELTA_EPSILON = 1e-6 # 1e-4 # 1e-6 # default from the paper (MNIST dataset) is small. We can be more aggressive... if data is not noisy (but it's really just a constant)
 
 # Default to adaptive learning rate. Recommended to train with fixed learning rate first. Don't do adaptive on clean model (too noisy)
 DEFAULT_ADAPTIVE = True # Set on to train adapative. 
@@ -710,10 +710,16 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     all_params = lasagne.layers.get_all_params(output_layer)
     # Default: Nesterov momentum. Try something else?
-    print('Building updates.nesterov_momentum with learning rate %.2f, momentum %.2f' % (learning_rate, momentum))
+    print('Building updates.nesterov_momentum with learning rate %.8ff, momentum %.2f' % (learning_rate, momentum))
     updates_nesterov = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
-    print('Building updates.adadelta with learning rate %.2f, rho %.2f, epsilon %.8f' % (ada_learning_rate, ada_rho, ada_epsilon))
+
+    # Try adaptive training -- varies learning rate in reaction to how data reacts.
+    print('Building updates.adadelta with learning rate %.8f, rho %.3f, epsilon %.8f' % (ada_learning_rate, ada_rho, ada_epsilon))
     updates_adadelta = lasagne.updates.adadelta(loss_train, all_params, learning_rate=ada_learning_rate, rho=ada_rho, epsilon=ada_epsilon)
+
+    # RMSprop = very similar to AdaDelta. Need to read more.
+    print('Building updates.rmsprop with learning rate %.8f, rho %.3f, epsilon %.8f' % (ada_learning_rate, ada_rho, ada_epsilon))
+    updates_rmsprop = lasagne.updates.rmsprop(loss_train, all_params, learning_rate=ada_learning_rate, rho=ada_rho, epsilon=ada_epsilon)
 
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
@@ -734,7 +740,13 @@ def create_iter_functions_full_output(dataset, output_layer,
         [input_layer.input_var, z_batch, m_batch], loss_train,
         updates=updates_adadelta,
         givens=givens_train,
-        on_unused_input='warn', # We might not need "m_batch" if unmasked input... but pain to deal with conditional compiling
+        on_unused_input='warn',
+        )
+    iter_train_rmsprop = theano.function(
+        [input_layer.input_var, z_batch, m_batch], loss_train,
+        updates=updates_rmsprop,
+        givens=givens_train,
+        on_unused_input='warn', 
         )
 
     # Fixed learning rate with Nesterov momentum, is still the default training function
@@ -742,8 +754,10 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     # Don't do adaptive training on fresh model. needs to run with learning & momentum first. Then... we delta
     if default_adaptive:
-        print('Using adaptive learning as default training!')
-        iter_train = iter_train_ada_delta 
+        #print('Using adaptive learning (AdaDelta) as default training!')
+        #iter_train = iter_train_ada_delta 
+        print('Using adaptive learning (RMSprop) as default training!')
+        iter_train = iter_train_rmsprop
 
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:

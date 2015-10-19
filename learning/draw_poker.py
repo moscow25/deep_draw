@@ -1178,7 +1178,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('------------')
                     last_hands_print = hands
 
-                    time.sleep(5)
+                    #time.sleep(5)
 
                 # count class, if item chosen
                 y_count_by_bucket[output_class] += 1
