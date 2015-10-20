@@ -42,8 +42,8 @@ elif TRAINING_FORMAT == 'deuce':
 elif TRAINING_FORMAT == 'video':
     DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
 
-MAX_INPUT_SIZE = 74000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 4000
+MAX_INPUT_SIZE = 740000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 40000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
@@ -56,12 +56,15 @@ MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 
 # Model initialization if we use adaptive learning (to start, to to switch to...)
-ADA_DELTA_LEARNING_RATE = 0.001 # 1.0 # 1.0 learning rate for AdaDelta... 0.01 recommended for RMSProp (very sensitive)
+ADA_DELTA_LEARNING_RATE = 1.0 # 0.001 #  # 1.0 learning rate for AdaDelta... 0.01 recommended for RMSProp (very sensitive)
 ADA_DELTA_RHO = 0.9 # 0.95 recommended from the AdaDelta paper, 0.9 for RMSprop
 ADA_DELTA_EPSILON = 1e-6 # 1e-4 # 1e-6 # default from the paper (MNIST dataset) is small. We can be more aggressive... if data is not noisy (but it's really just a constant)
 
 # Default to adaptive learning rate. Recommended to train with fixed learning rate first. Don't do adaptive on clean model (too noisy)
 DEFAULT_ADAPTIVE = False # True # Set on to train adapative. 
+ADAPTIVE_USE_RMSPROP = False # If use adaaptive, use RMSprop instead of AdaDelta?
+if ADAPTIVE_USE_RMSPROP:
+    ADA_DELTA_LEARNING_RATE = 0.001 # needs tiny learning rate for RMSprop, else gradient goes crazy
 
 NUM_FAT_FILTERS = NUM_FILTERS / 2
 if USE_FAT_MODEL:
@@ -733,10 +736,12 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     # Don't do adaptive training on fresh model. needs to run with learning & momentum first. Then... we delta
     if default_adaptive:
-        #print('Using adaptive learning (AdaDelta) as default training!')
-        #iter_train = iter_train_ada_delta 
-        print('--> Using adaptive learning (RMSprop) as default training!')
-        iter_train = iter_train_rmsprop
+        if ADAPTIVE_USE_RMSPROP:
+            print('--> Using adaptive learning (RMSprop) as default training!')
+            iter_train = iter_train_rmsprop
+        else:
+            print('Using adaptive learning (AdaDelta) as default training!')
+            iter_train = iter_train_ada_delta 
     else:
         print('--> Using fixed learning rate with Nesterov momentum as default training.')
 
