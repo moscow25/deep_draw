@@ -42,8 +42,8 @@ elif TRAINING_FORMAT == 'deuce':
 elif TRAINING_FORMAT == 'video':
     DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
 
-MAX_INPUT_SIZE = 740000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 40000
+MAX_INPUT_SIZE = 74000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 4000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
@@ -194,10 +194,12 @@ def value_action_error(output_matrix, target_matrix):
     # Apply mask to values that matter.
     output_matrix_masked = output_matrix * first_five_mask 
     
-    # Now, use matrix manipulation to tease out the current action vector, and current value vector
-    action_matrix = output_matrix[:,5:10] # Always output matrix. It's all we got!
-    value_matrix_output = theano.gradient.disconnected_grad(output_matrix[:,0:5]) # disconnect gradient -- so values aren't changed by action% model
-    value_matrix_target = target_matrix[:,0:5] # directly from observation
+    # Now, use matrix manipulation to tease out the current action vector, and current value vector.
+    # All values should be positive. Or a hard zero.
+    # NOTE: Take the absolute value of everthing. Why? Just in case! If we used leaky ReLU, etc... values could get negative, leading to divide by zero.
+    action_matrix = abs(output_matrix[:,5:10]) # Take action % from output matrix. It's all we got!
+    value_matrix_output = abs(theano.gradient.disconnected_grad(output_matrix[:,0:5])) # disconnect gradient -- so values aren't changed by action% model
+    value_matrix_target = abs(target_matrix[:,0:5]) # directly from observation
     
     #value_matrix = value_matrix_output # Try to learn values from the network. 
     #value_matrix = value_matrix_target # Use real values. Doesn't work, since too much bouncing around. Learns conservative moves (folds alot)
@@ -221,6 +223,7 @@ def value_action_error(output_matrix, target_matrix):
     # action-weighted value average for values
     # Average value will be ~2.0 [zero-value action]
     # We use the mask, so that action-weights on unknown values are ignored. In both the sum, and the average.
+    # NOTE: 0.05 is our regularization "epsilon" term
     values_sum_vector = weighted_value_matrix.sum(axis=1) / ((action_matrix * value_matrix_mask).sum(axis=1) + 0.05) 
 
     # minimize this, to maximize average value!
