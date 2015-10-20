@@ -27,6 +27,8 @@ TRAINING_FORMAT = 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
 USE_FAT_MODEL = False # True # False # True
 USE_FULLY_CONNECTED_MODEL = False # True # False
+# TODO: Is leaky units compatible with normal ReLu? Old models won't be 100% correct... but can we load them?
+DEFAULT_LEAKY_UNITS = True # False # Use leaky ReLU to avoid saturation at 0.0? [default leakiness 0.01]
 
 DATA_FILENAME = None
 if TRAINING_FORMAT == 'deuce_events':
@@ -54,12 +56,15 @@ MOMENTUM = 0.9
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 
 # Model initialization if we use adaptive learning (to start, to to switch to...)
-ADA_DELTA_LEARNING_RATE = 0.001 # 1.0 # 1.0 learning rate for AdaDelta... 0.01 recommended for RMSProp (very sensitive)
+ADA_DELTA_LEARNING_RATE = 1.0 # 0.001 #  # 1.0 learning rate for AdaDelta... 0.01 recommended for RMSProp (very sensitive)
 ADA_DELTA_RHO = 0.9 # 0.95 recommended from the AdaDelta paper, 0.9 for RMSprop
 ADA_DELTA_EPSILON = 1e-6 # 1e-4 # 1e-6 # default from the paper (MNIST dataset) is small. We can be more aggressive... if data is not noisy (but it's really just a constant)
 
 # Default to adaptive learning rate. Recommended to train with fixed learning rate first. Don't do adaptive on clean model (too noisy)
-DEFAULT_ADAPTIVE = True # Set on to train adapative. 
+DEFAULT_ADAPTIVE = False # True # Set on to train adapative. 
+ADAPTIVE_USE_RMSPROP = False # If use adaaptive, use RMSprop instead of AdaDelta?
+if ADAPTIVE_USE_RMSPROP:
+    ADA_DELTA_LEARNING_RATE = 0.001 # needs tiny learning rate for RMSprop, else gradient goes crazy
 
 NUM_FAT_FILTERS = NUM_FILTERS / 2
 if USE_FAT_MODEL:
@@ -192,16 +197,20 @@ def value_action_error(output_matrix, target_matrix):
     # Apply mask to values that matter.
     output_matrix_masked = output_matrix * first_five_mask 
     
-    # Now, use matrix manipulation to tease out the current action vector, and current value vector
-    action_matrix = output_matrix[:,5:10] # Always output matrix. It's all we got!
-    value_matrix_output = theano.gradient.disconnected_grad(output_matrix[:,0:5]) # disconnect gradient -- so values aren't changed by action% model
-    value_matrix_target = target_matrix[:,0:5] # directly from observation
+    # Now, use matrix manipulation to tease out the current action vector, and current value vector.
+    # All values should be positive. Or a hard zero.
+    # NOTE: Take the absolute value of everthing. Why? Just in case! If we used leaky ReLU, etc... values could get negative, leading to divide by zero.
+    action_matrix = abs(output_matrix[:,5:10]) # Take action % from output matrix. It's all we got!
+    action_matrix_clip = T.clip(action_matrix, 0.0, 2.0)
+    value_matrix_output = T.clip(theano.gradient.disconnected_grad(output_matrix[:,0:5]), 0.0, 10.0) # disconnect gradient -- so values aren't changed by action% model
+    value_matrix_target = T.clip(target_matrix[:,0:5], 0.0, 10.0) # directly from observation
     
     #value_matrix = value_matrix_output # Try to learn values from the network. 
     #value_matrix = value_matrix_target # Use real values. Doesn't work, since too much bouncing around. Learns conservative moves (folds alot)
 
     # Alternatively, learn a mix of network values, and real results (with a learning rate)
     # This will push the action % a little bit into adapting from real values, but not enough that we over-write predicted values, which are good
+    # TODO: Can this be achieved easier with "theano.tensor.maximum(a, b)"? Seems like we can compute masks, and take maximums, then be done.
     average_value_matrix_results, average_value_updates = theano.scan(fn=set_values_at_row_from_target,
                                                                       outputs_info=None,
                                                                       sequences=[np.asarray([[index, 0] for index in range(BATCH_SIZE)] , dtype=np.int32)],
@@ -209,27 +218,34 @@ def value_action_error(output_matrix, target_matrix):
     value_matrix = average_value_matrix_results.sum(axis=1)
 
     # create a mask, for non-zero values in the observed (values) space
+    # NOTE: abs() is just so we don't have random blowup, from crazy inputs. Need positive values so won't divide by zero.
     value_matrix_mask = T.ceil(0.05 * value_matrix) # Ends up with reasonable (available) values --> 1.0, zero values --> 0.0
 
     # This is the action-weighted sum of the values. Don't worry, we normalize by action sum.
     # A mask is needed, so that we ignore the unknown values inherent. 
     # NOTE: As an alternative... we can take the max of known, and network value. To try this, need to sever connection to network, so gradient isn't distorted.
-    weighted_value_matrix = value_matrix * action_matrix * value_matrix_mask 
+    # NOTE: Clip actions to [0.0, 1.0]. Negative weight actions are ignored.
+    # TODO: Try to *not* clip action weights. Why? Gradient pushing at negative values... (but then we need protections against divide by zero)
+    weighted_value_matrix = value_matrix * action_matrix_clip * value_matrix_mask 
 
     # action-weighted value average for values
     # Average value will be ~2.0 [zero-value action]
     # We use the mask, so that action-weights on unknown values are ignored. In both the sum, and the average.
-    values_sum_vector = weighted_value_matrix.sum(axis=1) / ((action_matrix * value_matrix_mask).sum(axis=1) + 0.05) 
+    # NOTE: 0.05 is our regularization "epsilon" term
+    # Clip action values, again, for consistency. [Or use abs() to further penalize negative values]
+    values_sum_vector = weighted_value_matrix.sum(axis=1) / ((abs(action_matrix) * value_matrix_mask).sum(axis=1) + 0.05)
 
     # minimize this, to maximize average value!
     # Average value will be ~1/3.0 = 0.33 [since normal/worst value of a normal spot is all folds]
     # Further reduce this, if we want the network to learn it slowly, not change values, etc.
+    # TODO: Can we just create linear error here? Can't be that hard to maximize a number. Just change the sign. Add a sink so it looks legit.
     values_sum_inverse_vector = INCREASE_VALUES_SUM_INVERSE * 1.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
 
     # sum of all probabilities...
     # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
     # Therefore, dampen the value. But also make sure that this matches the target.
-    probabilities_sum_vector = 0.10 * action_matrix.sum(axis=1) 
+    # NOTE: abs(action_matrix) so that negative action values... are counted against us. We need a negative gradient for negative action% values.
+    probabilities_sum_vector = 0.10 * abs(action_matrix).sum(axis=1) 
     
     # not sure if this is correct, but try it... 
     #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,BET_ACTIONS_VALUE_CATEGORY], values_sum_vector)
@@ -479,7 +495,9 @@ def build_fat_model(input_width, input_height, output_dim,
 
 # Need to explicitly pass input_var... if we want to feed input into the network, without putting that input into "shared"
 def build_model(input_width, input_height, output_dim,
-                batch_size=BATCH_SIZE, input_var = None):
+                batch_size=BATCH_SIZE, input_var = None,
+                use_leaky_units=DEFAULT_LEAKY_UNITS # small "leak" in ReLu units, to avoid saturation at 0.0?
+                ):
     print('building model, layer by layer...')
     num_input_cards = FULL_INPUT_LENGTH
 
@@ -500,13 +518,18 @@ def build_model(input_width, input_height, output_dim,
 
     print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
 
+    # Do we use rectified linear units, or a leaky version thereof? 
+    # NOTE: Could mix this layer by layer... but better to keep it consistent.
+    nonlinearity = lasagne.nonlinearities.rectify # default. Linear for all values >= 0.0. Negative values to go 0.0
+    if use_leaky_units:
+        print('Initializing with \'leaky\' ReLU units. Leakiness is default (0.01)');
+        nonlinearity = lasagne.nonlinearities.leaky_rectify # default 0.01 leakiness
+
     l_conv1 = lasagne.layers.Conv2DLayer(
         l_in,
         num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        #pad=BORDER_SHAPE,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_conv1)
@@ -519,9 +542,7 @@ def build_model(input_width, input_height, output_dim,
         l_conv1,
         num_filters=NUM_FILTERS, #16, #32,
         filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        #pad=BORDER_SHAPE,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_conv1_1)
@@ -534,23 +555,11 @@ def build_model(input_width, input_height, output_dim,
 
     print('maxPool layer l_pool1. Shape %s' % str(l_pool1.output_shape))
 
-    # try 3rd conv layer
-    #l_conv1_2 = lasagne.layers.Conv2DLayer(
-    #    l_conv1_1,
-    #    num_filters=16, #16, #32,
-    #    filter_size=(3,3), #(5,5), #(3,3), #(5, 5),
-    #    nonlinearity=lasagne.nonlinearities.rectify,
-    #    W=lasagne.init.GlorotUniform(),
-    #    )
-    #l_pool1 = lasagne.layers.MaxPool2DLayer(l_conv1_2, ds=(2, 2))
-
     l_conv2 = lasagne.layers.Conv2DLayer(
         l_pool1,
         num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
-        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        #pad=BORDER_SHAPE,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_conv2)
@@ -562,9 +571,7 @@ def build_model(input_width, input_height, output_dim,
         l_conv2,
         num_filters=NUM_FILTERS*2, #16, #32,
         filter_size=(3,3), #(5,5), # (3,3), #(5, 5),
-        #border_mode=BORDER_SHAPE, # full = pads to prev shape "valid" = shrinks [bad for small input sizes]
-        #pad=BORDER_SHAPE,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_conv2_2)
@@ -578,20 +585,10 @@ def build_model(input_width, input_height, output_dim,
 
     print('maxPool layer l_pool2. Shape %s' % str(l_pool2.output_shape))
 
-    # Add 3rd convolution layer!
-    #l_conv3 = lasagne.layers.Conv2DLayer(
-    #    l_pool2,
-    #    num_filters=16, #16, #32,
-    #    filter_size=(2,2), #(5,5), # (3,3), #(5, 5),
-    #    nonlinearity=lasagne.nonlinearities.rectify,
-    #    W=lasagne.init.GlorotUniform(),
-    #    )
-    #l_pool3 = lasagne.layers.MaxPool2DLayer(l_conv3, ds=(2, 2))
-
     l_hidden1 = lasagne.layers.DenseLayer(
         l_pool2,
         num_units=NUM_HIDDEN_UNITS,
-        nonlinearity=lasagne.nonlinearities.rectify,
+        nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_hidden1)
@@ -603,17 +600,10 @@ def build_model(input_width, input_height, output_dim,
 
     print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.output_shape))
 
-    #l_hidden2 = lasagne.layers.DenseLayer(
-    #     l_hidden1_dropout,
-    #     num_units=NUM_HIDDEN_UNITS,
-    #     nonlinearity=lasagne.nonlinearities.rectify,
-    #     )
-    #l_hidden2_dropout = lasagne.layers.DropoutLayer(l_hidden2, p=0.5)
-
     l_out = lasagne.layers.DenseLayer(
         l_hidden1_dropout, #l_hidden2_dropout, # l_hidden1_dropout,
         num_units=output_dim,
-        nonlinearity=lasagne.nonlinearities.rectify, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
+        nonlinearity=nonlinearity, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
         W=lasagne.init.GlorotUniform(),
         )
     layers.append(l_out)
@@ -754,10 +744,14 @@ def create_iter_functions_full_output(dataset, output_layer,
 
     # Don't do adaptive training on fresh model. needs to run with learning & momentum first. Then... we delta
     if default_adaptive:
-        #print('Using adaptive learning (AdaDelta) as default training!')
-        #iter_train = iter_train_ada_delta 
-        print('Using adaptive learning (RMSprop) as default training!')
-        iter_train = iter_train_rmsprop
+        if ADAPTIVE_USE_RMSPROP:
+            print('--> Using adaptive learning (RMSprop) as default training!')
+            iter_train = iter_train_rmsprop
+        else:
+            print('Using adaptive learning (AdaDelta) as default training!')
+            iter_train = iter_train_ada_delta 
+    else:
+        print('--> Using fixed learning rate with Nesterov momentum as default training.')
 
     # Be careful not to include in givens, what won't be used. Theano will complain!
     if TRAIN_MASKED_OBJECTIVE:
