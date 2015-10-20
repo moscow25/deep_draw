@@ -42,8 +42,8 @@ elif TRAINING_FORMAT == 'deuce':
 elif TRAINING_FORMAT == 'video':
     DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
 
-MAX_INPUT_SIZE = 74000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 4000
+MAX_INPUT_SIZE = 740000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 40000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
@@ -100,7 +100,7 @@ DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch 
 # NOTE: load_data needs to be already producing such masks.
 # NOTE: Default mask isn't all 1's... it's best_output == 1, others == 0
 # WARINING: Theano will complain if we pass a mask and don't use it!
-TRAIN_MASKED_OBJECTIVE = False
+TRAIN_MASKED_OBJECTIVE = True
 if not(TRAINING_FORMAT == 'deuce_events' or TRAINING_FORMAT == 'holdem_events'):
     TRAIN_MASKED_OBJECTIVE = False
 
@@ -199,19 +199,18 @@ def value_action_error(output_matrix, target_matrix):
     
     # Now, use matrix manipulation to tease out the current action vector, and current value vector.
     # All values should be positive. Or a hard zero.
-    # NOTE: Since values are not [0.0, +], we need to be careful. Best way is to take abs(size) for size, and T.clip(0.0, max) for value
-    action_matrix = output_matrix[:,5:10] # Take action % from output matrix. It's all we got!
-    action_matrix_clip = T.clip(action_matrix, 0.0, 1.0)
-    value_matrix_output = theano.gradient.disconnected_grad(output_matrix[:,0:5]) # disconnect gradient -- so values aren't changed by action% model
-    value_matrix_output = T.clip(value_matrix_output, 0.0, 10.0)
-    value_matrix_target = target_matrix[:,0:5] # directly from observation
-    value_matrix_target = T.clip(value_matrix_target, 0.0, 10.0)
+    # NOTE: Take the absolute value of everthing. Why? Just in case! If we used leaky ReLU, etc... values could get negative, leading to divide by zero.
+    action_matrix = abs(output_matrix[:,5:10]) # Take action % from output matrix. It's all we got!
+    action_matrix_clip = T.clip(action_matrix, 0.0, 2.0)
+    value_matrix_output = T.clip(theano.gradient.disconnected_grad(output_matrix[:,0:5]), 0.0, 10.0) # disconnect gradient -- so values aren't changed by action% model
+    value_matrix_target = T.clip(target_matrix[:,0:5], 0.0, 10.0) # directly from observation
     
     #value_matrix = value_matrix_output # Try to learn values from the network. 
     #value_matrix = value_matrix_target # Use real values. Doesn't work, since too much bouncing around. Learns conservative moves (folds alot)
 
     # Alternatively, learn a mix of network values, and real results (with a learning rate)
     # This will push the action % a little bit into adapting from real values, but not enough that we over-write predicted values, which are good
+    # TODO: Can this be achieved easier with "theano.tensor.maximum(a, b)"? Seems like we can compute masks, and take maximums, then be done.
     average_value_matrix_results, average_value_updates = theano.scan(fn=set_values_at_row_from_target,
                                                                       outputs_info=None,
                                                                       sequences=[np.asarray([[index, 0] for index in range(BATCH_SIZE)] , dtype=np.int32)],
@@ -219,6 +218,7 @@ def value_action_error(output_matrix, target_matrix):
     value_matrix = average_value_matrix_results.sum(axis=1)
 
     # create a mask, for non-zero values in the observed (values) space
+    # NOTE: abs() is just so we don't have random blowup, from crazy inputs. Need positive values so won't divide by zero.
     value_matrix_mask = T.ceil(0.05 * value_matrix) # Ends up with reasonable (available) values --> 1.0, zero values --> 0.0
 
     # This is the action-weighted sum of the values. Don't worry, we normalize by action sum.
