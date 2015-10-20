@@ -225,19 +225,20 @@ def value_action_error(output_matrix, target_matrix):
     # A mask is needed, so that we ignore the unknown values inherent. 
     # NOTE: As an alternative... we can take the max of known, and network value. To try this, need to sever connection to network, so gradient isn't distorted.
     # NOTE: Clip actions to [0.0, 1.0]. Negative weight actions are ignored.
-    # NOTE: Can we clip values? Sure. 
+    # TODO: Try to *not* clip action weights. Why? Gradient pushing at negative values... (but then we need protections against divide by zero)
     weighted_value_matrix = value_matrix * action_matrix_clip * value_matrix_mask 
 
     # action-weighted value average for values
     # Average value will be ~2.0 [zero-value action]
     # We use the mask, so that action-weights on unknown values are ignored. In both the sum, and the average.
     # NOTE: 0.05 is our regularization "epsilon" term
-    # Clip action values, again, for consistency.
-    values_sum_vector = weighted_value_matrix.sum(axis=1) / ((action_matrix_clip * value_matrix_mask).sum(axis=1) + 0.05)
+    # Clip action values, again, for consistency. [Or use abs() to further penalize negative values]
+    values_sum_vector = weighted_value_matrix.sum(axis=1) / ((abs(action_matrix) * value_matrix_mask).sum(axis=1) + 0.05)
 
     # minimize this, to maximize average value!
     # Average value will be ~1/3.0 = 0.33 [since normal/worst value of a normal spot is all folds]
     # Further reduce this, if we want the network to learn it slowly, not change values, etc.
+    # TODO: Can we just create linear error here? Can't be that hard to maximize a number. Just change the sign. Add a sink so it looks legit.
     values_sum_inverse_vector = INCREASE_VALUES_SUM_INVERSE * 1.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
 
     # sum of all probabilities...
