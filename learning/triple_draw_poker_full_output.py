@@ -948,12 +948,12 @@ def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None
     elif format == 'holdem':
         # TODO: Ignore first element... (overall value)
         """
-        #pred[:,0] = 0.0 # zero out first row, which is "best_value" column
+        # pred[:,0] = 0.0 # zero out first row, which is "best_value" column
         zeros = T.zeros_like(pred)
         zeros_subtensor = zeros[:,0:1]
         pred_values = T.set_subtensor(zeros_subtensor, pred)
         """
-        pred_max = T.argmax(pred[:,0:len(HOLDEM_VALUE_KEYS)], axis=1) # values of actions
+        pred_max = T.argmax(pred[:,1:len(HOLDEM_VALUE_KEYS)], axis=1) # values of actions
     else:
         pred_max = T.argmax(pred, axis=1)
 
@@ -968,7 +968,10 @@ def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None
     print(softmax_choices)
 
     # now debug the softmax choices...
-    if format != 'deuce_events':
+    if format == 'holdem':
+        # Maximums offset by one... since we don't want item[0] returned from argmax above
+        softmax_debug = [HOLDEM_VALUE_KEYS[i+1] for i in softmax_choices]
+    elif format != 'deuce_events':
         softmax_debug = [DRAW_VALUE_KEYS[i] for i in softmax_choices]
     else:
         softmax_debug = [eventCategoryName[i] for i in softmax_choices]
