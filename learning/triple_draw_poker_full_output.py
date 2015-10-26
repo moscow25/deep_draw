@@ -23,10 +23,11 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-TRAINING_FORMAT = 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'holdem' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
 USE_FAT_MODEL = False # True # False # True
 USE_FULLY_CONNECTED_MODEL = False # True # False
+USE_NOPOOL_MODEL = True # False # deeper network, with no maxpools (other small tweaks, to immitiate DeepMind GO result)
 # TODO: Is leaky units compatible with normal ReLu? Old models won't be 100% correct... but can we load them?
 DEFAULT_LEAKY_UNITS = True # False # Use leaky ReLU to avoid saturation at 0.0? [default leakiness 0.01]
 
@@ -45,12 +46,12 @@ elif TRAINING_FORMAT == 'video':
 MAX_INPUT_SIZE = 740000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 40000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 100 # 20 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
-NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
+NUM_FILTERS = 64 # 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
-LEARNING_RATE = 0.02 # 0.1 # 0.02 # 0.1 # 0.05
+LEARNING_RATE = 0.1 # 0.02 # 0.1 # 0.05
 MOMENTUM = 0.9
 # Fix and test, before epoch switch...
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
@@ -493,6 +494,139 @@ def build_fat_model(input_width, input_height, output_dim,
     # Don't really need l_out... but easy to access that way
     return (l_out, l_in, layers)
 
+# Alternatively, build deeper network, with no maxpool, more parameters.
+# Immitates DeepMind paper for GO: http://arxiv.org/pdf/1412.6564v1.pdf
+# Basics: many convolution layers. First on 4x4 (since four suits), others 3x3. More filters per layer (64 minimum)
+# NOTE: We do *not* 0-pad layers back to size, like DeepMind Go paper. That makes model very slow.
+# Instead, we 0-pad the cards input... then keep shrinking dimensions at each layer. Obviously, will need to 0-pad at some point for deeper network.
+def build_nopool_model(input_width, input_height, output_dim,
+                       batch_size=BATCH_SIZE, input_var = None,
+                       use_leaky_units=DEFAULT_LEAKY_UNITS # small "leak" in ReLu units, to avoid saturation at 0.0?
+                       ):
+    print('building \'nopool\' model, layer by layer...')
+    num_input_cards = FULL_INPUT_LENGTH
+
+    # Track all layers created, and return the full stack
+    layers = []
+
+    # Shape is [cards + bits] x height x width
+    if input_var:
+        l_in = lasagne.layers.InputLayer(
+            shape=(batch_size, num_input_cards, input_height, input_width),
+            input_var = input_var,
+            )
+    else:
+        l_in = lasagne.layers.InputLayer(
+            shape=(batch_size, num_input_cards, input_height, input_width),
+            )
+    layers.append(l_in)
+
+    print('input layer shape %d x %d x %d x %d' % (batch_size, num_input_cards, input_height, input_width))
+
+    # Do we use rectified linear units, or a leaky version thereof? 
+    # NOTE: Could mix this layer by layer... but better to keep it consistent.
+    nonlinearity = lasagne.nonlinearities.rectify # default. Linear for all values >= 0.0. Negative values to go 0.0
+    if use_leaky_units:
+        print('Initializing with \'leaky\' ReLU units. Leakiness is default (0.01)');
+        nonlinearity = lasagne.nonlinearities.leaky_rectify # default 0.01 leakiness
+
+    print('Creating convolutional laters with %d filters per level' % NUM_FILTERS)
+
+    l_conv1 = lasagne.layers.Conv2DLayer(
+        l_in,
+        num_filters=NUM_FILTERS,
+        filter_size=(4,4), # First layer 4x4 (since four suits!)
+        nonlinearity=nonlinearity,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv1)
+
+    print('convolution layer l_conv1. Shape %s' % str(l_conv1.output_shape))
+
+    l_conv2 = lasagne.layers.Conv2DLayer(
+        l_conv1,
+        num_filters=NUM_FILTERS,
+        filter_size=(3,3), # Next layers all 3x3...
+        nonlinearity=nonlinearity,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv2)
+
+    print('convolution layer l_conv2. Shape %s' % str(l_conv2.output_shape))
+
+    l_conv3 = lasagne.layers.Conv2DLayer(
+        l_conv2,
+        num_filters=NUM_FILTERS,
+        filter_size=(3,3), # Next layers all 3x3...
+        nonlinearity=nonlinearity,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv3)
+
+    print('convolution layer l_conv3. Shape %s' % str(l_conv3.output_shape))
+
+    l_conv4 = lasagne.layers.Conv2DLayer(
+        l_conv3,
+        num_filters=NUM_FILTERS,
+        filter_size=(3,3), # Next layers all 3x3...
+        nonlinearity=nonlinearity,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv4)
+
+    print('convolution layer l_conv4. Shape %s' % str(l_conv4.output_shape))
+
+    l_conv5 = lasagne.layers.Conv2DLayer(
+        l_conv4,
+        num_filters=NUM_FILTERS,
+        filter_size=(3,3), # Next layers all 3x3...
+        nonlinearity=nonlinearity,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv5)
+
+    print('convolution layer l_conv5. Shape %s' % str(l_conv5.output_shape))
+
+    l_conv6 = lasagne.layers.Conv2DLayer(
+        l_conv5,
+        num_filters=NUM_FILTERS,
+        filter_size=(3,3), # Next layers all 3x3...
+        nonlinearity=nonlinearity,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_conv6)
+
+    print('convolution layer l_conv6. Shape %s' % str(l_conv6.output_shape))
+
+    l_hidden1 = lasagne.layers.DenseLayer(
+        l_conv6,
+        num_units=NUM_HIDDEN_UNITS,
+        nonlinearity=nonlinearity,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_hidden1)
+
+    print('hidden layer l_hidden1. Shape %s' % str(l_hidden1.output_shape))
+
+    l_hidden1_dropout = lasagne.layers.DropoutLayer(l_hidden1, p=0.5)
+    layers.append(l_hidden1_dropout)
+
+    print('dropout layer l_hidden1_dropout. Shape %s' % str(l_hidden1_dropout.output_shape))
+
+    l_out = lasagne.layers.DenseLayer(
+        l_hidden1_dropout, #l_hidden2_dropout, # l_hidden1_dropout,
+        num_units=output_dim,
+        nonlinearity=nonlinearity, # Don't return softmax! #nonlinearity=lasagne.nonlinearities.softmax,
+        W=lasagne.init.GlorotUniform(),
+        )
+    layers.append(l_out)
+
+    print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.output_shape)))
+    print('produced network of %d layers. TODO: name \'em!' % len(layers))
+
+    # Don't really need l_out... but easy to access that way
+    return (l_out, l_in, layers)
+
 # Need to explicitly pass input_var... if we want to feed input into the network, without putting that input into "shared"
 def build_model(input_width, input_height, output_dim,
                 batch_size=BATCH_SIZE, input_var = None,
@@ -814,12 +948,12 @@ def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None
     elif format == 'holdem':
         # TODO: Ignore first element... (overall value)
         """
-        #pred[:,0] = 0.0 # zero out first row, which is "best_value" column
+        # pred[:,0] = 0.0 # zero out first row, which is "best_value" column
         zeros = T.zeros_like(pred)
         zeros_subtensor = zeros[:,0:1]
         pred_values = T.set_subtensor(zeros_subtensor, pred)
         """
-        pred_max = T.argmax(pred[:,0:len(HOLDEM_VALUE_KEYS)], axis=1) # values of actions
+        pred_max = T.argmax(pred[:,1:len(HOLDEM_VALUE_KEYS)], axis=1) # values of actions
     else:
         pred_max = T.argmax(pred, axis=1)
 
@@ -834,7 +968,10 @@ def predict_model(output_layer, test_batch, format = 'deuce', input_layer = None
     print(softmax_choices)
 
     # now debug the softmax choices...
-    if format != 'deuce_events':
+    if format == 'holdem':
+        # Maximums offset by one... since we don't want item[0] returned from argmax above
+        softmax_debug = [HOLDEM_VALUE_KEYS[i+1] for i in softmax_choices]
+    elif format != 'deuce_events':
         softmax_debug = [DRAW_VALUE_KEYS[i] for i in softmax_choices]
     else:
         softmax_debug = [eventCategoryName[i] for i in softmax_choices]
@@ -993,6 +1130,13 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
             )
     elif USE_FAT_MODEL:
         output_layer, input_layer, layers = build_fat_model(
+            input_height=dataset['input_height'],
+            input_width=dataset['input_width'],
+            output_dim=dataset['output_dim'],
+            input_var = input_var,
+            )
+    elif USE_NOPOOL_MODEL:
+        output_layer, input_layer, layers = build_nopool_model(
             input_height=dataset['input_height'],
             input_width=dataset['input_width'],
             output_dim=dataset['output_dim'],
