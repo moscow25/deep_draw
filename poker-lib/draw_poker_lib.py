@@ -325,7 +325,9 @@ class PokerAction:
         if hasattr(self, 'bet_val_vector'):
             output_map['bet_val_vector'] = self.bet_val_vector
             output_map['act_val_vector'] = self.act_val_vector
-            output_map['num_draw_vector'] = self.num_draw_vector
+            # Don't save draws vector... for a non-draw game!
+            if self.format == 'deuce':
+                output_map['num_draw_vector'] = self.num_draw_vector
         
         # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result', 'current_margin_result', 'future_margin_result', 'oppn_hand', 'current_hand_win', 'hand_num', 'running_average', 'bet_val_vector', 'act_val_vector', 'num_draw_vector']
         output_row = VectorFromKeysAndSparseMap(keys=header_map, sparse_data_map=output_map, default_value = '')
@@ -399,6 +401,26 @@ class RaiseBigStreet(PokerAction):
         this_bet = total_bet_size - player_bet_this_street;
         assert this_bet > 0, 'error calling %s' % self.__name__
         PokerAction.__init__(self, action_type = RAISE_BIG_STREET, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet, format=format)
+
+# Also, consider no-Limit actions: NL-bet and NL-raise. 
+# NOTE: Design decision: bounds checking should happen elsewhere (see how much is left, etc)
+# TODO: Should also report effective stack size. (amount left by player after this action)
+# --> 200 BB should be global constant... tracked outside of bets actions
+class BetNoLimit(PokerAction):
+    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street, format):
+        #total_bet_size = biggest_bet_this_street + BIG_BET_SIZE;
+        this_bet = total_bet_size - player_bet_this_street;
+        assert this_bet > 0, 'error calling %s' % self.__name__
+        # TODO: Declare no limit params. Other data to save?
+        PokerAction.__init__(self, action_type = BET_NO_LIMIT, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet, format=format)
+
+class RaiseNoLimit(PokerAction):
+    def __init__(self, actor_name, pot_size, player_bet_this_street, biggest_bet_this_street, format):
+        #total_bet_size = biggest_bet_this_street + BIG_BET_SIZE;
+        this_bet = total_bet_size - player_bet_this_street;
+        assert this_bet > 0, 'error calling %s' % self.__name__
+        # TODO: Declare no limit params. Other data to save?
+        PokerAction.__init__(self, action_type = RAISE_NO_LIMIT, actor_name = actor_name, pot_size = pot_size, bet_size = this_bet, format=format)
 
 
 # Should inherit from more general dealer class... when we need one.

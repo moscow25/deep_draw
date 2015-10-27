@@ -23,6 +23,7 @@ from draw_poker import cards_input_from_string
 from draw_poker import hand_input_from_context
 from draw_poker import holdem_cards_input_from_string
 from triple_draw_poker_full_output import build_model
+from triple_draw_poker_full_output import build_nopool_model
 from triple_draw_poker_full_output import build_fully_connected_model
 from triple_draw_poker_full_output import predict_model # outputs result for [BATCH x data]
 from triple_draw_poker_full_output import evaluate_single_hand # single hand... returns 32-point vector
@@ -73,7 +74,7 @@ USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage..
 if FORMAT == 'deuce':
     ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
 elif FORMAT == 'holdem':
-    ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with not enough explore
+    ACTION_PERCENTAGE_CHOICE_RATE = 0.3 # 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with not enough explore
 else:
     ACTION_PERCENTAGE_CHOICE_RATE = 0.0
 
@@ -1470,6 +1471,13 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
                  HAND_TO_MATRIX_PAD_SIZE, 
                  HAND_TO_MATRIX_PAD_SIZE,
                  32,
+                 )
+        elif len(bets_all_param_values_from_file) == 16:
+            bets_output_layer, bets_input_layer, bets_layers  = build_nopool_model(
+                 HAND_TO_MATRIX_PAD_SIZE, 
+                 HAND_TO_MATRIX_PAD_SIZE,
+                 32,
+                 num_filters=64,
                  )
         else:
             bets_output_layer, bets_input_layer, bets_layers  = build_model(

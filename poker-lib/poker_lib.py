@@ -1054,3 +1054,12 @@ class PokerDeck(object):
     # Shuffle cards remaining in the deck.
     def shuffle(self):
         random.shuffle(self.cards)
+
+    # Remove card from the deck. Returns the card, or None of not found
+    def remove_card(self, card):
+        card_index = self.cards.index(card)
+        if card_index:
+            return self.cards.pop(card_index)
+        else:
+            print('Can not find card %s in deck!')
+            return None
