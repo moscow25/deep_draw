@@ -23,11 +23,11 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-TRAINING_FORMAT = 'holdem' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
 USE_FAT_MODEL = False # True # False # True
 USE_FULLY_CONNECTED_MODEL = False # True # False
-USE_NOPOOL_MODEL = True # False # deeper network, with no maxpools (other small tweaks, to immitiate DeepMind GO result)
+USE_NOPOOL_MODEL = False # True # False # deeper network, with no maxpools (other small tweaks, to immitiate DeepMind GO result)
 # TODO: Is leaky units compatible with normal ReLu? Old models won't be 100% correct... but can we load them?
 DEFAULT_LEAKY_UNITS = True # False # Use leaky ReLU to avoid saturation at 0.0? [default leakiness 0.01]
 
@@ -46,12 +46,12 @@ elif TRAINING_FORMAT == 'video':
 MAX_INPUT_SIZE = 740000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 40000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 100 # 20 # 100 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
-NUM_FILTERS = 64 # 24 # 16 # 32 # 16 # increases 2x at higher level
+NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
-LEARNING_RATE = 0.1 # 0.02 # 0.1 # 0.05
+LEARNING_RATE = 0.02 # 0.02 # 0.1 # 0.05
 MOMENTUM = 0.9
 # Fix and test, before epoch switch...
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
@@ -185,6 +185,7 @@ def set_values_at_row_from_target(row_num, output_rows, target_rows):
 
 # Can we at least use outside mask??
 INCREASE_VALUES_SUM_INVERSE = 1.0 # default 1.0 (1/3 or so)
+VALUES_SUM_CONSTANT = 7.0 # Suggested by Lyon. Flatten out curve for increase hand value -> decrease inverse const/(const+X)
 def value_action_error(output_matrix, target_matrix):
     # Compute a mask... which per-row takes 5 bits of values, if target matrix has values,
     # and the five (six) bits of draws if target matrix is all about draws. 
@@ -202,9 +203,9 @@ def value_action_error(output_matrix, target_matrix):
     # All values should be positive. Or a hard zero.
     # NOTE: Take the absolute value of everthing. Why? Just in case! If we used leaky ReLU, etc... values could get negative, leading to divide by zero.
     action_matrix = abs(output_matrix[:,5:10]) # Take action % from output matrix. It's all we got!
-    action_matrix_clip = T.clip(action_matrix, 0.0, 2.0)
+    action_matrix_clip = T.clip(action_matrix, 0.0, 20.0)
     value_matrix_output = T.clip(theano.gradient.disconnected_grad(output_matrix[:,0:5]), 0.0, 10.0) # disconnect gradient -- so values aren't changed by action% model
-    value_matrix_target = T.clip(target_matrix[:,0:5], 0.0, 10.0) # directly from observation
+    value_matrix_target = T.clip(target_matrix[:,0:5], 0.0, 20.0) # directly from observation
     
     #value_matrix = value_matrix_output # Try to learn values from the network. 
     #value_matrix = value_matrix_target # Use real values. Doesn't work, since too much bouncing around. Learns conservative moves (folds alot)
@@ -227,26 +228,26 @@ def value_action_error(output_matrix, target_matrix):
     # NOTE: As an alternative... we can take the max of known, and network value. To try this, need to sever connection to network, so gradient isn't distorted.
     # NOTE: Clip actions to [0.0, 1.0]. Negative weight actions are ignored.
     # TODO: Try to *not* clip action weights. Why? Gradient pushing at negative values... (but then we need protections against divide by zero)
-    weighted_value_matrix = value_matrix * action_matrix_clip * value_matrix_mask 
+    weighted_value_matrix = value_matrix * action_matrix * value_matrix_mask 
 
     # action-weighted value average for values
     # Average value will be ~2.0 [zero-value action]
     # We use the mask, so that action-weights on unknown values are ignored. In both the sum, and the average.
     # NOTE: 0.05 is our regularization "epsilon" term
     # Clip action values, again, for consistency. [Or use abs() to further penalize negative values]
-    values_sum_vector = weighted_value_matrix.sum(axis=1) / ((abs(action_matrix) * value_matrix_mask).sum(axis=1) + 0.05)
+    values_sum_vector = T.clip(weighted_value_matrix.sum(axis=1), -1.0, 20.0) / ((abs(action_matrix) * value_matrix_mask).sum(axis=1) + 0.05)
 
     # minimize this, to maximize average value!
     # Average value will be ~1/3.0 = 0.33 [since normal/worst value of a normal spot is all folds]
     # Further reduce this, if we want the network to learn it slowly, not change values, etc.
     # TODO: Can we just create linear error here? Can't be that hard to maximize a number. Just change the sign. Add a sink so it looks legit.
-    values_sum_inverse_vector = INCREASE_VALUES_SUM_INVERSE * 1.0 / (values_sum_vector + 1.0) # We need to make sure that gradient is never crazy
+    values_sum_inverse_vector = INCREASE_VALUES_SUM_INVERSE * VALUES_SUM_CONSTANT / (values_sum_vector + VALUES_SUM_CONSTANT) # We need to make sure that gradient is never crazy
 
     # sum of all probabilities...
     # We want the probabilities to sum to 1.0...  but this should not be a huge consideration.
     # Therefore, dampen the value. But also make sure that this matches the target.
-    # NOTE: abs(action_matrix) so that negative action values... are counted against us. We need a negative gradient for negative action% values.
-    probabilities_sum_vector = 0.10 * abs(action_matrix).sum(axis=1) 
+    # NOTE: For sum... ignore negative values.
+    probabilities_sum_vector = 0.10 * action_matrix_clip.sum(axis=1) 
     
     # not sure if this is correct, but try it... 
     #values_output_matrix_masked = T.set_subtensor(output_matrix_masked[:,BET_ACTIONS_VALUE_CATEGORY], values_sum_vector)
@@ -501,7 +502,8 @@ def build_fat_model(input_width, input_height, output_dim,
 # Instead, we 0-pad the cards input... then keep shrinking dimensions at each layer. Obviously, will need to 0-pad at some point for deeper network.
 def build_nopool_model(input_width, input_height, output_dim,
                        batch_size=BATCH_SIZE, input_var = None,
-                       use_leaky_units=DEFAULT_LEAKY_UNITS # small "leak" in ReLu units, to avoid saturation at 0.0?
+                       use_leaky_units=DEFAULT_LEAKY_UNITS, # small "leak" in ReLu units, to avoid saturation at 0.0?
+                       num_filters=NUM_FILTERS # can also set it externally, if mixing models
                        ):
     print('building \'nopool\' model, layer by layer...')
     num_input_cards = FULL_INPUT_LENGTH
@@ -534,7 +536,7 @@ def build_nopool_model(input_width, input_height, output_dim,
 
     l_conv1 = lasagne.layers.Conv2DLayer(
         l_in,
-        num_filters=NUM_FILTERS,
+        num_filters=num_filters,
         filter_size=(4,4), # First layer 4x4 (since four suits!)
         nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
@@ -545,7 +547,7 @@ def build_nopool_model(input_width, input_height, output_dim,
 
     l_conv2 = lasagne.layers.Conv2DLayer(
         l_conv1,
-        num_filters=NUM_FILTERS,
+        num_filters=num_filters,
         filter_size=(3,3), # Next layers all 3x3...
         nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
@@ -556,7 +558,7 @@ def build_nopool_model(input_width, input_height, output_dim,
 
     l_conv3 = lasagne.layers.Conv2DLayer(
         l_conv2,
-        num_filters=NUM_FILTERS,
+        num_filters=num_filters,
         filter_size=(3,3), # Next layers all 3x3...
         nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
@@ -567,7 +569,7 @@ def build_nopool_model(input_width, input_height, output_dim,
 
     l_conv4 = lasagne.layers.Conv2DLayer(
         l_conv3,
-        num_filters=NUM_FILTERS,
+        num_filters=num_filters,
         filter_size=(3,3), # Next layers all 3x3...
         nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
@@ -578,7 +580,7 @@ def build_nopool_model(input_width, input_height, output_dim,
 
     l_conv5 = lasagne.layers.Conv2DLayer(
         l_conv4,
-        num_filters=NUM_FILTERS,
+        num_filters=num_filters,
         filter_size=(3,3), # Next layers all 3x3...
         nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
@@ -589,7 +591,7 @@ def build_nopool_model(input_width, input_height, output_dim,
 
     l_conv6 = lasagne.layers.Conv2DLayer(
         l_conv5,
-        num_filters=NUM_FILTERS,
+        num_filters=num_filters,
         filter_size=(3,3), # Next layers all 3x3...
         nonlinearity=nonlinearity,
         W=lasagne.init.GlorotUniform(),
