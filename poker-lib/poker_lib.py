@@ -1040,6 +1040,7 @@ class PokerDeck(object):
 
     # put cards back in the deck... (for local simulation, etc)
     def return_cards(self, cards_return, shuffle=True):
+        #print('returning cards %s to deck' % hand_string(cards_return))
         for card in cards_return:
             self.cards.append(card)
 
@@ -1058,8 +1059,16 @@ class PokerDeck(object):
     # Remove card from the deck. Returns the card, or None of not found
     def remove_card(self, card):
         card_index = self.cards.index(card)
-        if card_index:
+        if card_index >= 0:
             return self.cards.pop(card_index)
         else:
-            print('Can not find card %s in deck!')
+            print('Can not find card %s in deck!' % card)
             return None
+    
+    # Swaps card into given position
+    def set_card(self, card, pos=0):
+        card_pop = self.remove_card(card)
+        if card_pop:
+            self.cards.insert(pos, card_pop)
+        else:
+            print('Card %s not found in deck! Ignoring set_card' % card)

@@ -87,7 +87,8 @@ TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
                             'total_bet', 'result', 'margin_bet', 'margin_result',
                             'current_margin_result', 'future_margin_result',
                             'oppn_hand', 'current_hand_win',
-                            'hand_num', 'running_average', 'bet_val_vector', 'act_val_vector', 'num_draw_vector']
+                            'hand_num', 'running_average', 'bet_val_vector', 'act_val_vector', 'num_draw_vector',
+                            'allin_vs_oppn', 'stdev_vs_oppn', 'allin_vs_random', 'stdev_vs_random']
 
 BATCH_SIZE = 100 # Across all cases
 
@@ -1299,6 +1300,19 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
 
     deck = PokerDeck(shuffle=True)
 
+    """
+    # NOTE: This is the spot to insert a deck setup, if needed for testing
+    deck.set_card(Card(suit=DIAMOND, value=Five), pos=0)
+    deck.set_card(Card(suit=DIAMOND, value=Jack), pos=1)
+    deck.set_card(Card(suit=SPADE, value=Nine), pos=2)
+    deck.set_card(Card(suit=CLUB, value=Ace), pos=3)
+    deck.set_card(Card(suit=CLUB, value=Deuce), pos=4)
+    deck.set_card(Card(suit=CLUB, value=Ten), pos=5)
+    deck.set_card(Card(suit=CLUB, value=Trey), pos=6)
+    deck.set_card(Card(suit=CLUB, value=Eight), pos=7)
+    deck.cards.reverse()
+    """
+
     dealer = TripleDrawDealer(deck=deck, player_button=player_button, player_blind=player_blind, format=FORMAT)
     dealer.play_single_hand()
 
@@ -1317,6 +1331,9 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
     # xActions = 011 -> check, bet, raise
     # This information is the most important. Number of draws by opponent matters also, as well as previous bets...
     print('\nFull hand history...')
+    # Shared object, so that if we generate "allin value" simulation for actions... don't recompute exact same
+    now = time.time() 
+    allin_values_cache = HoldemValuesCache()
     for event in dealer.hand_history:
         # Also, pass running average, to the update (average is per-player). 
         # NOTE: It's a hack, but good to see running stats for that player so far.
@@ -1330,7 +1347,7 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
         event.update_result(winners, final_bets, hand_num=round, running_average=running_average)
         print(event)
         if csv_header_map:
-            event_line = event.csv_output(csv_header_map)
+            event_line = event.csv_output(csv_header_map, allin_cache=allin_values_cache)
             print(event_line)
 
         # Write events, for training.
@@ -1338,6 +1355,9 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
         if csv_writer:
             csv_writer.writerow(event_line)
     # TODO: Flush buffer here?
+
+    # How long did it take to calculate & print everything?
+    print('%.2fs to write CSV (simulate allin values, etc)' % (time.time() - now))
 
     # If we are tracking results... return results (wins/losses for player by order
     bb_result = dealer.hand_history[0].margin_result

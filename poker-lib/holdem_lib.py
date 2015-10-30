@@ -33,6 +33,10 @@ HOLDEM_ROUNDS_SET = set([PREFLOP_ROUND, FLOP_ROUND, TURN_ROUND, RIVER_ROUND])
 # TODO: Make this an easier lookup, etc.
 HOLDEM_VALUE_KEYS = ['best_value'] + [categoryName[category] for category in HIGH_HAND_CATEGORIES]
 
+# For allin simulation... use cache so we don't sim same thing for each bet (same street). 
+# Clear once in a while... in case lots of hands, to save memory, etc.
+POKER_VALUES_CACHE_MAX = 1000
+
 # Evaluate a 2-card hold'em hand, with 3+ community cards
 # NOTE: Can use 0-2 from dealt_cards and the rest from community.
 # TODO: Add game type (or new function) to support Omaha when we get there (needs two cards exclusively)
@@ -78,6 +82,43 @@ def hand_rank_community_cards(dealt_cards, community_cards):
             best_rank = rank
     return best_rank
 
+# Move this out of Holdem... if values cache goes outside of Holdem
+class HoldemValuesCache(object):
+    def __init__(self, cache_max = POKER_VALUES_CACHE_MAX):
+        self.cache_max = cache_max
+        self.values_map = {}
+
+    # Assume that all cards given as [Card] array.
+    # NOTE: Assumes that inputs are NOT canonicalized or sorted
+    def key(self, our_hand, oppn_hand, flop, turn, river):
+        return '%s/%s:%s/%s/%s' % (hand_string(our_hand), hand_string(oppn_hand), 
+                                   hand_string(flop), hand_string(turn), hand_string(river))
+    
+    # Standard dictionary insert
+    def insert(self, our_hand, oppn_hand, flop, turn, river, value, stdev):
+        key = self.key(our_hand, oppn_hand, flop, turn, river)
+        # print('~> cache insert key: %s\t val: %s' % (key, [value, stdev]))
+        self.values_map[key] = (value, stdev)
+
+    # Cache lookup: (value, stdev). Returns (None, None) if not found.
+    def lookup(self, our_hand, oppn_hand, flop, turn, river):
+        key = self.key(our_hand, oppn_hand, flop, turn, river)
+        reverse_key = self.key(oppn_hand, our_hand, flop, turn, river) # -1 * value
+
+        if self.values_map and self.values_map.has_key(key):
+            return self.values_map[key]
+        elif self.values_map and self.values_map.has_key(reverse_key):
+            (value, stdev) =  self.values_map[reverse_key]
+            return (1.0 - value, stdev)
+        else:
+            return (None, None)
+
+    # Clear the cache... if over the (recommended) max.
+    # Only clear between hands, and when too big (in case 20k hands, etc)
+    def clear_cache_if_full(self):
+        if len(self.values_map) > self.cache_max:
+            self.values_map = {}
+    
 
 # Community cards. Not part of the deck. But also not really a hand. 
 # NOTE: We can hard-wire a hand having flop, turn and river.

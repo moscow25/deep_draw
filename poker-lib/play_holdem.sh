@@ -24,6 +24,9 @@ CNN_3_0_BETS="$DEEP_DRAW_PATH/learning/holdem_events_conv_64_filter_xCards_xComm
 # Ran for 100 epochs. Too long... so will be severely overtrained.
 CNN_2_3_BETS="$DEEP_DRAW_PATH/learning/holdem_events_conv_24_filter_xCards_xCommunity_xContext_0.02_CNN_2_3_fixed_act_per_smoothed_100_epoch_700k_test.pickle"
 
+# 2.27 --> Quick retrain on 2.26 hand winners. It's crushing. Also, 7/(7-X) for action percent. But not 100 epochs to over-train.
+CNN_2_27_BETS="$DEEP_DRAW_PATH/learning/holdem_events_conv_24_filter_xCards_xCommunity_xContext_0.02_CNN_2_27_more_leaky_ReLU_vs_2_26_700k_test.pickle"
+
 # 2.26 --> full leaky run [much better than the others]
 CNN_2_6_BETS="$DEEP_DRAW_PATH/learning/holdem_events_conv_24_filter_xCards_xCommunity_xContext_0.02_CNN_2_26_fixed_leaky_ReLU_full_run_20_epoch_700k_test.pickle"
 
@@ -45,7 +48,7 @@ CNN_1_5_BETS="$DEEP_DRAW_PATH/learning/holdem_events_conv_24_filter_xCards_xComm
 
 # Up to three models that we can use.
 # TODO: It's ok to use CNN_8 with DNN moves..... if we do draws model with 1/3 choice also. Otherwise... the crazy pats are too predictable
-LATEST_VALUES_MODEL=$CNN_2_6_BETS # $CNN_3_0_BETS # too slow, and act% errors.
+LATEST_VALUES_MODEL=$CNN_2_6_BETS # $CNN_2_27_BETS # $CNN_3_0_BETS # too slow, and act% errors.
 OLDER_VALUES_MODEL=$CNN_2_6_BETS
 OTHER_VALUES_MODEL=$CNN_2_1_BETS
 

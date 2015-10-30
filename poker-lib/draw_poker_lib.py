@@ -28,6 +28,12 @@ Copyright: PokerPoker, LLC 2015
 Methods, useful for organizing & evaluating a draw poker match. Include everything that doesn't involve model building, model evaluation.
 """
 
+# If we simulate allin value (vs current hand, and random hand) as part of Holdem output... how many times do we simulate?
+# TODO: Record how long it takes, add easy option to turn it off in production.
+# NOTE: For 200x counts... stdev is +-0.02 for some cases. So we can be way off w/r/t predictions... but averages out over many hands.
+# Noise is ok, and even 500x counts... really slows down the play. Even with caching. Maybe on a fast machine... 
+SIMULATE_ALLINS_COUNT = 500 # 200 # 1000 -- accurate, but takes too long. We should cache... since X vs Y lookup (for bet streets)
+
 # Heuristics, to evaluate hand actions. On 0-1000 scale, where wheel is 1000 points, and bad hand is 50-100 points.
 # Meant to map to rough % of winning at showdown. Tuned for ring game, so random hand << 500.
 
@@ -260,7 +266,208 @@ class PokerAction:
         # Details for debug
         self.hand_num = hand_num
         self.running_average = running_average # NOTE: A step behind, but.... that's ok.
-        
+    
+    # Simulate allin value vs random opponent hand. How good is our hand?
+    def simulate_allin_vs_oppn(self, num_samples = SIMULATE_ALLINS_COUNT, allin_cache=None):
+        # Currently, allin values only implemented for some games
+        if self.format != 'holdem':
+            return
+
+        # Create objects from current hand... 
+        # TODO: Allin simulation should be a library sub-routine...
+        # Project community hand, if available. Can only evaluate if flop or more (otherwise, no 5 card hand)
+        flop = []
+        turn = []
+        river = []
+        if self.best_draw:
+            flop = self.best_draw
+        if self.hand_after:
+            if len(self.hand_after) == 1:
+                turn = self.hand_after
+            elif len(self.hand_after) == 2:
+                turn = [self.hand_after[0]]
+                river = [self.hand_after[1]]
+            else:
+                assert False, 'Unparsable turn/river %s' % self.hand_after
+        community = HoldemCommunityHand(flop=flop, turn=turn, river=river)
+        our_hand = HoldemHand(cards=self.hand, community=community)
+        oppn_hand = HoldemHand(cards=self.oppn_hand, community=community)
+
+
+        # If cache exists, look up cache, in case already computed.
+        if allin_cache:
+            (allin_value, allin_stdev) = allin_cache.lookup(our_hand.dealt_cards, oppn_hand.dealt_cards, flop, turn, river)
+            
+            # If cache hit... just output and return.
+            if allin_value != None:
+                allin_error = allin_stdev / np.sqrt(num_samples)
+
+                # print('[cache] allin value [vs oppn] is %.4f +-%.4f (%.4f stdev)' % (allin_value, allin_error, allin_stdev))
+
+                self.allin_value = allin_value
+                self.allin_stdev = allin_stdev
+                return
+
+
+        # Information that's fixed in stone for simulation
+        all_dealt_cards = community.cards() + our_hand.dealt_cards + oppn_hand.dealt_cards
+        #print('removing %d dealt cards from the deck: %s' % (len(all_dealt_cards), hand_string(all_dealt_cards)))
+        hand_round = community.round
+
+        # Deck with remaining cards
+        deck = PokerDeck(shuffle=False)
+        for card in all_dealt_cards:
+            deck.remove_card(card)
+        #print('deck contains %d cards after removal' % len(deck.cards))
+
+        # Ok, now we're ready to deal to the end, record, return, shuffle, repeat X times
+        # TODO: This should be a library sub-routine
+        hand_results = []
+        for i in range(num_samples):
+            # NOTE: Clear oppn cards, if simulating allin vs random hand
+            community.rewind(deck=deck, round=hand_round)
+            deck.shuffle()
+            #print('deck now %d cards' % len(deck.cards))
+            community.deal(deck=deck,runway=True)
+            our_hand.evaluate()
+            oppn_hand.evaluate()
+            #print(our_hand)
+            #print(oppn_hand)
+            if our_hand.rank > oppn_hand.rank:
+                result = 0.0
+                #print('oppn wins')
+            elif our_hand.rank < oppn_hand.rank:
+                result = 1.0
+                #print('our hand wins')
+            else:
+                result = 0.5
+                #print('we ties')
+            hand_results.append(result)
+
+        allin_value = np.mean(hand_results)
+        allin_stdev = np.std(hand_results)
+        allin_error = allin_stdev / np.sqrt(num_samples)
+
+        # print('allin value [vs oppn] is %.4f +-%.4f (%.4f stdev)' % (allin_value, allin_error, allin_stdev))
+
+        self.allin_value = allin_value
+        self.allin_stdev = allin_stdev
+
+        # If cache exists, update the cache
+        if allin_cache:
+            allin_cache.insert(our_hand.dealt_cards, oppn_hand.dealt_cards, flop, turn, river, allin_value, allin_stdev)
+
+    # Simulate allin value vs random opponent hand. How good is our hand?
+    def simulate_allin_vs_random(self, num_samples = SIMULATE_ALLINS_COUNT, allin_cache=None):
+        # Currently, allin values only implemented for some games
+        if self.format != 'holdem':
+            return
+
+        # Create objects from current hand... 
+        # TODO: Allin simulation should be a library sub-routine...
+        # Project community hand, if available. Can only evaluate if flop or more (otherwise, no 5 card hand)
+        flop = []
+        turn = []
+        river = []
+        if self.best_draw:
+            flop = self.best_draw
+        if self.hand_after:
+            if len(self.hand_after) == 1:
+                turn = self.hand_after
+            elif len(self.hand_after) == 2:
+                turn = [self.hand_after[0]]
+                river = [self.hand_after[1]]
+            else:
+                assert False, 'Unparsable turn/river %s' % self.hand_after
+        community = HoldemCommunityHand(flop=flop, turn=turn, river=river)
+        our_hand = HoldemHand(cards=self.hand, community=community)
+        oppn_hand = HoldemHand(cards=[], community=community) # empty opponenet hand
+
+        # If cache exists, look up cache, in case already computed.
+        if allin_cache:
+            (allin_value, allin_stdev) = allin_cache.lookup(our_hand.dealt_cards, oppn_hand.dealt_cards, flop, turn, river)
+            
+            # If cache hit... just output and return.
+            if allin_value != None:
+                allin_error = allin_stdev / np.sqrt(num_samples)
+
+                # print('[cache] allin value [vs random] is %.4f +-%.4f (%.4f stdev)' % (allin_value, allin_error, allin_stdev))
+
+                self.allin_value_vs_random = allin_value
+                self.allin_stdev_vs_random = allin_stdev
+                return
+
+        # Information that's fixed in stone for simulation
+        all_dealt_cards = community.cards() + our_hand.dealt_cards + oppn_hand.dealt_cards
+        #print('removing %d dealt cards from the deck: %s' % (len(all_dealt_cards), hand_string(all_dealt_cards)))
+        hand_round = community.round
+
+        # Deck with remaining cards
+        deck = PokerDeck(shuffle=False)
+        for card in all_dealt_cards:
+            deck.remove_card(card)
+
+        # Ok, now we're ready to deal to the end, record, return, shuffle, repeat X times
+        # TODO: This should be a library sub-routine
+        hand_results = []
+        for i in range(num_samples):
+            community.rewind(deck=deck, round=hand_round)
+            # Clear oppn cards, since simulating allin vs random hand
+            deck.return_cards(cards_return=oppn_hand.dealt_cards, shuffle=False)
+            oppn_hand.dealt_cards = []
+
+            # deal new hand and evaluate
+            deck.shuffle()
+            oppn_hand.dealt_cards = deck.deal(2) # new cards for opponent
+            community.deal(deck=deck,runway=True)
+            our_hand.evaluate()
+            oppn_hand.evaluate()
+            if our_hand.rank > oppn_hand.rank:
+                result = 0.0
+            elif our_hand.rank < oppn_hand.rank:
+                result = 1.0
+            else:
+                result = 0.5
+            hand_results.append(result)
+
+        # For correctness, clear 'Random' opponent hand after we're done.
+        oppn_hand.dealt_cards = []
+
+        allin_value = np.mean(hand_results)
+        allin_stdev = np.std(hand_results)
+        allin_error = allin_stdev / np.sqrt(num_samples)
+
+        # print('allin value [vs random] is %.4f +-%.4f (%.4f stdev)' % (allin_value, allin_error, allin_stdev))
+
+        self.allin_value_vs_random = allin_value
+        self.allin_stdev_vs_random = allin_stdev
+
+        # If cache exists, update the cache
+        if allin_cache:
+            allin_cache.insert(our_hand.dealt_cards, oppn_hand.dealt_cards, flop, turn, river, allin_value, allin_stdev)
+
+    # For training, optionally simulate in-place to get
+    # - Allin value vs current opponent
+    # - Allin value vs random opponent hand (just our own hand strength)
+    # NOTE: Easy to add more outputs... as long as no new loop (over random hands) is needed
+    # TODO: This is expensive. Make sure to include an option to disable this run run faster.
+    def simulate_allin_values(self, allin_cache=None):
+        # Currently, allin values only implemented for some games
+        if self.format != 'holdem':
+            return
+
+        # Print out, how long it takes to simulate allin values (since per-move is needed)
+        now = time.time()
+
+        # check if we computed this already
+        if not(hasattr(self, 'allin_vs_random') and self.allin_vs_random >= 0.0):
+            self.simulate_allin_vs_random(allin_cache=allin_cache)
+
+        # check if we computed this already
+        if not(hasattr(self, 'allin_vs_oppn') and self.allin_vs_oppn >= 0.0):
+            self.simulate_allin_vs_oppn(allin_cache=allin_cache)
+
+        # print('%.2fs to simulate allin values (%d times)' % (time.time() - now, SIMULATE_ALLINS_COUNT))
         
     # Consise summary, of the action taken.
     def __str__(self):
@@ -268,7 +475,14 @@ class PokerAction:
         #raise NotImplementedError()
 
     # Return array of outputs, corresponding to CSV header map order. Empty fields are ''
-    def csv_output(self, header_map):
+    def csv_output(self, header_map, allin_cache = None):
+        # If available for this game (Holdem, etc), output allin values for our hand.
+        # NOTE: Since we simulate in-place, this can be very expensive. 
+        # TODO: Track time spent on this activity.
+        # ~> turn off if running in production (not for data generation purposes)
+        # In general... include an option to turn off "csv_output" for faster performance (in ACPC, etc)
+        self.simulate_allin_values(allin_cache=allin_cache)
+
         output_map = {}
         if hasattr(self, 'hand') and self.hand:
             output_map['hand'] = hand_string(self.hand)
@@ -328,8 +542,18 @@ class PokerAction:
             # Don't save draws vector... for a non-draw game!
             if self.format == 'deuce':
                 output_map['num_draw_vector'] = self.num_draw_vector
+
+        # If we choose to compute these, allin values vs current opponent, and vs random player.
+        if hasattr(self, 'allin_value'):
+            output_map['allin_vs_oppn'] = self.allin_value
+        if hasattr(self, 'allin_stdev'):
+            output_map['stdev_vs_oppn'] = self.allin_stdev
+        if hasattr(self, 'allin_value_vs_random'):
+            output_map['allin_vs_random'] = self.allin_value_vs_random
+        if hasattr(self, 'allin_stdev_vs_random'):
+            output_map['stdev_vs_random'] = self.allin_stdev_vs_random
         
-        # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result', 'current_margin_result', 'future_margin_result', 'oppn_hand', 'current_hand_win', 'hand_num', 'running_average', 'bet_val_vector', 'act_val_vector', 'num_draw_vector']
+        # ['hand', 'draws_left', 'bet_model', 'value_heuristic', 'position', 'num_cards_kept', 'num_opponent_kept', 'best_draw', 'hand_after', 'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand', 'actions_this_round', 'actions_full_hand', 'total_bet', 'result', 'margin_bet', 'margin_result', 'current_margin_result', 'future_margin_result', 'oppn_hand', 'current_hand_win', 'hand_num', 'running_average', 'bet_val_vector', 'act_val_vector', 'num_draw_vector', 'allin_vs_oppn', 'stdev_vs_oppn', 'allin_vs_random', 'stdev_vs_random']
         output_row = VectorFromKeysAndSparseMap(keys=header_map, sparse_data_map=output_map, default_value = '')
         return output_row
 
