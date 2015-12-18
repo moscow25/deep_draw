@@ -106,51 +106,47 @@ categoryName = {ROYAL_FLUSH: 'royal',
 # Why are 3-bets and 4-bets different than raises? Human-different concepts.
 POST_BIG_BLIND = 301
 POST_SMALL_BLIND = 302
-CALL_SMALL_BLIND = 303 ## Not used.
 CALL_SMALL_STREET = 304
 CALL_BIG_STREET = 305
 BET_SMALL_STREET = 306
 BET_BIG_STREET = 307
-RAISE_SMALL_BLIND = 308 ## Not used.
 RAISE_SMALL_STREET = 309
 RAISE_BIG_STREET = 310
-BET_3_SMALL_STREET = 311 ## Not used.
-BET_3_BIG_STREET = 312 ## Not used.
-BET_4_SMALL_STREET = 313 ## Not used.
-BET_4_BIG_STREET = 314 ## Not used.
+
+# NLH bets: Special, since variable bet amount, with min and max
+CALL_NO_LIMIT = 311
+BET_NO_LIMIT = 313
+RAISE_NO_LIMIT = 315
+
+# Passive, no-bet actions.
 CHECK_HAND = 350
 FOLD_HAND = 399
 DRAW_ACTION = 366
 
 actionsArray = [POST_BIG_BLIND, POST_SMALL_BLIND, 
-                CALL_SMALL_BLIND, CALL_SMALL_STREET, CALL_BIG_STREET,
+                CALL_SMALL_STREET, CALL_BIG_STREET,
                 BET_SMALL_STREET, BET_BIG_STREET, 
-                RAISE_SMALL_BLIND, RAISE_SMALL_STREET, RAISE_BIG_STREET,
-                BET_3_SMALL_STREET, BET_3_BIG_STREET, 
-                BET_4_SMALL_STREET, BET_4_BIG_STREET,
-                CHECK_HAND, FOLD_HAND, DRAW_ACTION ]
+                RAISE_SMALL_STREET, RAISE_BIG_STREET,
+                CHECK_HAND, FOLD_HAND, DRAW_ACTION,
+                CALL_NO_LIMIT, BET_NO_LIMIT, RAISE_NO_LIMIT]
 
 # Could use better names...
 actionName = {POST_BIG_BLIND: 'pos_BB', POST_SMALL_BLIND: 'pos_SB', 
-              CALL_SMALL_BLIND: 'call_SB', CALL_SMALL_STREET: 'call_small', CALL_BIG_STREET: 'call_big',
+              CALL_SMALL_STREET: 'call_small', CALL_BIG_STREET: 'call_big',
               BET_SMALL_STREET: 'bet_small', BET_BIG_STREET: 'bet_big', 
-              RAISE_SMALL_BLIND: 'raise_SB', RAISE_SMALL_STREET: 'raise_small', RAISE_BIG_STREET: 'raise_big',
-              BET_3_SMALL_STREET: '3bet_s', BET_3_BIG_STREET: '3bet_b', 
-              BET_4_SMALL_STREET: '4bet_s', BET_4_BIG_STREET: '4bet_b',
-              CHECK_HAND: 'check', FOLD_HAND: 'FOLD', DRAW_ACTION: 'draw' }
+              RAISE_SMALL_STREET: 'raise_small', RAISE_BIG_STREET: 'raise_big',
+              CHECK_HAND: 'check', FOLD_HAND: 'FOLD', DRAW_ACTION: 'draw',
+              CALL_NO_LIMIT: 'call_NL', BET_NO_LIMIT: 'bet_NL', RAISE_NO_LIMIT: 'raise_NL'}
 
 # Reverse dictionary
 actionNameToAction = {v: k for k, v in actionName.items()}
 
 # Set of all bet types... that constitute a bet.
 ALL_BETS_SET = set([BET_SMALL_STREET, BET_BIG_STREET, 
-                    RAISE_SMALL_BLIND, RAISE_SMALL_STREET, RAISE_BIG_STREET,
-                    BET_3_SMALL_STREET, BET_3_BIG_STREET, 
-                    BET_4_SMALL_STREET, BET_4_BIG_STREET])
-ALL_RAISES_SET = set([RAISE_SMALL_BLIND, RAISE_SMALL_STREET, RAISE_BIG_STREET,
-                    BET_3_SMALL_STREET, BET_3_BIG_STREET, 
-                    BET_4_SMALL_STREET, BET_4_BIG_STREET])
-ALL_CALLS_SET = set([CALL_SMALL_BLIND, CALL_SMALL_STREET, CALL_BIG_STREET])
+                    RAISE_SMALL_STREET, RAISE_BIG_STREET, 
+                    BET_NO_LIMIT, RAISE_NO_LIMIT])
+ALL_RAISES_SET = set([RAISE_SMALL_STREET, RAISE_BIG_STREET, RAISE_NO_LIMIT])
+ALL_CALLS_SET = set([CALL_SMALL_STREET, CALL_BIG_STREET, CALL_NO_LIMIT])
 ALL_BLINDS_SET = set([POST_BIG_BLIND, POST_SMALL_BLIND])
 
 # Now... map (some) of these actions, to 32-length arrays.
@@ -604,31 +600,44 @@ def deuce_rank_five_card(hand):
 
 # Helper function to turn a poker hand (array of cards) into 2D array.
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
-# NOTE: Try 17x17 padding!
+# NOTE: 17x17 padding!
+# NOTE: Double_row = T expands to 8x13 by repeating suit row. Full order: CDHS CHDS.
+# Logic from Colin. Idea is that any pair can be learned with a single convolution. (Any two suit rows together.)
 HAND_TO_MATRIX_PAD_SIZE = 17
-def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=HAND_TO_MATRIX_PAD_SIZE):
+DOUBLE_ROW_HAND_MATRIX = True # False # Set true for 8x13 matrix, with redundancy. 
+remap_suit = {CLUB:CLUB, HEART:DIAMOND, DIAMOND:HEART, SPADE:SPADE}
+def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=HAND_TO_MATRIX_PAD_SIZE, double_row=DOUBLE_ROW_HAND_MATRIX):
     # initialize empty 4x13 matrix
     # Unless pad to fit... in which case pad to 17x17
     if pad_to_fit:
         matrix = np.array([[0 for x in range(pad_size)] for x in range(pad_size)], np.int32)
     else:
         matrix = np.array([[0 for x in range(len(ranksArray))] for x in range(len(suitsArray))], np.int32)
+    if pad_to_fit:
+        if pad_size == 17:
+            # add 5 empty rows to start, and 5 empty rows to finish
+            suit_offset = 6
+            # add empty column to start 
+            value_offset = 2
+        elif pad_size == 15:
+            suit_offset = 5
+            value_offset = 1
+        if double_row:
+            suit_offset -= 2
+    else:
+        suit_offset = 0
+        value_offset = 0
+
     for card in poker_hand:
         #print card
         #print ([suits_to_matrix[card.suit]], [card.value])
-        if pad_to_fit:
-            if pad_size == 17:
-                # add 5 empty rows to start, and 5 empty rows to finish
-                suit_offset = 6
-                # add empty column to start 
-                value_offset = 2
-            elif pad_size == 15:
-                suit_offset = 5
-                value_offset = 1
-        else:
-            suit_offset = 0
-            value_offset = 0
         matrix[suits_to_matrix[card.suit] + suit_offset][card.value + value_offset] = 1
+
+    # If double row, now copy rows
+    if double_row:
+        suit_offset += 4
+        for card in poker_hand:
+            matrix[suits_to_matrix[remap_suit[card.suit]] + suit_offset][card.value + value_offset] = 1
         
     return matrix
 
@@ -645,6 +654,67 @@ def pretty_print_hand_matrix(poker_hand):
     for suit in suitsArray:
         row = suitSymbol[suit] + ''.join([(str(c) if c  else '.') for c in matrix[suits_to_matrix[suit]]])
         print row
+
+# Represent bet size (or pot size) as encoding of 1's. Starts top left corner, like 2c.
+# NOTE: Assumes "double size" 8x13 working area (so encoding as cards doesn't work).
+# NOTE: Will return array of floats, since bet sizes can be, and will be, chunked.
+def bet_size_to_matrix(bet_size, scale, pad_size=HAND_TO_MATRIX_PAD_SIZE, double_row=DOUBLE_ROW_HAND_MATRIX):
+    matrix = np.array([[0 for x in range(pad_size)] for x in range(pad_size)], np.float32)
+    if pad_size == 17:
+        # add 5 empty rows to start, and 5 empty rows to finish
+        suit_offset = 6
+        # add empty column to start 
+        value_offset = 2
+    elif pad_size == 15:
+        suit_offset = 5
+        value_offset = 1
+    if double_row:
+        suit_offset -= 2
+
+    num_ranks = len(ranksArray)
+    num_suits = len(suitsArray)
+    if double_row:
+        num_suits *= 2
+
+    # Roll through each suit, than through each rank.
+    # Keep chunking bet_size, until we run out, or fill the grid
+    num_bets = (bet_size * 1.0) / scale
+    assert num_bets >= 0.0, 'Attempting to encode unknown bet size %s (scale %s)' % (bet_size, scale)
+    for rank in range(num_ranks):
+        for suit in range(num_suits):
+            if num_bets > 1.0:
+                matrix[suit + suit_offset][rank + value_offset] = 1.0
+                num_bets -= 1.0
+            elif num_bets > 0.0:
+                matrix[suit + suit_offset][rank + value_offset] = num_bets
+                num_bets = 0.0
+                break
+            else:
+                break
+        if num_bets == 0.0:
+            break
+
+    if num_bets > 0.0:
+        print('Finished encoding bet %s with remainder %s' % (bet_size, num_bets * scale))
+    return matrix
+
+# For LIMIT game... [assumes 50.0 step and single-precision 4x13 matrix inputs]
+# Encode pot (0 to 3000 or so) into array... by faking a hand.
+# Every $50 of pot is another card... so 50 -> [2c], 200 -> [2c, 2d, 2h, 2s]
+def pot_to_array(pot_size, pad_to_fit = True):
+    pot_to_cards = []
+    for rank in ranksArray:
+        for suit in suitsArray:
+            card = Card(suit=suit, value=rank)
+            if pot_size >= 50:
+                pot_to_cards.append(card)
+                pot_size -= 50
+            else:
+                break
+        if pot_size < 50:
+            break
+    pot_size_card = hand_to_matrix(pot_to_cards, pad_to_fit=pad_to_fit)
+    return pot_size_card
     
 # create a matrix with same shape as a card... filled with given value
 # TODO: Merge the *fill*, with card input..
@@ -766,21 +836,8 @@ class HandSimResult(object):
         self.evaluate()
         return '%d sample:\t%.2f average\t%.2f maximum' % (len(self.results), self.average_value, self.best_value)
 
-    """
-    def __cmp__(self,other):
-        return cmp(self.average_value,other.average_value)
-
-    def __gt__(self, sim_result_2):
-        return self.average_value > sim_result_2.average_value
-        """
-
     def __lt__(self, sim_result_2):
         return self.average_value < sim_result_2.average_value
-
-    """
-    def __eq__(self, sim_result_2):
-        return self.average_value == sim_result_2.average_value
-        """
 
 # A wrapper around array of cards. But deals with draws, remembering discards, etc
 class PokerHand(object):

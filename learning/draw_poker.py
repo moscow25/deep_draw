@@ -106,8 +106,14 @@ SAMPLE_BY_HOLD_VALUE = True # Default == true, for all 32-length draws. As it fo
 # If we load the input arrays without refactoring... might save memory.
 TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
 
+# Scale dollar bets to values that can be learned from ReLU units (no negative numbers)
 # Value of a "zero event." Why baseline? Model doesn't really handle negative numbers!
-EVENTS_VALUE_BASELINE = 2.000
+EVENTS_VALUE_SCALE = 0.001 # dollars to doughnuts
+EVENTS_VALUE_BASELINE = 2.000 # -$2000 scales to 0.0
+
+# For big bet events (50/100 blinds, $20k max stack)
+BIG_BET_EVENTS_VALUE_SCALE = 0.001 # $1k bet -> 1.0
+BIG_BET_EVENTS_VALUE_BASELINE = 10.0 # -$10k scales to 0.0 (unsatisfying, but unavoidable)
 
 # Keep the focus on current results (pot, probability of winning this bet, etc)
 DISCOUNT_FUTURE_RESULTS = True # We want to encourage going after the current pot...
@@ -116,7 +122,7 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.2 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 1.0 # 0.2 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 IMPORTANT_CASES_SAMPLE_RATE = min(3.0 * SAMPLE_RATE_DEUCE_EVENTS, 1.0)
 
 # Are the some cases that are important, and should always be selected?
@@ -137,6 +143,7 @@ HOLDEM_RIVER_PLAY_BOARD_ARE_IMPORTANT = True # same category as the "board" card
 PLAYERS_INCLUDE_DEUCE_EVENTS = set(['CNN_3', 'CNN_4', 'CNN_5', 'CNN_6', 'CNN_45', 'CNN_7', 'CNN_76', 'CNN_7_per', 'CNN_76_per', 'man']) # learn only from better models, or man's actions
 PLAYERS_INCLUDE_DEUCE_EVENTS.add('DNN_2_per') # experimentally, try to train also will aggro DNN player. Why? to see what betting strong, especially on river, feels like. Also, what are the results of aggro draws & pats?
 # set(['CNN', 'CNN_2', 'CNN_3', 'man', 'sim']) # Incude 'sim' and ''?
+PLAYERS_INCLUDE_DEUCE_EVENTS.add('nlh_sim') # If we want to train on simulation (heuristic) data?
 
 # returns numpy array 5x4x13, for card hand string like '[Js,6c,Ac,4h,5c]' or 'Tc,6h,Kh,Qc,3s'
 # if pad_to_fit... pass along to card input creator, to create 14x14 array instead of 4x13
@@ -286,8 +293,54 @@ def holdem_cards_input_from_string(cards_string, flop_string, turn_string, river
 
     return cards_input_with_context
 
+# Encode bets string to padded tensors. Either as '0110' limit format, or 'b456c' ACPC format
+def bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT, format='deuce_events'):
+    #print('\nencoding bet string |%s|' % bets_string)
+    if format=='nlh_events':
+        return big_bets_string_to_array(bets_string, pad_to_fit=pad_to_fit)
+    else:
+        return limit_bets_string_to_array(bets_string, pad_to_fit=pad_to_fit)
+
+# ACPC foramt. k = check c = call bXXX = bet/raise to XXX [total for this street
+def big_bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
+    #output_array = [card_to_matrix_fill(0, pad_to_fit = pad_to_fit) for i in range(5)]
+    output_matrix = []
+    
+    # Iterate over the string, and break into bets (with possible values attached)
+    for bet in re.finditer('\S[0-9]*', bets_string):
+        #print(bet.span(), bet.group(0))
+        # Each bet should be encoded, in turn.
+        bet_type = bet.group(0)[0]
+        bet_amount = bet.group(0)[1:]
+        if not bet_amount:
+            bet_amount = 0
+        #print('%s amount: %s' % (bet_type, bet_amount))
+
+        matrix = bet_size_to_matrix(int(bet_amount), NLH_BETS_MATRIX_SCALE)
+        output_matrix.append(matrix)
+
+    #print('created bets matrix of %d bets' % len(output_matrix))
+    
+    # Output has to be exactly 5 bets.
+    # A. Fill to 5
+    if len(output_matrix) < 5:
+        output_matrix +=  [card_to_matrix_fill(0, pad_to_fit = pad_to_fit) for i in range(5 - len(output_matrix))]
+    # B. If too long, trim final row if all 0's
+    if len(output_matrix) > 5:
+        print('Too many bets (%s) in bet string matrix!' % len(output_matrix))
+        if bet_amount == 0.0:
+            print('Clipping final bet, which is 0.0')
+            output_matrix = output_matrix[:-1]
+    # C. If still too long, take *last* 5 rows. It's the big bets that matter.
+    if len(output_matrix) > 5:
+        print('Too many bets (%s) in bet string matrix!' % len(output_matrix))
+        output_matrix = output_matrix[-5:]
+
+    assert len(output_matrix) == 5
+    return output_matrix
+
 # Encode a string like '011' to 5-length array of "cards"
-def bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
+def limit_bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
     output_array = [card_to_matrix_fill(0, pad_to_fit = pad_to_fit) for i in range(5)]
     index = 0
     for c in bets_string:
@@ -307,11 +360,39 @@ def bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
     #print(output_array)
     return output_array
 
+
+# Given entire hand betting string, chop into (previous_round, round_before, two_round_before)
+def get_previous_round_string(all_round_string, current_round_bets_string = '', format='deuce_events'):
+    if format == 'nlh_events':
+        # ACPC format
+        return big_bet_get_previous_round_string(all_round_string, current_round_bets_string=current_round_bets_string)
+    else:
+        # '0011010' format
+        return limit_get_previous_round_string(all_round_string, current_round_bets_string=current_round_bets_string)
+
+# ACPC format: b402b1174c/kk/b1567c/b2741f
+def big_bet_get_previous_round_string(all_round_string, current_round_bets_string = ''):
+    # Simple. Just chop by /. Check if we have current round betting
+    bets = all_round_string.split('/')
+    bets.reverse()
+    # print('previous round bets: %s' % bets)
+    if bets and current_round_bets_string:
+        # first round of betting should be current bets
+        assert bets[0] == current_round_bets_string, 'in bets history, current bets (%s) not match full history (%s)' % (current_round_bets_string, all_round_string)
+        bets = bets[1:]
+    bets += ['', '', '']
+
+    previous_round = bets[0]
+    round_before = bets[1]
+    two_round_before = bets[2]
+    #print('Current round |%s| prev_round |%s| round_before |%s| two_round_before |%s|' % (current_round_bets_string, previous_round, round_before, two_round_before))
+    return (previous_round, round_before, two_round_before)
+
 # Given an input like '1010001' or '11010111101', return the *previous round*. Check against current round.
 # How? Simple. Track bets from the beginning, and determine ends of rounds. Round ends if:
 # A. Player bets '1', followed by raises '1', then a player calls '0'
 # B. Player checks '0', and other player checks '0'.
-def get_previous_round_string(all_round_string, current_round_bets_string = ''):
+def limit_get_previous_round_string(all_round_string, current_round_bets_string = ''):
     # first, produce array of rounds of betting (chop the string)
     index_start = 0
     index_end = 0
@@ -372,25 +453,37 @@ def get_previous_round_string(all_round_string, current_round_bets_string = ''):
 def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0, opponent_cards_kept=0, pad_to_fit = PAD_INPUT, all_rounds_bets_string=None, format = 'deuce_events'):
 
     position_input = card_to_matrix_fill(position, pad_to_fit = pad_to_fit)
-    pot_size_input = pot_to_array(pot_size, pad_to_fit = pad_to_fit) # saved to single "card"
-    bets_string_input = bets_string_to_array(bets_string, pad_to_fit = pad_to_fit) # length 5
+    if format == 'nlh_events':
+        pot_size_input = bet_size_to_matrix(pot_size, NLH_POT_MATRIX_SCALE)
+    else:
+        pot_size_input = pot_to_array(pot_size, pad_to_fit = pad_to_fit) # saved to single "card"
+    bets_string_input = bets_string_to_array(bets_string, pad_to_fit = pad_to_fit, format=format) # length 5
     cards_kept_input = integer_to_card_array(cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
     opponent_cards_kept_input = integer_to_card_array(opponent_cards_kept, max_integer = 5, pad_to_fit = pad_to_fit)
     # If present...
     # NOTE: This will extend context array. Flag to enable it. And change all 26-length dependencies!
     #print('Attempting to dig up \'previous rounds bets\' from %s' % all_rounds_bets_string)
-    (previous_round, round_before, two_round_before) = get_previous_round_string(all_rounds_bets_string, current_round_bets_string=bets_string)
+    (previous_round, round_before, two_round_before) = get_previous_round_string(all_rounds_bets_string, current_round_bets_string=bets_string, format=format)
     previous_round_bets_string = previous_round
     #print('-->%s' % previous_round_bets_string)
-    previous_bets_string_input = bets_string_to_array(previous_round_bets_string, pad_to_fit = pad_to_fit) # Also, 5 bits
+    previous_bets_string_input = bets_string_to_array(previous_round_bets_string, pad_to_fit = pad_to_fit, format=format) # Also, 5 bits
 
     # NOTE: Use previous rounds... if requested.
     round_before_string = round_before
-    round_before_string_input = bets_string_to_array(round_before_string, pad_to_fit = pad_to_fit) # Also, 5 bits
+    round_before_string_input = bets_string_to_array(round_before_string, pad_to_fit = pad_to_fit, format=format) # Also, 5 bits
     two_round_before_string = two_round_before
-    two_round_before_string_input = bets_string_to_array(two_round_before_string, pad_to_fit = pad_to_fit) # Also, 5 bits
+    two_round_before_string_input = bets_string_to_array(two_round_before_string, pad_to_fit = pad_to_fit, format=format) # Also, 5 bits
 
-    if format == 'holdem_events':
+    if format == 'nlh_events':
+        # For nlh_events... include all rounds of betting. Take opportunity to re-organize (if needed)
+        # [xPosition, xPot, xBets [this street], ... , xPreviousBets]
+        # NOTE: We separate out NLH, to make sure "holdem_events" kept correctly. 
+        hand_context_input = np.array([position_input, pot_size_input, 
+                                   bets_string_input[0], bets_string_input[1], bets_string_input[2], bets_string_input[3], bets_string_input[4],
+                                   two_round_before_string_input[0], two_round_before_string_input[1], two_round_before_string_input[2], two_round_before_string_input[3], two_round_before_string_input[4],
+                                   round_before_string_input[0], round_before_string_input[1], round_before_string_input[2], round_before_string_input[3], round_before_string_input[4],
+                                   previous_bets_string_input[0], previous_bets_string_input[1], previous_bets_string_input[2], previous_bets_string_input[3], previous_bets_string_input[4]], TRAINING_INPUT_TYPE)
+    elif format == 'holdem_events':
         # For holdem_events... swap out cards_kep, and swap in... previous rounds betting
         # [xPosition, xPot, xBets [this street], ... , xPreviousBets]
         # A bit confusing... but do pot and bets first, then previous round bets in the correct order [to get "prev_round" to match]
@@ -408,23 +501,6 @@ def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0
                                        opponent_cards_kept_input[0], opponent_cards_kept_input[1], opponent_cards_kept_input[2], opponent_cards_kept_input[3], opponent_cards_kept_input[4],
                                        previous_bets_string_input[0], previous_bets_string_input[1], previous_bets_string_input[2], previous_bets_string_input[3], previous_bets_string_input[4]], TRAINING_INPUT_TYPE)
     return hand_context_input
-
-# Encode pot (0 to 3000 or so) into array... by faking a hand.
-# Every $50 of pot is another card... so 50 -> [2c], 200 -> [2c, 2d, 2h, 2s]
-def pot_to_array(pot_size, pad_to_fit = PAD_INPUT):
-    pot_to_cards = []
-    for rank in ranksArray:
-        for suit in suitsArray:
-            card = Card(suit=suit, value=rank)
-            if pot_size >= 50:
-                pot_to_cards.append(card)
-                pot_size -= 50
-            else:
-                break
-        if pot_size < 50:
-            break
-    pot_size_card = hand_to_matrix(pot_to_cards, pad_to_fit=pad_to_fit)
-    return pot_size_card
 
 # Return all legal actions (or the flipside) for given heads-up context
 def legal_actions_context(num_draws, position, bets_string, reverse = False):
@@ -496,7 +572,10 @@ def adjust_float_value(hand_val, mode = 'video'):
         # map these values to +3.0 and -2.0
 
         # Add a (significant) positive baseline to values. Why? A. stands out from noise data B. model not really built to predict negatives.
-        return hand_val * 0.001 + EVENTS_VALUE_BASELINE # hack, to test if can learn negative values?
+        return hand_val * EVENTS_VALUE_SCALE + EVENTS_VALUE_BASELINE # hack, to test if can learn negative values?
+    elif mode and (mode == 'nlh_events'):
+        # Similar for big bet events. Except that bets play a bit bigger, and much easier to have negative value
+        return hand_val * BIG_BET_EVENTS_VALUE_SCALE + BIG_BET_EVENTS_VALUE_BASELINE # could possibly return negative, but very unlikely
     else:
         # Unknown mode. 
         print('Warning! Unknown mode %s for value %s' % (mode, hand_val))
@@ -627,7 +706,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
             cards_input = cards_input_from_string(data_array[csv_key_map['hand']], 
                                                   include_num_draws=True, num_draws=data_array[csv_key_map['draws_left']], 
                                                   include_full_hand = True)
-        elif format == 'holdem_events':
+        elif format == 'holdem_events' or format == 'nlh_events':
             cards_string = data_array[csv_key_map['hand']]
 
             # Hack for flop, and turn/river. Need to deconstruct...
@@ -805,8 +884,11 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
 
         # TODO: Add option to quit early, if we only want bet actions (no draw actions)
         # raise AssertionError()
+    elif action_taken in ALL_BLINDS_SET:
+        #print('Skip post-blinds events')
+        raise NotImplementedError()
     else:
-        #print('action not useful for poker event training %s' % action_taken)
+        print('action not useful for poker event training %s' % action_taken)
         raise AssertionError()
 
     # In parallel, encode the values that we observed, to train on.
@@ -1015,7 +1097,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     hand_inputs_all, output_class, output_array = read_poker_line(line, csv_key_map, adjust_floats = format, include_num_draws=include_num_draws, include_full_hand = include_full_hand, include_hand_context = include_hand_context)
                 elif format == 'holdem':
                     hand_inputs_all, output_class, output_array = read_holdem_poker_line(line, csv_key_map)
-                elif format == 'deuce_events' or format == 'holdem_events':
+                elif format == 'deuce_events' or format == 'holdem_events' or format == 'nlh_events':
                     # Hack! Not properly tracking number of cards drawn, especially for draw decision. So build it line by line.
                     # NOTE: Reset at every blind post, set at every draw. Pass optionally to read_poker_line.
                     # TODO: Fix data collection...
@@ -1063,8 +1145,8 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('unknown input format: %s' % format)
                     sys.exit(-3)
             
-            #except (AssertionError, KeyError): # Fewer errors, for debugging
-            except (TypeError, IndexError, ValueError, KeyError, AssertionError): # Any reading error
+            except (KeyError, AssertionError, NotImplementedError): # Fewer errors, for debugging
+            #except (TypeError, IndexError, ValueError, KeyError, AssertionError, NotImplementedError): # Any reading error
                 if lines % 1000 == 0:
                     print('\nskipping malformed/unusable input line:\n|%s|\n' % line)
                 continue
@@ -1159,7 +1241,11 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                         np.set_printoptions(threshold='nan')
 
                         # Get all bits for input... excluding padding bits that go to 17x17
-                        debug_input = hand_input[:,6:10,2:15]
+                        # Show 8 rows for NLH (need more space to encode bets, and (2x) redundant encode for cards)
+                        if format=='nlh_events':
+                            debug_input = hand_input[:,4:12,2:15]
+                        else:
+                            debug_input = hand_input[:,6:10,2:15]
                         print(debug_input)
                         print(debug_input.shape)
 

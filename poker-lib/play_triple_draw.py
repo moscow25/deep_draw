@@ -9,7 +9,7 @@ import random
 import os.path # checking file existence, etc
 import argparse # command line arguements parsing
 import numpy as np
-import scipy.stats as ss
+import scipy.stats
 import lasagne
 import theano
 import theano.tensor as T
@@ -62,8 +62,9 @@ models and final hand evaluations, to accomodate any other draw game.
 # Better yet, outside global constants class (modified from command line, etc)
 # [default format is 'deuce']
 CARDS_CANONICAL_FORM = True # if available. NOTE: Older models my work better w/o canonical form, new models require it
-FORMAT = 'deuce' # 'holdem' # 'deuce'
-if args.holdem_model:
+FORMAT = 'nlh' # 'deuce' # 'holdem' # 'deuce'
+# TODO: allow 'holdem' (limit) vs 'nlh' from command line
+if args.holdem_model and FORMAT != 'nlh':
     FORMAT = 'holdem'
 
 USE_ACTION_PERCENTAGE = True # For CNN7+, use action percentage directly from the model? Otherwise, take action with highest value (some noise added)
@@ -73,7 +74,7 @@ USE_ACTION_PERCENTAGE_BOTH_PLAYERS = True # Try both players action percentage..
 #    USE_ACTION_PERCENTAGE = False 
 if FORMAT == 'deuce':
     ACTION_PERCENTAGE_CHOICE_RATE = 0.5 # 0.7 # How often do we use the choice %?? (value with noise the rest of the time)
-elif FORMAT == 'holdem':
+elif FORMAT == 'holdem' or FORMAT == 'nlh':
     ACTION_PERCENTAGE_CHOICE_RATE = 0.3 # 0.5 # 0.7 # Reduce for holdem, as values get better. Otherwise, very primitive bets model... with not enough explore
 else:
     ACTION_PERCENTAGE_CHOICE_RATE = 0.0
@@ -82,13 +83,16 @@ else:
 # TODO: Replace with more logical header for 'Holdem', and other games...
 TRIPLE_DRAW_EVENT_HEADER = ['hand', 'draws_left', 'best_draw', 'hand_after',
                             'bet_model', 'value_heuristic', 'position',  'num_cards_kept', 'num_opponent_kept',
-                            'action', 'pot_size', 'bet_size', 'pot_odds', 'bet_this_hand',
+                            'action', 'pot_size', 'bet_size', 'pot_odds', 
+                            'bet_faced', 'stack_size', 'bet_this_street', # Added for NLH
+                            'bet_this_hand', # total for all rounds
                             'actions_this_round', 'actions_full_hand', 
                             'total_bet', 'result', 'margin_bet', 'margin_result',
                             'current_margin_result', 'future_margin_result',
-                            'oppn_hand', 'current_hand_win',
-                            'hand_num', 'running_average', 'bet_val_vector', 'act_val_vector', 'num_draw_vector',
-                            'allin_vs_oppn', 'stdev_vs_oppn', 'allin_vs_random', 'stdev_vs_random']
+                            'oppn_hand', 'current_hand_win', # what oppn has, and are we winning?
+                            'hand_num', 'running_average', 'bet_val_vector', 'act_val_vector', 'num_draw_vector', # model's internal predictions
+                            'allin_vs_oppn', 'stdev_vs_oppn', 'allin_vs_random', 'stdev_vs_random', 'allin_categories_vector' # odds from Monte Carlo simulation
+                            ] 
 
 BATCH_SIZE = 100 # Across all cases
 
@@ -129,10 +133,10 @@ RETRY_FOLD_ACTION = True # If we get a model that says fold preflop... try again
 ADJUST_VALUES_TO_FIX_IMPOSSIBILITY = True # Do we fix impossile values? Like check < 0.0, or calling on river > pot + bet
 
 # Turn this on... only if we are not vulnerable to super-aggro patting machine. In the end... should be off. Gotta pay off sometimes.
-USE_NEGATIVE_RIVER_CALL_VALUE = True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
+USE_NEGATIVE_RIVER_CALL_VALUE = False #  True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
 NEGATIVE_RIVER_CALL_CUTOFF = -0.05 # try to reduce *really bad* calls, like straights, big pairs, other hopeless hands.  
-if FORMAT == 'holdem':
-    NEGATIVE_RIVER_CALL_CUTOFF = -0.01 # Holdem is tighter. Don't auto-bet with bad hands...
+#if FORMAT == 'holdem':
+#    NEGATIVE_RIVER_CALL_CUTOFF = -0.01 # Holdem is tighter. Don't auto-bet with bad hands...
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponen), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -150,11 +154,12 @@ def baseline_heuristic_value(round, bets_this_round = 0):
         baseline = RANDOM_HAND_HEURISTIC_BASELINE + 0.200
         
     # Increase the baseline... especially as we get into 3-bet and 4-bet territory.
+    # NOTE: For NLH, "bets this round" is in bet size, not number of bets.
     if bets_this_round >= 1:
         baseline += 0.05 * (bets_this_round) 
-        baseline += 0.05 * (bets_this_round - 1)
+        # baseline += 0.05 * (bets_this_round - 1)
 
-    return baseline
+    return min(baseline, 0.90)
 
 # Return indices for [0, 5] cards kept (best x-card draw)
 def best_five_draws(hand_draws_vector):
@@ -269,6 +274,8 @@ class TripleDrawAIPlayer():
         else:
             if FORMAT == 'holdem':
                 return 'holdem_sim'
+            elif FORMAT == 'nlh':
+                return 'nlh_sim'
             else:
                 return 'sim'
 
@@ -396,7 +403,8 @@ class TripleDrawAIPlayer():
     # Baseline the hand value. CNN lookup, but with differences depending on the game.
     # TODO: Change logic to where we pass game type, etc. For now, easier to use a global.
     def update_hand_value(self, num_draws=0, debug = True):
-        if FORMAT == 'holdem':
+        print('calling update_hand_value for format %s' % FORMAT)
+        if FORMAT == 'holdem' or FORMAT == 'nlh':
             self.update_holdem_hand_value(debug=debug)
         else:
             self.update_draw_hand_value(num_draws=num_draws, debug=debug)
@@ -609,6 +617,7 @@ class TripleDrawAIPlayer():
                     print(value_predictions)
 
         # Get and apply action... from 0-32 actions layer.
+        print('Requesting draw_move() for format %s' % FORMAT)
         self.draw_move(deck, num_draws, draw_recommendations = value_predictions)
 
         # TODO: We should log this, and output information useful for tracking.
@@ -627,7 +636,7 @@ class TripleDrawAIPlayer():
         self.draw_hand.deal(new_cards, final_hand=True)
 
     # This should choose an action policy... based on things we know, randomness, CNN output, RL, etc
-    def choose_action(self, actions, round, bets_this_round = 0, 
+    def choose_action(self, actions, round, bets_this_round = 0, bets_sequence = [], chip_stack = 0,
                       has_button = True, pot_size=0, actions_this_round=[], actions_whole_hand=[],
                       cards_kept=0, opponent_cards_kept=0, 
                       debug = True, retry = False):
@@ -654,7 +663,7 @@ class TripleDrawAIPlayer():
 
         if bets_layer and self.use_learning_action_model:
             #print('We has a *bets* output model. Use it!')
-            if FORMAT == 'holdem':
+            if FORMAT == 'holdem' or FORMAT == 'nlh':
                 cards_string = hand_string(self.holdem_hand.dealt_cards)
                 flop_string = hand_string(self.holdem_hand.community.flop)
                 turn_string = hand_string(self.holdem_hand.community.turn)
@@ -734,14 +743,14 @@ class TripleDrawAIPlayer():
             if debug:
                 if self.is_dense_model:
                     print('~ DNN model ~')
-                if FORMAT == 'holdem':
+                if FORMAT == 'holdem' or FORMAT == 'nlh':
                     print('context %s' % ([cards_string, flop_string, turn_string, river_string, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
                 else:
                     print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
 
             # TODO: Clean up this hack. Need "x_events" format for model loading.
             format = 'deuce_events'
-            if FORMAT == 'holdem':
+            if FORMAT == 'holdem' or FORMAT == 'nlh':
                 format = 'holdem_events'
             hand_context_input = hand_input_from_context(position=has_button, pot_size=pot_size, bets_string=bets_string,
                                                          cards_kept=cards_kept, opponent_cards_kept=opponent_cards_kept,
@@ -973,19 +982,25 @@ class TripleDrawAIPlayer():
                 return best_action
         else:
             print('No *bets* output model specified (or not used) for player %s' % self.name)
-        return self.choose_heuristic_action(allowed_actions = list(actions), 
-                                            round = round, 
-                                            bets_this_round = bets_this_round, 
-                                            has_button = has_button, debug=debug)
+        heuristic_action, bet_amount= self.choose_heuristic_action(allowed_actions = list(actions), 
+                                                                   round = round, 
+                                                                   bets_this_round = bets_this_round, 
+                                                                   bets_sequence = bets_sequence,
+                                                                   chip_stack = chip_stack,
+                                                                   pot_size = pot_size,
+                                                                   has_button = has_button, debug=debug)
+        # NOTE: For backward compatible, can skip "bet_amount" if game not big-bet game
+        return (heuristic_action, bet_amount)
 
     # Use known game information, and especially hand heuristic... to output probability preference for actions.
-    # (bet_raise, check_call, fold)
+    # (bet_raise, check_call, fold, bet_amount)
     # TODO: Pass along other important hand aspects here... # of bets made, hand history, opponent draw #, etc
-    def create_heuristic_action_distribution(self, round, bets_this_round = 0, has_button = True, debug = True):
+    def create_heuristic_action_distribution(self, round, bets_this_round = 0, bets_sequence = [], chip_stack = 0, pot_size = 0, has_button = True, debug = True):
         # Baseline is 2/2/0.5 bet/check/fold
         bet_raise = 2.0
         check_call = 2.0
         fold = 0.5 # 1.0
+        bet_amount = 0.0 # optional output, only relevant for big-bet games
 
         # If player is on the button, he should check less, and bet more. 
         # TODO: This change a lot, once we look at previous draw & bet patterns.
@@ -995,11 +1010,85 @@ class TripleDrawAIPlayer():
             check_call = 1.0
             fold = 0.5
 
+        # If NLH, bets_sequence -> use this for bet size faced
+        bet_faced = 0.0
+        raise_amount = 0.0
+        min_bet = 0.0
+        max_bet = 0.0
+        reasonable_bet = 0.0 
+        if FORMAT == 'nlh':
+            print('heuristic action for nlh hand... bets_sequence %s [pot size %s]' % (bets_sequence, pot_size))
+
+            # Bet faced is the previous bet, if any. Minimum raise requires us to bet (bet_faced + minimum raise amount)
+            if bets_sequence:
+                bet_faced = max(bets_sequence[-1], SMALL_BET_SIZE)
+                raise_amount = bet_faced
+                if len(bets_sequence) >= 2:
+                    raise_amount = max(bets_sequence[-1] - bets_sequence[-2], SMALL_BET_SIZE)
+            min_bet = bet_faced + raise_amount
+            if round <= FLOP_ROUND:
+                min_bet = max(min_bet, SMALL_BET_SIZE)
+            else:
+                min_bet = max(min_bet, BIG_BET_SIZE)
+            max_bet = chip_stack
+            min_bet = min(min_bet, max_bet)
+
+            # Reasonable bet... is a normal big-bet game bet this will form the median bet size,
+            # for a median hand [obviously, a pretty ridiculous concept]
+            # If we bet (remember, we also check sometimes), reasonable bet --> 2x min bet, or 2/3 pot. 
+            # NOTE: Beta distribution means we could bet more, or bet less.
+            reasonable_bet = max(min(max(BIG_BET_SIZE * 2.0, pot_size * 0.66), max_bet), min_bet)
+
+            print('--> if betting, need to decide bet size between (min %.1f, max %.1f, reasonable %.1f)' % (min_bet, max_bet, reasonable_bet))
+
         # See our value, and typical opponent hand value... adjust our betting pattern.
+        # TODO: If NLH... we might want to adjust baseline based on amount bet. Or not!
         hand_value = self.heuristic_value
         baseline_value = baseline_heuristic_value(round, bets_this_round)
+        print('hand_value: %.3f\tbaseline: %.3f (%.2f bets this round)' % (hand_value, baseline_value, bets_this_round))
 
-        if FORMAT == 'holdem':
+        # TODO: If NLH... use bets sequence (total bet this round) and current bet faced... to tweak baseline
+        # TODO: Separate mechanism for calling with pot odds to win, obviously (to increase call, decrease fold)
+        # TODO: Third system to guess a Beta distribution for bets...
+        # A. beta baseline
+        # B. bet more with good hands, generally speaking
+        # C. bet more as pot increases --> most important
+
+        # For bet sizing, generate beta distribution fit from (sum of)
+        # A. Narrow beta around 'reasonable_bet'
+        # B. Sample of bets from minimum to allin.
+        if FORMAT == 'nlh' and min_bet == max_bet:
+            # If we are close to allin, no real choice, and skip ahead.
+            print('only bet is allin!')
+            bet_amount = max_bet
+            print('choice: %s' % bet_amount)
+        elif FORMAT == 'nlh':
+            print('pot_size %s\tmin_bet %s\tmax_bet %s\treasonable_bet %s' % (pot_size, min_bet, max_bet, reasonable_bet))
+
+            # Calculate beta-distribution parameters directly from mean and deviation
+            reasonable_beta = generate_beta(mean=reasonable_bet, stdev=min(2.0 * min_bet, math.sqrt(max_bet - min_bet)), scale=MAX_STACK_SIZE)
+            alpha, beta, scale, loc = reasonable_beta
+            print(reasonable_beta)
+
+            # Grab 50-size sample from our desired bet size
+            sample_reasonable_beta = scipy.stats.beta.rvs(alpha, beta, scale=scale, size=50) + loc
+            sample_reasonable_beta = np.unique(np.clip(sample_reasonable_beta, min_bet, max_bet)) # snip out-of-range bets
+            #print('%s reasonablechoices from beta %s' % (len(sample_reasonable_beta), sample_reasonable_beta))
+
+            # Fixed number of samples from the full bets amount (~10 samples)
+            sample_all_bets = sample_bets_range(pot_size=pot_size, min_bet=min_bet, max_bet=max_bet) 
+            #print('sample all bets: %s' % sample_all_bets)
+
+            # OK... now we have a sample of possible bets, (heavily) weighed toward the "reasonable bet"
+            # We can just sample from this set, or fit a beta distribution.
+            weighted_bets_sample = np.sort(np.append(sample_reasonable_beta, sample_all_bets))
+
+            print('With reasonable bets and all_bets, sample size %s: %s' % (weighted_bets_sample.shape, weighted_bets_sample))
+            bet_amount = np.random.choice(weighted_bets_sample, 1)
+            print('choice: %s' % bet_amount)
+
+
+        if FORMAT == 'holdem' or FORMAT == 'nlh':
             if debug:
                 print('Player %s (button %d) value %.2f, vs baseline %.2f %s + %s' % (self.name, has_button, hand_value, baseline_value, 
                                                                                   hand_string(self.cards), 
@@ -1024,14 +1113,17 @@ class TripleDrawAIPlayer():
             bet_raise += bet_decrease
             
             # Start to fold more, especially if we are 0.20 or more behind expect opponent hand (2-card draw vs pat hand, etc)
+            # Fold more if NLH. 
             fold_increase = 0.5 / 0.10 * (hand_value - baseline_value)
+            if FORMAT == 'nlh':
+                fold_increase *= 2.0 
             #print('increasing fold by %.2f' % fold_increase)
             fold -= fold_increase      
 
         # Decrease folding as the pot grows... shift these to calls.
         # NOTE: Also balances us out, in terms of not raising and folding too much. We won't over-fold to 4bet, etc
-        if bets_this_round > 1:
-            fold_decrease = 0.5 / 2 * (bets_this_round - 1) 
+        if bets_this_round > 1 and FORMAT != 'nlh':
+            fold_decrease = 0.5 / 2 * (max(bets_this_round, 5) - 1) 
             #print('decreaseing fold by %.2f since much action this street.' % fold_decrease)
             fold -= fold_decrease
 
@@ -1051,20 +1143,23 @@ class TripleDrawAIPlayer():
         #if raise_minimum and raise_minimum > bet_raise:
         #    print('resetting mimimum raise to %.2f. Fortune favors the bold!' % max(bet_raise + raise_minimum, raise_minimum))
 
-        return (max(bet_raise + raise_minimum, raise_minimum), check_call, max(fold, 0.0))
+        return (max(bet_raise + raise_minimum, raise_minimum), check_call, max(fold, 0.0), math.floor(bet_amount))
         
 
     # Computes a distribution over actions, based on (hand_value, round, other info)
     # Then, probabilistically chooses a single action, from the distribution.
     # NOTE: allowed_actions needs to be a list... so that we can match probabilities for each.
-    def choose_heuristic_action(self, allowed_actions, round, bets_this_round = 0, has_button = True, debug=True):
-        #print('Allowed actions %s' % ([actionName[action] for action in allowed_actions]))
+    def choose_heuristic_action(self, allowed_actions, round, bets_this_round = 0, bets_sequence = [], chip_stack = 0, pot_size = 0, has_button = True, debug=True):
+        print('Allowed actions %s' % ([actionName[action] for action in allowed_actions]))
 
         # First, create a distribution over actions.
-        # NOTE: Resulting distribution is *not* normalized. Could return (3, 2, 0.5)
-        (bet_raise, check_call, fold) = self.create_heuristic_action_distribution(round, 
-                                                                                  bets_this_round = bets_this_round,
-                                                                                  has_button = has_button, debug=debug)
+        # NOTE: Resulting distribution is *not* normalized. Could return (3, 2, 0.5, 425.7)
+        (bet_raise, check_call, fold, bet_amount) = self.create_heuristic_action_distribution(round, 
+                                                                                              bets_this_round = bets_this_round,
+                                                                                              bets_sequence = bets_sequence,
+                                                                                              chip_stack = chip_stack,
+                                                                                              pot_size = pot_size,
+                                                                                              has_button = has_button, debug=debug)
 
         # Normalize so sum adds to 1.0
         action_sum = bet_raise + check_call + fold
@@ -1076,15 +1171,16 @@ class TripleDrawAIPlayer():
 
         # Match outputs above to actual game actions. Assign values directly to action.probability
         if debug:
-            print('(bet/raise %.2f, check/call %.2f, fold %.2f)' % (bet_raise, check_call, fold))
+            print('(bet/raise %.2f, check/call %.2f, fold %.2f, amount %.1f)' % (bet_raise, check_call, fold, bet_amount))
         
         # Good for easy lookup of "are we allowed to bet here"?
         all_actions_set = set(allowed_actions)
+        print('allowed actions: %s' % all_actions_set)
 
         action_probs = []
         for action in allowed_actions:
             probability = 0.0
-            if action == CALL_SMALL_STREET or action == CALL_BIG_STREET:
+            if action in ALL_CALLS_SET:
                 #print('CALL take all of the check/call credit: %s' % check_call)
                 probability += check_call
                 
@@ -1092,10 +1188,7 @@ class TripleDrawAIPlayer():
                 if not(set(ALL_BETS_SET) & all_actions_set):
                     #print('since no BET/RAISE, CALL takes all bet/raise credit: %s' % bet_raise)
                     probability += bet_raise
-            elif action == BET_SMALL_STREET or action == BET_BIG_STREET:
-                #print('BET take all of the bet/raise credit: %s' % bet_raise)
-                probability += bet_raise
-            elif action == RAISE_SMALL_STREET or action == RAISE_BIG_STREET:
+            elif action in ALL_BETS_SET:
                 #print('RAISE take all of the bet/raise credit: %s' % bet_raise)
                 probability += bet_raise
             elif action == FOLD_HAND:
@@ -1109,6 +1202,11 @@ class TripleDrawAIPlayer():
                 if not(FOLD_HAND in all_actions_set):
                     #print('Since no FOLD, CHECK takes all fold credit: %s' % fold)
                     probability += fold
+
+                # If we can't bet (already allin, etc)... credit goes here.
+                if not(set(ALL_BETS_SET) & all_actions_set):
+                    #print('since no BET/RAISE (maybe allin already), CHECK takes all bet/raise credit: %s' % bet_raise)
+                    probability += bet_raise
             else:
                 assert False, 'Unknown possible action %s' % actionName[action]
                 
@@ -1120,7 +1218,9 @@ class TripleDrawAIPlayer():
         # Then sample a single action, from this distribution.
         choice_action = np.random.choice(len(allowed_actions), 1, p = action_distribution)
         #print('choice: %s' % allowed_actions[choice_action[0]])
-        return allowed_actions[choice_action[0]]
+
+        # Bet amount only applies to bets and raises...
+        return (allowed_actions[choice_action[0]], bet_amount)
 
     # Nobody said that... some actions can't be more random than others!
     def choose_random_action(self, actions, round):
@@ -1144,7 +1244,7 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
                       has_button = True, pot_size=0, actions_this_round=[], actions_whole_hand=[],
                       cards_kept=0, opponent_cards_kept=0, ):
         print('Choosing among actions %s for round %s' % ([actionName[action] for action in actions], round))
-        if SHOW_HUMAN_DEBUG and FORMAT != 'holdem':
+        if SHOW_HUMAN_DEBUG and not (FORMAT == 'holdem' or FORMAT == 'nlh'):
             # First show the context for this hand.
             num_draws_left = 3
             if round == PRE_DRAW_BET_ROUND:
@@ -1185,7 +1285,7 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
             #print(actions_this_round)
             # Hand baseline, purely for debug
             self.create_heuristic_action_distribution(round, bets_this_round = bets_this_round, has_button = has_button)
-        elif FORMAT == 'holdem':
+        elif FORMAT == 'holdem' or FORMAT == 'nlh':
             # Save these, in case needed for recording data.
             self.cards = self.holdem_hand.dealt_cards
             self.flop = self.holdem_hand.community.flop
@@ -1357,6 +1457,8 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
     # TODO: Flush buffer here?
 
     # How long did it take to calculate & print everything?
+    game_log = encode_bets_string(dealer.hand_history, format=FORMAT)
+    print(game_log)
     print('%.2fs to write CSV (simulate allin values, etc)' % (time.time() - now))
 
     # If we are tracking results... return results (wins/losses for player by order
@@ -1369,7 +1471,7 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
 def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_model_filename=None,
          bets_model_filename=None, old_bets_model_filename=None, other_old_bets_model_filename=None, human_player=None, compare_models=None):
     # Compute hand values, or compare hands.
-    if FORMAT == 'holdem':
+    if FORMAT == 'holdem' or FORMAT == 'nlh':
         cashier = HoldemCashier() # Compares by Hold'em (poker high hand) rules
     else:
         cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
@@ -1398,7 +1500,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
                          ['Ts,Th', '', '', ''], # good hand preflop
                          ['9s,Qh', '', '', ''], # average hand preflop
                          ]
-    if FORMAT == 'holdem':
+    if FORMAT == 'holdem' or FORMAT == 'nlh':
         test_cases = test_cases_holdem
     else:
         test_cases = test_cases_draw
@@ -1408,7 +1510,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
 
     # NOTE: Num_draws and full_hand must match trained model.
     # TODO: Use shared environemnt variables...
-    if FORMAT == 'holdem':
+    if FORMAT == 'holdem' or FORMAT == 'nlh':
         test_batch = np.array([holdem_cards_input_from_string(case[0], case[1], case[2], case[3]) for case in test_cases], np.int32)
     else:
         test_batch = np.array([cards_input_from_string(hand_string=case[0], 
