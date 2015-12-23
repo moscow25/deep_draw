@@ -714,11 +714,12 @@ def read_holdem_poker_line(data_array, csv_key_map):
 
     # For outputs, grab holdem value keys. All values [0.0, 1.0] so ReLU good, and no need to adjust values.
     holdem_values = np.array([float(data_array[csv_key_map[holdem_value_key]]) for holdem_value_key in HOLDEM_VALUE_KEYS], dtype=TRAINING_INPUT_TYPE)
-    zeros_fill = np.zeros(32 - len(HOLDEM_VALUE_KEYS), dtype=TRAINING_INPUT_TYPE)
-    output_values = np.concatenate((holdem_values, zeros_fill), axis = 0)
+    zeros_fill = np.zeros(32 - (2 * len(HOLDEM_VALUE_KEYS)), dtype=TRAINING_INPUT_TYPE)
+    # Concant twice. We want to output values at the beginning (for compatibility) and and the end (since NLH model has them there)
+    output_values = np.concatenate((holdem_values, zeros_fill, holdem_values), axis = 0)
 
     # Best category? The most likely hand result (or actual hand result if on the river). Can't choose first index, as overall value.
-    output_category = np.argmax(output_values[1:]) + 1
+    output_category = np.argmax(output_values[1:len(holdem_values)]) + 1
 
     """
     print([cards_string, flop_string, turn_string, river_string])
@@ -1479,7 +1480,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
 
                         # Get all bits for input... excluding padding bits that go to 17x17
                         # Show 8 rows for NLH (need more space to encode bets, and (2x) redundant encode for cards)
-                        if format=='nlh_events' and (DOUBLE_ROW_HAND_MATRIX or DOUBLE_ROW_BET_MATRIX):
+                        if (format=='nlh_events' and DOUBLE_ROW_BET_MATRIX) or DOUBLE_ROW_HAND_MATRIX:
                             debug_input = hand_input[:,4:12,2:15]
                         else:
                             debug_input = hand_input[:,6:10,2:15]

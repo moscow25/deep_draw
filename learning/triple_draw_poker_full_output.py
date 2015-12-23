@@ -23,7 +23,7 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-TRAINING_FORMAT = 'nlh_events' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'holdem' # 'nlh_events' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
 USE_FAT_MODEL = False # True # False # True
 USE_FULLY_CONNECTED_MODEL = False # True # False
@@ -45,8 +45,8 @@ elif TRAINING_FORMAT == 'deuce':
 elif TRAINING_FORMAT == 'video':
     DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
 
-MAX_INPUT_SIZE = 66000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 6000
+MAX_INPUT_SIZE = 820000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 20000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100

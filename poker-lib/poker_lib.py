@@ -653,7 +653,7 @@ def deuce_rank_five_card(hand):
 # NOTE: Double_row = T expands to 8x13 by repeating suit row. Full order: CDHS CHDS.
 # Logic from Colin. Idea is that any pair can be learned with a single convolution. (Any two suit rows together.)
 HAND_TO_MATRIX_PAD_SIZE = 17
-DOUBLE_ROW_HAND_MATRIX = False # True # False # Set true for 8x13 matrix, with redundancy. 
+DOUBLE_ROW_HAND_MATRIX = True # False # True # False # Set true for 8x13 matrix, with redundancy. 
 remap_suit = {CLUB:CLUB, HEART:DIAMOND, DIAMOND:HEART, SPADE:SPADE}
 def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=HAND_TO_MATRIX_PAD_SIZE, double_row=DOUBLE_ROW_HAND_MATRIX):
     # initialize empty 4x13 matrix
