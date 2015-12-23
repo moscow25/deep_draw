@@ -48,7 +48,7 @@ elif TRAINING_FORMAT == 'video':
 MAX_INPUT_SIZE = 820000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 20000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 100 # 20 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level

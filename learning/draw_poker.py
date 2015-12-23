@@ -1379,8 +1379,8 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('unknown input format: %s' % format)
                     sys.exit(-3)
             
-            except (KeyError, AssertionError, NotImplementedError): # Fewer errors, for debugging
-            #except (TypeError, IndexError, ValueError, KeyError, AssertionError, NotImplementedError): # Any reading error
+            #except (KeyError, AssertionError, NotImplementedError): # Fewer errors, for debugging
+            except (TypeError, IndexError, ValueError, KeyError, AssertionError, NotImplementedError): # Any reading error
                 if lines % 1000 == 0:
                     print('\nskipping malformed/unusable input line:\n|%s|\n' % line)
                 continue
