@@ -160,7 +160,7 @@ ALL_ACTION_CATEGORY_SET = set([BET_CATEGORY, RAISE_CATEGORY, CHECK_CATEGORY, CAL
 eventCategoryName = {BET_CATEGORY: 'bet', RAISE_CATEGORY: 'raise', CHECK_CATEGORY: 'check',
                      CALL_CATEGORY: 'call', FOLD_CATEGORY: 'fold'}
 
-# Percentages we are trying to learn for betting actions.
+# Percentages we are trying to learn for (limit) betting actions.
 BET_ACTION_CATEGORY = 5
 RAISE_ACTION_CATEGORY = 6
 CHECK_ACTION_CATEGORY = 7
@@ -173,6 +173,55 @@ BET_ACTIONS_VALUE_CATEGORY = 10 # actually the inverse. Minimize value to maximi
 BET_ACTIONS_SUM_CATEGORY = 11 # sum of all actions for the hand. Try to get sum to add up to 1.0 (100%)
 BET_ACTIONS_SUM_VARIETY_CATEGORY = 12 # optionally, spread some weight amongst the values 
 ALL_ACTION_PERCENT_CATEGORY_SET = set([BET_ACTIONS_VALUE_CATEGORY, BET_ACTIONS_SUM_CATEGORY, BET_ACTIONS_SUM_VARIETY_CATEGORY])
+
+
+# For big-bet games (NLH), ignore action% [don't try to balance a range]. Instead, learn values for several bet sizes.
+# All in the form [0.25, 0.5, 1.0, 2.0, ...] * pot. Plus [min_bet, max_bet]
+# NOTE: If any bet size outside of min, max... those values become min, max. If only bet allin, all values should be same.
+MIN_BET_CATEGORY = 5
+NL_BET_020_CATEGORY = 6 # 0.2x pot
+NL_BET_050_CATEGORY = 7 # 0.5x pot
+NL_BET_100_CATEGORY = 8 # 1.0x pot
+NL_BET_150_CATEGORY = 9 # 1.5x pot
+NL_BET_300_CATEGORY = 10 # 3.0x pot
+NL_BET_800_CATEGORY = 11 # 8.0x pot
+MAX_BET_CATEGORY = 12
+
+# NOTE: Vast majority of action will be in the 0.5x - 1.5x pot size. We need the other values, to smooth out curve between min and max.
+# NOTE: If performance looks weird, we can very easily restrict output to the more normal range. No need to bet tiny of huge, until pot catch up.
+NL_BET_BUCKET_SIZES = [0.0, 0.2, 0.5, 1.0, 1.5, 3.0, 8.0, 1000.0] # Bucket values, limited by min bet and max bet
+TINY_WEIGHT_UNKNOWN_BET_SIZE = 0.01 # Small amount of gradient, pushing self-similarly for all bet sizes, including unknown ones.
+
+# It's crazy not to output the size of the bet actually made by network. (but do predict it at discount to other values)
+# FOLD = 0; CALL = bet_faced; BET/RAISE = size (also from buckets above)
+BET_SIZE_MADE = 13 
+
+# For big-bet games (NLH), ask network to output bet sizes, easily learned from the inputs
+# Compared to results from bets, how much to de-emphasize the simulation-based results? (including autoencoder pass-throughs)
+MONTE_CARLO_RESULTS_SCALE = 1.0 # 0.1
+POT_SIZE = 14
+BET_FACED = 15
+STACK_SIZE = 16
+BET_THIS_STREET_ALREADY = 17
+
+# If available for high hand (LHE and NLH), output odds from Monte Carlo
+# 0.0-1.0 odds the describe strength of our current hand. Abstractly, and vs opponent
+# NOTE: These take the last 15 bits of output. Add more bits if needed, expand from 32 --> more outputs
+ALLIN_VS_OPPONENT = 18
+# STDEV_VS_OPPONENT = 18 # Exclude. This just don't make sense!
+ALLIN_VS_RANDOM = 19
+STDEV_VS_RANDOM = 20
+# Also, output all (11) High-hand categories, from this offset.
+# So flush value would be stored at (offset + high_hand_categories_index[FLUSH]). Too much... but ok since categories order fixed.
+# NOTE: We could combine Royal, Str8 flush and Quads into one super-category... but easier to keep structure
+HAND_CATEGORIES_OUTPUT_OFFSET = 21 # 32 - 11
+
+# TODO: If we were smart, also output *bet size* as a single number. Try to predict what the training set would do here. Grrr..
+# Other numbers I'd try to predict:
+# Opponent has pair
+# Opponent has top pair
+# Opponent has flush draw
+# Opponent's next action.
 
 # Similarly, we can encode decision to keep {0,1,2,3,4,5} cards.
 # NOTE: We enocode this further down in the output array. Why? Separation, room for action% for bets.
@@ -604,7 +653,7 @@ def deuce_rank_five_card(hand):
 # NOTE: Double_row = T expands to 8x13 by repeating suit row. Full order: CDHS CHDS.
 # Logic from Colin. Idea is that any pair can be learned with a single convolution. (Any two suit rows together.)
 HAND_TO_MATRIX_PAD_SIZE = 17
-DOUBLE_ROW_HAND_MATRIX = True # False # Set true for 8x13 matrix, with redundancy. 
+DOUBLE_ROW_HAND_MATRIX = False # True # False # Set true for 8x13 matrix, with redundancy. 
 remap_suit = {CLUB:CLUB, HEART:DIAMOND, DIAMOND:HEART, SPADE:SPADE}
 def hand_to_matrix(poker_hand, pad_to_fit=False, pad_size=HAND_TO_MATRIX_PAD_SIZE, double_row=DOUBLE_ROW_HAND_MATRIX):
     # initialize empty 4x13 matrix
@@ -658,7 +707,8 @@ def pretty_print_hand_matrix(poker_hand):
 # Represent bet size (or pot size) as encoding of 1's. Starts top left corner, like 2c.
 # NOTE: Assumes "double size" 8x13 working area (so encoding as cards doesn't work).
 # NOTE: Will return array of floats, since bet sizes can be, and will be, chunked.
-def bet_size_to_matrix(bet_size, scale, pad_size=HAND_TO_MATRIX_PAD_SIZE, double_row=DOUBLE_ROW_HAND_MATRIX):
+DOUBLE_ROW_BET_MATRIX = True # We need 8x13 to encode bet sizes. It would be nice if also 8x13 for cards, but even if not...
+def bet_size_to_matrix(bet_size, scale, pad_size=HAND_TO_MATRIX_PAD_SIZE, double_row=DOUBLE_ROW_BET_MATRIX):
     matrix = np.array([[0 for x in range(pad_size)] for x in range(pad_size)], np.float32)
     if pad_size == 17:
         # add 5 empty rows to start, and 5 empty rows to finish

@@ -45,8 +45,8 @@ elif TRAINING_FORMAT == 'deuce':
 elif TRAINING_FORMAT == 'video':
     DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
 
-MAX_INPUT_SIZE = 24000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 4000
+MAX_INPUT_SIZE = 66000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 6000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
@@ -154,6 +154,8 @@ if TRAINING_FORMAT == 'deuce_events':
     OUTPUT_CATEGORY_DEFAULT_MASK = first_five_mask
 elif TRAINING_FORMAT == 'holdem':
     OUTPUT_CATEGORY_DEFAULT_MASK = only_holdem_category_mask
+elif TRAINING_FORMAT == 'nlh_events':
+    OUTPUT_CATEGORY_DEFAULT_MASK =  only_first_five_mask
 else:
     OUTPUT_CATEGORY_DEFAULT_MASK = np.ones((32,100))
 
@@ -188,7 +190,14 @@ def set_values_at_row_from_target(row_num, output_rows, target_rows):
 # Can we at least use outside mask??
 INCREASE_VALUES_SUM_INVERSE = 1.0 # default 1.0 (1/3 or so)
 VALUES_SUM_CONSTANT = 7.0 # Suggested by Lyon. Flatten out curve for increase hand value -> decrease inverse const/(const+X)
-def value_action_error(output_matrix, target_matrix):
+def value_action_error(output_matrix, target_matrix, format = TRAINING_FORMAT):
+    # HACK: If 'nlh_events', we're back to straight comparison, and not trying to predict action %
+    # TODO: Fix, or at least split to a separate function name!
+    if TRAINING_FORMAT == 'nlh_events':
+        print('Avoiding fancy scans for predicting action percent for format NLH. Just compare vectors')
+        simple_error = (output_matrix - target_matrix)
+        return simple_error ** 2
+
     # Compute a mask... which per-row takes 5 bits of values, if target matrix has values,
     # and the five (six) bits of draws if target matrix is all about draws. 
     # Why? We don't want to action% model (for bets) on inputs to num_draws output.
@@ -766,15 +775,9 @@ def create_iter_functions_full_output(dataset, output_layer,
        epoch.
     """
     print('creating iter funtions')
-
-    #print('input dataset %s' % dataset)
-
     batch_index = T.iscalar('batch_index')
-    #if not input_var:
-    #X_batch = X_tensor_type('x') # inputs to the network
     y_batch = T.ivector('y') # "best class" for the network
     z_batch = T.matrix('z') # all values for the network
-    #if TRAIN_MASKED_OBJECTIVE:
     m_batch = T.matrix('m') # mask for all values, if some are relevant, others are N/A or ?
 
     # TODO: Replace the "batch index" input, with input of actual batch... (so data doesn't need to be stored in theano.shared())
@@ -817,7 +820,7 @@ def create_iter_functions_full_output(dataset, output_layer,
     
     # Prediction actually stays the same! Since we still want biggest value in the array... and compare to Y
     # NOTE: If accuracy really supposed to be first 5... use [:,0:5] below [multiply by mask, before argmax]
-    if TRAIN_MASKED_OBJECTIVE:
+    if TRAIN_MASKED_OBJECTIVE and not TRAINING_FORMAT == 'nlh_events':
         # Apply [0:5] only mask, to consider accuracy (for bet alues)
         # TODO: Allow predictions to consider both cases with output == bet/raise and ouput == num_cards draw
 

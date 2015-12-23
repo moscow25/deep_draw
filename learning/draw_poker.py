@@ -41,26 +41,17 @@ import theano.printing as tp # theano.printing.pprint(variable) [tp.pprint(var)]
 import time
 import math
 import csv
+import ast # string parsing
 from poker_lib import *
 from holdem_lib import *
 from poker_util import *
 
-PY2 = sys.version_info[0] == 2
+# When creating 3D tensors from CSV (this can be slow) Print full input, tensor and output... every X rows.
+FULL_DEBUG_STEP = 2500
+DEBUG = False # Examine how data is loaded, or when changing some functions
 
-if PY2:
-    from urllib import urlretrieve
-
-    def pickle_load(f, encoding):
-        return pickle.load(f)
-else:
-    from urllib.request import urlretrieve
-
-    def pickle_load(f, encoding):
-        return pickle.load(f, encoding=encoding)
-
-DATA_URL = '' # 'http://deeplearning.net/data/mnist/mnist.pkl.gz'
-DATA_FILENAME = '../data/250k_full_sim_combined.csv' # full dataset, with preference to better data (more samples per point)
 # Default, if not specified elsewhere...
+DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
 MAX_INPUT_SIZE = 250000 #100000 # 50000 # 200000 # 150000 # 1000000 #40000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 2000
 TEST_SIZE = 2000
@@ -112,11 +103,11 @@ EVENTS_VALUE_SCALE = 0.001 # dollars to doughnuts
 EVENTS_VALUE_BASELINE = 2.000 # -$2000 scales to 0.0
 
 # For big bet events (50/100 blinds, $20k max stack)
-BIG_BET_EVENTS_VALUE_SCALE = 0.001 # $1k bet -> 1.0
-BIG_BET_EVENTS_VALUE_BASELINE = 10.0 # -$10k scales to 0.0 (unsatisfying, but unavoidable)
+BIG_BET_EVENTS_VALUE_SCALE = 0.0001 # $10k bet -> 1.0
+BIG_BET_EVENTS_VALUE_BASELINE = 2.00 # -$20k scales to 0.0 (unsatisfying, but unavoidable)
 
 # Keep the focus on current results (pot, probability of winning this bet, etc)
-DISCOUNT_FUTURE_RESULTS = True # We want to encourage going after the current pot...
+DISCOUNT_FUTURE_RESULTS = False # True # We want to encourage going after the current pot...
 FUTURE_DISCOUNT = 0.9 
 
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
@@ -305,7 +296,7 @@ def bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT, format='deuce_even
 def big_bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
     #output_array = [card_to_matrix_fill(0, pad_to_fit = pad_to_fit) for i in range(5)]
     output_matrix = []
-    
+    bet_sequence = []
     # Iterate over the string, and break into bets (with possible values attached)
     for bet in re.finditer('\S[0-9]*', bets_string):
         #print(bet.span(), bet.group(0))
@@ -314,6 +305,7 @@ def big_bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
         bet_amount = bet.group(0)[1:]
         if not bet_amount:
             bet_amount = 0
+        bet_sequence.append(bet_amount)
         #print('%s amount: %s' % (bet_type, bet_amount))
 
         matrix = bet_size_to_matrix(int(bet_amount), NLH_BETS_MATRIX_SCALE)
@@ -327,14 +319,17 @@ def big_bets_string_to_array(bets_string, pad_to_fit = PAD_INPUT):
         output_matrix +=  [card_to_matrix_fill(0, pad_to_fit = pad_to_fit) for i in range(5 - len(output_matrix))]
     # B. If too long, trim final row if all 0's
     if len(output_matrix) > 5:
-        print('Too many bets (%s) in bet string matrix!' % len(output_matrix))
+        #print('Too many bets (%s) in bet string matrix! %s' % (len(output_matrix), bet_sequence))
         if bet_amount == 0.0:
-            print('Clipping final bet, which is 0.0')
+            #print('Clipping final bet, which is 0.0')
             output_matrix = output_matrix[:-1]
+            bet_sequence = bet_sequence[:-1]
+        #time.sleep(5)
     # C. If still too long, take *last* 5 rows. It's the big bets that matter.
     if len(output_matrix) > 5:
-        print('Too many bets (%s) in bet string matrix!' % len(output_matrix))
+        #print('Still many bets (%s) in bet string matrix! Taking last five. %s' % (len(output_matrix), bet_sequence[-5:]))
         output_matrix = output_matrix[-5:]
+        #time.sleep(5)
 
     assert len(output_matrix) == 5
     return output_matrix
@@ -503,7 +498,63 @@ def hand_input_from_context(position=0, pot_size=0, bets_string='', cards_kept=0
     return hand_context_input
 
 # Return all legal actions (or the flipside) for given heads-up context
-def legal_actions_context(num_draws, position, bets_string, reverse = False):
+def legal_actions_context(num_draws, position, bets_string, reverse = False, format='deuce_events'):
+    if format == 'nlh_events':
+        return big_bet_legal_actions_context(num_draws, position, bets_string, reverse = reverse)
+    else:
+        return limit_legal_actions_context(num_draws, position, bets_string, reverse = reverse)
+
+# For NLH game, with bets type 'cb588c/kk/kb806f'
+# NOTE: We ignore case where players are allin, and thus no more betting. 
+def big_bet_legal_actions_context(num_draws, position, bets_string, reverse = False):
+    #print('considering bet string for NLH legal/illegal bets: |%s|' % bets_string)
+
+    # Is it enough to just count bets via 'bxxx'?
+    num_bets = 0
+    for c in bets_string:
+        if c == 'b':
+            num_bets += 1
+    # special cases for first round... (because of blinds)
+    #print([num_draws, position, bets_string, reverse])
+    if num_draws == 3:
+        #print('adding implied bet for first round action')
+        num_bets += 1
+
+    legal_actions = set([])
+    if num_bets == 0:
+        assert(num_draws < 3) # No such thing as zero bets on first round of actions
+        #print('--> first or second to act, check or bet')
+        legal_actions.add(BET_CATEGORY)
+        legal_actions.add(CHECK_CATEGORY)
+    elif num_draws == 3 and num_bets == 1:
+        # Special case, for SB and BB and no raise yet...
+        if position:
+            #print('--> first to act, in position, preflop')
+            legal_actions.add(RAISE_CATEGORY)
+            legal_actions.add(CALL_CATEGORY)
+            legal_actions.add(FOLD_CATEGORY)
+        else:
+            #print('--> check or raise, in BB, preflop')
+            legal_actions.add(RAISE_CATEGORY)
+            legal_actions.add(CHECK_CATEGORY)
+    elif num_bets < 4:
+        #print('--> facing a bet. Raise, call or fold')
+        legal_actions.add(RAISE_CATEGORY)
+        legal_actions.add(CALL_CATEGORY)
+        legal_actions.add(FOLD_CATEGORY)
+    else:
+        #print('--> facing a 3+bet bet. But NLH, so can raise. TODO: Are we allin?')
+        legal_actions.add(RAISE_CATEGORY)
+        legal_actions.add(CALL_CATEGORY)
+        legal_actions.add(FOLD_CATEGORY)
+
+    if reverse:
+        return (ALL_ACTION_CATEGORY_SET - legal_actions)
+    else:
+        return legal_actions
+
+# For limit game with bets type '0110'
+def limit_legal_actions_context(num_draws, position, bets_string, reverse = False):
     num_bets = 0
     for c in bets_string:
         if c == '1':
@@ -687,8 +738,9 @@ def read_holdem_poker_line(data_array, csv_key_map):
 # output_array --> 32-length output... but only the 'output_class' index matters. The rest are zero
 # Thus, we can train on the same model as 3-round draw decisions... resulting good initialization.
 def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_to_fit = PAD_INPUT, include_hand_context = False, 
-                          num_draw_out_position = 0, num_draw_in_position = 0, actions_this_round = ''): 
-    #print(data_array) 
+                          num_draw_out_position = 0, num_draw_in_position = 0, actions_this_round = '', debug=DEBUG): 
+    if debug:
+        print(data_array) 
 
     # If we are told which player agent made this move, skip moves from players except those whom we trust.
     if format == 'deuce_events' and csv_key_map.has_key('bet_model') and PLAYERS_INCLUDE_DEUCE_EVENTS:
@@ -805,7 +857,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
             important_training_case = True
             #print('found a straight or flush in the hand!')
             #print(data_array)
-    elif format == 'holdem_events' and data_array[csv_key_map['best_draw']]:
+    elif (format == 'holdem_events' or format == 'nlh_events') and data_array[csv_key_map['best_draw']]:
         # Similarly for HE, give special attention to board where we have 2p+.
         # 
         # A. Some cases with very strong board, which we do or don't improve
@@ -886,39 +938,38 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         # raise AssertionError()
     elif action_taken in ALL_BLINDS_SET:
         #print('Skip post-blinds events')
-        raise NotImplementedError()
+        raise AssertionError() 
     else:
         print('action not useful for poker event training %s' % action_taken)
-        raise AssertionError()
+        raise NotImplementedError()
+
+    ###############################################
+    ## Encode network outputs. Mostly, these are encoding results of bets made or which can be implied.
+    ## But also, we can encode side-information about the hand.
+    ## We also encode, which actions are legal, and which are not... 
+    ###############################################
 
     # In parallel, encode the values that we observed, to train on.
     output_mask_classes = np.zeros(32)
     output_array = np.zeros(32)
 
-    if bets_action:
-        # Encode large negative value for illegal actions. Helps with debug, and action model
-        illegal_actions = legal_actions_context(num_draws, position, bets_string, reverse = True)
-        legal_actions = legal_actions_context(num_draws, position, bets_string, reverse = False)
-    else: 
-        # Don't fill in bets... if we are encoding a draw move.
-        illegal_actions = set([])
-        legal_actions = set([])
-
-    #print('illegal actions for context: %s' % illegal_actions)
-    for action in illegal_actions:
-        output_mask_classes[action] = 1.0
-
-    # Now, consider the value of this action.
+    # The most important observed number: "margin_result" == win/loss from this bet.
+    # *includes results of future bets*
+    # Fold -> margin_result = 0.0
+    # Otherwise, treat pot as dead money. From this point on, including this action, how much do we win/lose?
+    # In other words, point value for each action. We assume it's good (enough) to approximate sell-value of current hand, in current environment
     margin_result = float(data_array[csv_key_map['margin_result']])
     margin_value = margin_result
+    if debug:
+        print('marginal result for this action: %.0f' % (margin_result))
 
     # Optionally, we can consider how this action breaks down by current and future rewards.
     # Why? Current rewards are this pot, and this bet. Future rewards depend on future play.
     # Use a discount rate to focus on current play
 
-    # NOTE: For more recent data... we can get the current & future rewards directly.
-    pot_size = float(data_array[csv_key_map['pot_size']]) # 150 - 3000 or so
-    bet_size = float(data_array[csv_key_map['bet_size']]) # 150 - 3000 or so
+    # We can also discount "future results" that result from winning/losing chips with future betting.
+    # NOTE: We start by turning this OFF for NLH.
+    # Note that allin/call makes that part of current rewards... for the caller. But future rewards for bettor. Not sure this is correct, so OFF
     if DISCOUNT_FUTURE_RESULTS and FUTURE_DISCOUNT:
         if margin_result == 0.0:
             current_margin_result = 0
@@ -935,8 +986,180 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         # print('For discount rate %.2f, margin_result %.2f [%.2f, %.2f] --> %.3f' % 
         #      (FUTURE_DISCOUNT, margin_result, current_margin_result, future_margin_result, margin_value))
 
-    # Our results... is an empty 32-vector, with only action's value set
+    # The value of the action we took, formatted for output array.
     action_margin_value = adjust_float_value(margin_value, mode=format)
+    # In case we need an unknown default, also save value, regressed toward 0.0 value... 
+    # TODO: Can try other regressions. But this should be good.
+    # We want to encourage sticking with good bet (> 0.0), and encourage trying another bet, if this one not good (< 0.0)
+    regressed_margin_value = adjust_float_value(margin_value / 2.0, mode=format)
+
+    # Along with bets, we might want to encode side-outputs, to:
+    # A. Make sure we can auto-encode hand-specific numbers like "pot size" [including in extreme cases]
+    # B. Reinforce game odds (from Monte Carlo)
+    # C. Estimate opponent hand strength
+    
+    # All numbers below in chips, for $50-$100 blinds
+    pot_size = float(data_array[csv_key_map['pot_size']]) # Pot, before this action
+    bet_size = float(data_array[csv_key_map['bet_size']]) # Bet being made, with this action (including chips put in with a call)
+    # NOTE: Some of these numbers might be missing in older logs... so add checks if there are problems
+    bet_faced = float(data_array[csv_key_map['bet_faced']]) # Bet that was made to us (0.0 if first to act, etc)
+    stack_size = float(data_array[csv_key_map['stack_size']]) # Chips remaining (for NLH hand) *before* this bet is made. 
+    bet_this_street = float(data_array[csv_key_map['bet_this_street']]) # ACPC style, total amount we bet this street *including* current bet
+    bet_this_street_already = bet_this_street - bet_size # How much did we already commit to this pot, on this street
+    # TODO: Compute min raise from stats above. [In terms of fresh chips to wager]
+    min_bet = min(max(bet_faced, SMALL_BET_SIZE), stack_size)
+
+    # Encode a few bet sizes for output: pot_size, stack_size (before current bet), bet_faced, bet_this_street_already (not including this bet)
+    # Why these values? We want stats that can be computed directly from hand history. Make sure this info is getting through (autoencoder)
+    # NOTE: We encode ( - BIG_BET_FULL_STACK) to make output sizes smaller. These are all positive numbers, so no need to center zero at +20.0, etc
+    # TODO: It can't hurt to output more values (like how much we already bet this hand, this street). Need to expand output vector size.
+    bet_size_values = {BET_SIZE_MADE: adjust_float_value(bet_size - BIG_BET_FULL_STACK, mode=format),
+                       POT_SIZE: adjust_float_value(pot_size - BIG_BET_FULL_STACK, mode=format),
+                       BET_FACED: adjust_float_value(bet_faced - BIG_BET_FULL_STACK, mode=format),
+                       STACK_SIZE: adjust_float_value(stack_size - BIG_BET_FULL_STACK, mode=format),
+                       BET_THIS_STREET_ALREADY: adjust_float_value(bet_this_street_already - BIG_BET_FULL_STACK, mode=format),
+                       }
+    if debug:
+        print('pot: %.0f\tfaced: %.0f\tstax: %.0f\talready: %.0f' % (pot_size, bet_faced, stack_size, bet_this_street_already))
+    for cat in bet_size_values.keys():
+        output_array[cat] = bet_size_values[cat]
+        output_mask_classes[cat] = MONTE_CARLO_RESULTS_SCALE
+
+    # We also want to encode bet-value buckets. Essentially, this means having outputs for
+    # [0.25, 0.5, 1.0, 2.0] X pot (or whatever categories). We ask network to predict:
+    # A. Value(s) for chip bucket closest to bet actually made
+    # B. We could also ask chip sizes... but instead below, predict pot size and other invariants
+    # NOTE: We could/should use more sophisticated method than closest bucket. At least, probabilistic.
+    # Why? Training from data, same bet in between should not just set to closest. Very weak that way.
+    # Example: Sam Ganzfried paper (Eric uses this system) https://www.cs.cmu.edu/~sandholm/reverse%20mapping.ijcai13.pdf
+    # 
+    # Remember, values for bets not made are ? (not 0.0) in training. So don't over-spread weight... but ok to spread it a bit.
+
+    bet_sizes_weights = [0.0 for percent in NL_BET_BUCKET_SIZES]
+    # A. Compute bet size vector, in terms of pot and buckets.
+    # B. Apply min and max cutoffs.
+    bet_sizes_vector = np.clip([pot_size * percent for percent in NL_BET_BUCKET_SIZES], min_bet, stack_size)
+    if debug:
+        print('bet buckets (pot %.0f)\t%s' % (pot_size, bet_sizes_vector))
+
+    # C. Apply closest value to bet size actually made... or whatever algorithm to split/project
+    bet_difference_vector = np.abs(bet_sizes_vector - bet_size)
+    if debug:
+        print('subtract bet %.0f:\t%s' % (bet_size, bet_difference_vector))
+    closest_bet_index = bet_difference_vector.argmin()
+    closest_bet = bet_sizes_vector[closest_bet_index]
+    if debug:
+        print('closest bet size %.0f' % (closest_bet))
+
+    # Exact match. Otherwise, spread weight linearly between closest values
+    second_closest_bet_index = closest_bet_index
+    if closest_bet == bet_size or closest_bet_index == 0 or closest_bet_index >= len(bet_sizes_vector) - 1 :
+        if debug:
+            print('perfect match (or out of bounds)')
+        # Apply to every other value that matches.
+        for index in range(len(bet_sizes_vector)):
+            if bet_difference_vector[index] == abs(bet_size - closest_bet):
+                bet_sizes_weights[index] = 1.0
+    elif bet_size < closest_bet:
+        second_closest_bet_index = closest_bet_index - 1
+        if debug:
+            print('real bet smaller')
+    else:
+        second_closest_bet_index = closest_bet_index + 1
+        if debug:
+            print('real bet larger')
+
+    second_closest_bet = bet_sizes_vector[second_closest_bet_index]
+    if second_closest_bet_index != closest_bet_index:
+        a = abs(closest_bet - bet_size)
+        b = abs(second_closest_bet - bet_size)
+        closest_bet_weight = max(a,b)/(a+b)
+        second_closest_bet_weight = min(a,b)/(a+b)
+        bet_sizes_weights[closest_bet_index] = closest_bet_weight
+        bet_sizes_weights[second_closest_bet_index] = second_closest_bet_weight
+
+        # Don't forget to spread weight to equal edge buckets... 
+        # TODO: If small difference, would make sense to spread weight further...
+        for index in range(len(bet_sizes_vector)):
+            if bet_difference_vector[index] == (bet_size - closest_bet):
+                bet_sizes_weights[index] = closest_bet_weight
+            elif bet_difference_vector[index] == (bet_size - second_closest_bet):
+                bet_sizes_weights[index] = second_closest_bet_weight
+        
+    # The weights that we will encode... 
+    if debug:
+        print(bet_sizes_weights)
+    
+    # *only if we made a bet*
+    # E. Encode into output: weight to mask, hand_result to output vector
+    # NOTE: To simplify, hand result used as-is. It's problematic projecting a different size bet to win more or less chips, in any case.
+    if action_taken in ALL_BETS_SET:
+        if debug:
+            print('We are betting, so save bet result to 1+ bet size buckets')
+        for index in range(len(bet_sizes_weights)):
+            weight = bet_sizes_weights[index]
+            if weight > 0.0:
+                output_mask_classes[MIN_BET_CATEGORY + index] = weight
+                output_array[MIN_BET_CATEGORY + index] = action_margin_value
+            elif TINY_WEIGHT_UNKNOWN_BET_SIZE:
+                # So that other bet weights don't go out of whack... code in same value for all bets... but at tiny weight
+                # NOTE: We used "regressed" bet value. Moves it toward 0.0. 
+                output_mask_classes[MIN_BET_CATEGORY + index] = TINY_WEIGHT_UNKNOWN_BET_SIZE
+                output_array[MIN_BET_CATEGORY + index] = regressed_margin_value
+
+    #else:
+    #    print('Action taken is not a bet. So move on...')    
+
+    # Stats from Monte Carlo simulation. All stats 0.0 - 1.0
+    # NOTE: Again, some may be missing in older data.
+    allin_vs_oppn = float(data_array[csv_key_map['allin_vs_oppn']])
+    stdev_vs_oppn = float(data_array[csv_key_map['stdev_vs_oppn']]) # Kind of bullshit number. Can't learn confidence independently
+    allin_vs_random = float(data_array[csv_key_map['allin_vs_random']])
+    stdev_vs_random = float(data_array[csv_key_map['stdev_vs_random']]) # More useful, since allin% is absolute. We are learning hand upside... sort of.
+    if debug:
+        print('allin: %.3f (%.3f)\tvs_rando: %.3f (%.3f)' % (allin_vs_oppn, stdev_vs_oppn, allin_vs_random, stdev_vs_random))
+    # Array of odds to make hand categories
+    value_categories = ast.literal_eval(data_array[csv_key_map['allin_categories_vector']])
+    if debug:
+        print(value_categories)
+        print('odds for flush %.3f' % value_categories[high_hand_categories_index[FLUSH]])
+
+    # Match Monte Carlo outputs to output array indices
+    monte_carlo_values = {ALLIN_VS_OPPONENT: allin_vs_oppn, # STDEV_VS_OPPONENT: stdev_vs_oppn,
+                          ALLIN_VS_RANDOM: allin_vs_random, STDEV_VS_RANDOM: stdev_vs_random}
+    assert len(value_categories) == len(HIGH_HAND_CATEGORIES), 'Mismatch in vector for high hand categories %s' % value_categories
+    for cat, val in zip(HIGH_HAND_CATEGORIES, value_categories):
+        # NOTE: category is FLUSH or ONE_PAIR. We want index of this category.
+        monte_carlo_values[HAND_CATEGORIES_OUTPUT_OFFSET + high_hand_categories_index[cat]] = val
+    if debug:
+        print(monte_carlo_values)
+    
+    # Write these Monte Carlo stats directly to output, and to output mask
+    for cat in monte_carlo_values.keys():
+        output_array[cat] = monte_carlo_values[cat]
+        output_mask_classes[cat] = MONTE_CARLO_RESULTS_SCALE
+    
+    #######################################################################
+    ## Encode bets that were made, or which can 100% be implied (we know result if fold anytime, or call on the river)
+    #######################################################################
+    # Start by calculating which actions are allowed, and which are illegal
+    if bets_action:
+        # Encode large negative value for illegal actions. Helps with debug, and action model
+        # TODO: Handle legal/illegal actions in NLH format [no 4-bet cap, but can't bet when allin]
+        illegal_actions = legal_actions_context(num_draws, position, bets_string, reverse = True, format=format)
+        legal_actions = legal_actions_context(num_draws, position, bets_string, reverse = False, format=format)
+    else: 
+        # Don't fill in bets... if we are encoding a draw move.
+        illegal_actions = set([])
+        legal_actions = set([])
+    
+    if debug:
+        print('allowed actions for context: %s' % legal_actions)
+        print('illegal actions for context: %s' % illegal_actions)
+    for action in illegal_actions:
+        output_mask_classes[action] = 1.0
+
+    # Our results... is an empty 32-vector, with only action's value set
     output_array[output_category] = action_margin_value
     output_mask_classes[output_category] = 1.0
 
@@ -945,7 +1168,11 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
     if (FOLD_CATEGORY in legal_actions):
         fold_marginal_value = adjust_float_value(0.0, mode=format)
         output_array[FOLD_CATEGORY] = fold_marginal_value
+        if debug:
+            print('we are allowed to fold. Setting value to %.0f' % fold_marginal_value)
         output_mask_classes[FOLD_CATEGORY] = 1.0
+    #else:
+    #    print('fold is not allowed here!')
 
     # Optionally, encode moves that can be implied.
     # TODO: Encode river call value (value is result of hand). [Need opponent hand...]
@@ -968,7 +1195,10 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                 #print('--> consider counter-factual of call instead of FOLD')
                 call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
                 if call_result == 0.0:
-                    call_result = -1.0 * BIG_BET_SIZE
+                    if format == 'nlh_events':
+                        call_result = -1.0 * bet_faced
+                    else:
+                        call_result = -1.0 * BIG_BET_SIZE
                 #print('we would win %.1f by calling... ' % call_result)
                 call_marginal_value = adjust_float_value(call_result, mode=format)
                 output_array[CALL_CATEGORY] = call_marginal_value
@@ -1000,7 +1230,10 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                 #print('We raised, when could have called')
                 check_call_result = float(data_array[csv_key_map['current_hand_win']]) * pot_size
                 if check_call_result == 0.0:
-                    check_call_result = -1.0 * BIG_BET_SIZE
+                    if format == 'nlh_events':
+                        check_call_result = -1.0 * bet_faced
+                    else:
+                        check_call_result = -1.0 * BIG_BET_SIZE
 
             # Again, skip 0.5 win result, as this may be a data error. 
             #print('we would win %.1f by check/calling... ' % check_call_result)
@@ -1023,9 +1256,9 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         #else:
             #print('no possible counter-factual to action taken |%s|... yet' % action_taken)
 
-        #print(output_mask_classes)
-        #print(output_array)
-            
+    if debug:
+        print(output_mask_classes)
+        print(output_array)
     """
     print(data_array)
     print(output_mask_classes)
@@ -1199,9 +1432,12 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                 # We can also add output "mask" for which of the "output_array" values matter.
                 # As default, for testing, etc, try applying mask for "output_class" == 1
                 # NOTE: For deuce events, we can also encode other know values (call on river,etc), as well as to code in illegal actions.
-                if (format == 'deuce_events' or format == 'holdem_events') and len(output_mask_classes) > 0:
+                if (format == 'deuce_events' or format == 'holdem_events' or format == 'nlh_events') and len(output_mask_classes) > 0:
                     output_mask = output_mask_classes
                     
+                    # Just copy the classes, at least for NLH.
+                    # If we want act to be calculated as a softmax... turn it on via flag. See below.
+                    """
                     # HACK: for deuce game, allow computing loss on [5-9] as "action %" on the give bets
                     # And also 10, 11 as sum of action% and average value...
                     # TODO: Document, or fix this hack.
@@ -1223,12 +1459,13 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                         output_mask[BET_ACTIONS_VALUE_CATEGORY] = 1.0
                         output_mask[BET_ACTIONS_SUM_CATEGORY] = 1.0
                         output_mask[12] = 0.0
+                        """
 
                 else:
                     output_mask = np.zeros(32)
                     output_mask[output_class] = 1.0
                 
-                if (hands % 2500 == 1) and hands != last_hands_print:
+                if (hands % FULL_DEBUG_STEP == 1) and hands != last_hands_print:
                     print('\nLoaded %d hands... (of these %d are important cases)\n' % (hands, important_training_cases))
                     print(line)
                     print('Loaded in canonical form? %s' % CARDS_CANONICAL_FORM)
@@ -1242,7 +1479,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
 
                         # Get all bits for input... excluding padding bits that go to 17x17
                         # Show 8 rows for NLH (need more space to encode bets, and (2x) redundant encode for cards)
-                        if format=='nlh_events':
+                        if format=='nlh_events' and (DOUBLE_ROW_HAND_MATRIX or DOUBLE_ROW_BET_MATRIX):
                             debug_input = hand_input[:,4:12,2:15]
                         else:
                             debug_input = hand_input[:,6:10,2:15]
@@ -1285,7 +1522,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             #sys.exit(-3)
 
     # Show histogram... of counts by 32 categories.
-    if format == 'deuce_events' or format == 'holdem_events':
+    if format == 'deuce_events' or format == 'holdem_events' or format == 'nlh_events':
         for action in ALL_ACTION_CATEGORY_SET:
             DRAW_VALUE_KEYS[action] = eventCategoryName[action]
         for action in DRAW_CATEGORY_SET:
@@ -1508,6 +1745,16 @@ def train(iter_funcs, dataset, batch_size=BATCH_SIZE, epoch_switch_adapt=10000):
                 X_batch = dataset['X_train'][batch_slice] # input bits
                 z_batch = dataset['z_train'][batch_slice] # results
                 m_batch = dataset['m_train'][batch_slice] # m == mask. Which results bits are known (actions taken or can be implied)
+
+                """
+                print(X_batch)
+                print(X_batch.shape)
+                print(z_batch)
+                print(z_batch.shape)
+                print(m_batch)
+                print(m_batch.shape)
+                """
+
                 # Runs a training cycle... by calling function 'train' with input b == batch #
                 # TODO: Actually supply the batch... or better yet, set that as input for the network!
                 batch_train_loss = iter_funcs['train'](X_batch, z_batch, m_batch)
