@@ -23,7 +23,7 @@ Use similar network... to learn triple draw poker!!
 First, need new data import functins.
 """
 
-TRAINING_FORMAT = 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
+TRAINING_FORMAT = 'nlh_events' # 'holdem_events' # 'holdem' # 'deuce_events' # 'deuce' # 'video'
 # fat model == 5x5 bottom layer, and remove a maxpool. Better visualization?
 USE_FAT_MODEL = False # True # False # True
 USE_FULLY_CONNECTED_MODEL = False # True # False
@@ -32,7 +32,9 @@ USE_NOPOOL_MODEL = False # True # False # deeper network, with no maxpools (othe
 DEFAULT_LEAKY_UNITS = True # False # Use leaky ReLU to avoid saturation at 0.0? [default leakiness 0.01]
 
 DATA_FILENAME = None
-if TRAINING_FORMAT == 'deuce_events':
+if TRAINING_FORMAT == 'nlh_events':
+    DATA_FILENAME = '../data/holdem/200k_CNN_nlh_hands.csv' # 'nlh_events' No limit Hold'em (ACPC history)
+elif TRAINING_FORMAT == 'deuce_events':
     DATA_FILENAME = '../data/100k_hands_triple_draw_events.csv' # 'deuce_events' 4M hands, of the latest model (and some human play)
 elif TRAINING_FORMAT == 'holdem_events':
     DATA_FILENAME = '../data/holdem/100k_CNN_holdem_hands.csv' # 'holdem_events' trained on actually CNN hands (at least some poker ability)
@@ -43,8 +45,8 @@ elif TRAINING_FORMAT == 'deuce':
 elif TRAINING_FORMAT == 'video':
     DATA_FILENAME = '../data/250k_full_sim_combined.csv' # 250k hands (exactly) for 32-item sim for video poker (Jacks or better) [from April]
 
-MAX_INPUT_SIZE = 740000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
-VALIDATION_SIZE = 40000
+MAX_INPUT_SIZE = 24000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
+VALIDATION_SIZE = 4000
 TEST_SIZE = 0 # 5000
 NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
@@ -102,7 +104,7 @@ DISABLE_EVENTS_EPOCH_SWITCH = True # False # Is system stable enough, to switch 
 # NOTE: Default mask isn't all 1's... it's best_output == 1, others == 0
 # WARINING: Theano will complain if we pass a mask and don't use it!
 TRAIN_MASKED_OBJECTIVE = True
-if not(TRAINING_FORMAT == 'deuce_events' or TRAINING_FORMAT == 'holdem_events'):
+if not(TRAINING_FORMAT == 'deuce_events' or TRAINING_FORMAT == 'holdem_events' or TRAINING_FORMAT == 'nlh_events'):
     TRAIN_MASKED_OBJECTIVE = False
 
 # Helps speed up inputs?
@@ -1234,7 +1236,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
                          ['9s,Qh', '', '', ''], # average hand preflop
                          ]
                          
-    if TRAINING_FORMAT == 'holdem' or TRAINING_FORMAT == 'holdem_events':
+    if TRAINING_FORMAT == 'holdem' or TRAINING_FORMAT == 'holdem_events' or TRAINING_FORMAT == 'nlh_events':
         test_cases = test_cases_holdem
     else:
         test_cases = test_cases_draw
@@ -1252,7 +1254,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     elif TRAINING_FORMAT == 'deuce_events':
         # TODO:  Add context, if made available...
         test_batch = np.array([cards_input_from_string(hand_string=case[0], include_num_draws=INCLUDE_NUM_DRAWS, num_draws=case[1], include_full_hand = INCLUDE_FULL_HAND, include_hand_context = INCLUDE_HAND_CONTEXT) for case in test_cases], np.int32)
-    elif TRAINING_FORMAT == 'holdem' or TRAINING_FORMAT == 'holdem_events':
+    elif TRAINING_FORMAT == 'holdem' or TRAINING_FORMAT == 'holdem_events' or TRAINING_FORMAT == 'nlh_events':
         test_batch = np.array([holdem_cards_input_from_string(case[0], case[1], case[2], case[3]) for case in test_cases], np.int32)
         
     predict_model(output_layer=output_layer, test_batch=test_batch, format = TRAINING_FORMAT, input_layer = input_layer)

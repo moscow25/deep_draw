@@ -21,6 +21,12 @@ Anything that's a util, not based on Card or Deck class... belongs in poker_util
 ##########################
 # Values for Hold'em games.
 
+# For NLH, hard-wired allin stack (resets per hand)?
+BIG_BET_FULL_STACK = 200 * 100 # 200 'bigs': ACPC rules
+MAX_STACK_SIZE = BIG_BET_FULL_STACK * 1.0
+NLH_BETS_MATRIX_SCALE = 200.0 # Each dot in the scale encoding bet sizes... is XXX amount
+NLH_POT_MATRIX_SCALE = 2 * NLH_BETS_MATRIX_SCALE # Pot > bet so scale at a higher ratio (so still fits)
+
 # "Rounds" in the game, equivalent to 3,2,1 draws left, similar to draw games.
 PREFLOP_ROUND = 1 # PRE_DRAW_BET_ROUND
 FLOP_ROUND = 2 # DRAW_1_BET_ROUND
@@ -36,6 +42,26 @@ HOLDEM_VALUE_KEYS = ['best_value'] + [categoryName[category] for category in HIG
 # For allin simulation... use cache so we don't sim same thing for each bet (same street). 
 # Clear once in a while... in case lots of hands, to save memory, etc.
 POKER_VALUES_CACHE_MAX = 1000
+
+# Cashier for Texas Holdem. Evaluates hands, as well as compares hands.
+class HoldemCashier(PayoutTable):
+    # Compare hands.
+    # TODO: Hand split pots, other % payouts. Should really output [hand_id: % pot]
+    def showdown(self, hands):
+        #print('using HoldemCashier to compare hands')
+        # As a hack... output hand with best (2-7) rank. Ties go to best position...
+        best_rank = 1000000
+        best_hand = None
+        for hand in hands:
+            hand.evaluate()
+            if hand.rank < best_rank:
+                best_hand = hand
+                best_rank = hand.rank
+            elif hand.rank == best_rank:
+                #print('Need to implement ties & splits!')
+                return None
+                #raise NotImplementedError()
+        return best_hand
 
 # Evaluate a 2-card hold'em hand, with 3+ community cards
 # NOTE: Can use 0-2 from dealt_cards and the rest from community.
@@ -95,23 +121,25 @@ class HoldemValuesCache(object):
                                    hand_string(flop), hand_string(turn), hand_string(river))
     
     # Standard dictionary insert
-    def insert(self, our_hand, oppn_hand, flop, turn, river, value, stdev):
+    def insert(self, our_hand, oppn_hand, flop, turn, river, value, stdev, categories = []):
         key = self.key(our_hand, oppn_hand, flop, turn, river)
         # print('~> cache insert key: %s\t val: %s' % (key, [value, stdev]))
-        self.values_map[key] = (value, stdev)
+        self.values_map[key] = (value, stdev, categories)
 
     # Cache lookup: (value, stdev). Returns (None, None) if not found.
     def lookup(self, our_hand, oppn_hand, flop, turn, river):
         key = self.key(our_hand, oppn_hand, flop, turn, river)
-        reverse_key = self.key(oppn_hand, our_hand, flop, turn, river) # -1 * value
+
+        # NOTE: We can not use 'reverse key' if returning category estimates [categories unique per hand]
+        #reverse_key = self.key(oppn_hand, our_hand, flop, turn, river) # -1 * value
 
         if self.values_map and self.values_map.has_key(key):
             return self.values_map[key]
-        elif self.values_map and self.values_map.has_key(reverse_key):
-            (value, stdev) =  self.values_map[reverse_key]
-            return (1.0 - value, stdev)
+        #elif self.values_map and self.values_map.has_key(reverse_key):
+        #    (value, stdev, categories) =  self.values_map[reverse_key]
+        #    return (1.0 - value, stdev)
         else:
-            return (None, None)
+            return (None, None, None)
 
     # Clear the cache... if over the (recommended) max.
     # Only clear between hands, and when too big (in case 20k hands, etc)
