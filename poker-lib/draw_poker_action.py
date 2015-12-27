@@ -21,8 +21,7 @@ from poker_util import *
 # TODO: Record how long it takes, add easy option to turn it off in production.
 # NOTE: For 200x counts... stdev is +-0.02 for some cases. So we can be way off w/r/t predictions... but averages out over many hands.
 # Noise is ok, and even 500x counts... really slows down the play. Even with caching. Maybe on a fast machine... 
-SIMULATE_ALLINS_COUNT = 500 # 200 # 1000 -- accurate, but takes too long. We should cache... since X vs Y lookup (for bet streets)
-
+SIMULATE_ALLINS_COUNT = 200 # 500 # 200 # 1000 -- accurate, but takes too long. We should cache... since X vs Y lookup (for bet streets)
 
 # Heuristics, to evaluate hand actions. On 0-1000 scale, where wheel is 1000 points, and bad hand is 50-100 points.
 # Meant to map to rough % of winning at showdown. Tuned for ring game, so random hand << 500.

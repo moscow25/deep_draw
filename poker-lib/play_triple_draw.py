@@ -42,6 +42,7 @@ parser.add_argument('--human_player', action='store_true', help='pass for p2 = h
 parser.add_argument('-CNN_old_model', '--CNN_old_model', default=None, help='pass for p2 = old model (or second model)') # useful, if we want to test two CNN models against each other.
 parser.add_argument('-CNN_other_old_model', '--CNN_other_old_model', default=None, help='pass for p2 = other old model (or 3rd model)') # and a third model, 
 parser.add_argument('-compare_models', '--compare_models', action='store_true', help="pass for model A vs model B. Needs to input exactly two models") # Useful for A/B testing. Should auto-detect when a model is DNN or CNN. Leave model_2 empty for comp with heuristic. Crashes if 3 models given.
+parser.add_argument('-hand_history', '--hand_history', default=None, help='shortcut to generate CSV from ACPC file (line per hand). NLH only') # Instead of fresh hands, give hand history, and generate CSV
 args = parser.parse_args()
 
 """
@@ -217,6 +218,7 @@ class TripleDrawAIPlayer():
     def __init__(self):
         self.draw_hand = None
         self.name = '' # backward-compatible, not really used any more...
+        self.tag = '' # Useful for outside tagging (re-create ACPC logs, etc)
 
         # TODO: Name, and track, multiple models. 
         # This is the draw model. Also, outputs the heuristic (value) of a hand, given # of draws left.
@@ -249,7 +251,9 @@ class TripleDrawAIPlayer():
         self.opponent = None
 
     def player_tag(self):
-        if self.is_human:
+        if self.tag:
+            return self.tag # set from outside, as for ACPC re-create, etc
+        elif self.is_human:
             return 'man'
         elif self.use_learning_action_model and self.bets_output_layer:
             # Backward-compatibility hack, to allow support for "old" model used for NIPS paper (CNN)
@@ -414,7 +418,9 @@ class TripleDrawAIPlayer():
     # NOTE: It woudl be easy to just give it cards here... but even easier for the AI to track its own hand.
     def update_holdem_hand_value(self, debug = True):
         if not self.holdem_output_layer:
-            assert self.holdem_output_layer, 'Need holdem_output_layer CNN model, if we want to value holdem hands!'
+            #assert self.holdem_output_layer, 'Need holdem_output_layer CNN model, if we want to value holdem hands!'
+            print('Need holdem_output_layer CNN model, if we want to value holdem hands!')
+            return
 
         # Reduce debug, if opponent is human (don't give away our hand)
         if self.opponent and self.opponent.is_human:
@@ -1378,13 +1384,37 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
         # NOTE: heuristic value... is before we got our cards.
         self.num_cards_kept = 5 - len(discards)
 
+# Given a partial hand string, parse cards, and set in the deck provided, at given offset.
+# NOTE: Pass '0' to expected_length if no requirement
+# NOTE: _OFFSET counts in deck counting forward. In real deck, we pop backwards... make sure to reverse deck *once* after setup.
+# TODO: Move this to utils.
+BLIND_HAND_OFFSET = 0
+BUTTON_HAND_OFFSET = 2
+BOARD_HAND_OFFSET = 4
+def set_deck_with_cards_string(deck, card_string, expected_length, deck_offset):
+    # Strip '/' for flop/turn/river split.
+    # TODO: Include characters to strip in params
+    card_array = card_array_from_string(card_string.replace('/', '').strip())
+    if expected_length:
+        assert len(card_array) == expected_length, 'incorrect parsing as expected length %d |%s|' % (expected_length, blind_hand_string)
+    # Set deck cards!
+    for index in range(len(card_array)):
+        card = card_array[index]
+        deck.set_card(card, pos=deck_offset + index)
+
+
 # As simply as possible, simulate a full round of triple draw. Have as much logic as possible, contained in the objects
 # Actors:
 # cashier -- evaluates final hands
 # deck -- dumb deck, shuffled once, asked for next cards
 # dealer -- runs the game. Tracks pot, propts players for actions. Decides when hand ends.
 # players -- acts directly on a poker hand. Makes draw and betting decisions... when propted by the dealer
-def game_round(round, cashier, player_button=None, player_blind=None, csv_writer=None, csv_header_map=None,
+# NOTE: We can also optionally supply players' hands, the board, and bets_string (or some subset of these)
+# NOTE: We do no error checking on validity of player cards given. Will fail later, or if double cards, some will be invalid.
+def game_round(round, cashier, player_button=None, player_blind=None,
+               button_hand_string = None, blind_hand_string = None,
+               board_string = None, bets_string = None,
+               csv_writer=None, csv_header_map=None,
                player_button_average=0.0, player_blind_average=0.0):
     print '\n-- New Round %d --\n' % round
     # Performance suffers... a lot, over time. Can we improve this with garbage collection?
@@ -1398,7 +1428,20 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
         gc.collect()
         print ('--> gc %d took %.1f seconds...\n' % (round, time.time() - now))
 
+    # Shuffle deck *before* any hand setup. 
     deck = PokerDeck(shuffle=True)
+
+    # If we are passed strings for p1_hand, p2_hand, and/or the board...
+    # ...parse those cards. And set them in the correct deck order.
+    if blind_hand_string:
+        set_deck_with_cards_string(deck, blind_hand_string, 2, BLIND_HAND_OFFSET)
+    if button_hand_string:
+        set_deck_with_cards_string(deck, button_hand_string, 2, BUTTON_HAND_OFFSET)
+    if board_string:
+        set_deck_with_cards_string(deck, board_string, 0, BOARD_HAND_OFFSET)
+
+    # NOTE: Cards are popped from the back of the deck... but just set them in the front, then reverse()
+    deck.cards.reverse()
 
     """
     # NOTE: This is the spot to insert a deck setup, if needed for testing
@@ -1414,10 +1457,7 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
     """
 
     dealer = TripleDrawDealer(deck=deck, player_button=player_button, player_blind=player_blind, format=FORMAT)
-    dealer.play_single_hand()
-
-    # TODO: Should output results.
-    # TODO: Also output game history for training data
+    dealer.play_single_hand(bets_string=bets_string) # Pass empty bets string, to allow players to make actual choices
 
     winners = dealer.get_hand_result(cashier)
     final_bets = {player_button.name: player_button.bet_this_hand, player_blind.name: player_blind.bet_this_hand}
@@ -1457,8 +1497,16 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
     # TODO: Flush buffer here?
 
     # How long did it take to calculate & print everything?
+
+    # Game log, in ACPC format.
+    # TODO: If desired bets supplied via "bet_string", did we get the same thing back??
     game_log = encode_bets_string(dealer.hand_history, format=FORMAT)
-    print(game_log)
+    print('game log:\n%s' % game_log) 
+    if bets_string:
+        if bets_string != game_log:
+            print('compare to ACPC bets_string:\n%s' % bets_string)
+            print('\n--> Bets strings do not match! (issue with allins?)\n')
+        # assert game_log == bets_string, 'Bets strings do not match! (issue with allins?)'
     print('%.2fs to write CSV (simulate allin values, etc)' % (time.time() - now))
 
     # If we are tracking results... return results (wins/losses for player by order
@@ -1466,25 +1514,23 @@ def game_round(round, cashier, player_button=None, player_blind=None, csv_writer
     sb_result = dealer.hand_history[1].margin_result
     return (bb_result, sb_result)
 
-# Play a bunch of hands.
-# For now... just rush toward full games, and skip details, or fill in with hacks.
-def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_model_filename=None,
-         bets_model_filename=None, old_bets_model_filename=None, other_old_bets_model_filename=None, human_player=None, compare_models=None):
-    # Compute hand values, or compare hands.
-    if FORMAT == 'holdem' or FORMAT == 'nlh':
-        cashier = HoldemCashier() # Compares by Hold'em (poker high hand) rules
-    else:
-        cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
+# Generate neural net models, for players:
+# return (player_one, player_two)
+def generate_player_models(draw_model_filename=None, holdem_model_filename=None,
+                           bets_model_filename=None, old_bets_model_filename=None, other_old_bets_model_filename=None,
+                           human_player=None, compare_models=None):
+    # We initialize deck, and dealer, every round. But players kept constant, and reset for each trial.
+    # NOTE: This can, and will change, if we do repetative simulation, etc.
+    player_one = TripleDrawAIPlayer()
+    player_two = TripleDrawAIPlayer()
 
-    # TODO: Initialize CSV writer
-    csv_header_map = CreateMapFromCSVKey(TRIPLE_DRAW_EVENT_HEADER)
-    csv_writer=None
-    bufsize = 0 # Write immediately to CSV file. Why? Don't want to lose last hand, etc. Writing to CSV is not dominant operation.
-    if output_file_name:
-        output_file = open(output_file_name, 'a', bufsize) # append to file... 
-        csv_writer = csv.writer(output_file)
-        csv_writer.writerow(TRIPLE_DRAW_EVENT_HEADER)
+    # Optionally, compete against human opponent.
+    if human_player:
+        player_two = TripleDrawHumanPlayer()
 
+    # For easy looking of 'is_human', etc
+    player_one.opponent = player_two
+    player_two.opponent = player_one
 
     # Test the model, by giving it dummy inputs
     # Test cases -- it keeps the two aces. But can it recognize a straight? A flush? Trips? Draw?? Two pair??
@@ -1678,20 +1724,7 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     else:
         print('No *old bets* model provided or loaded. Expect error if model required. %s', other_old_bets_model_filename)
 
-    # We initialize deck, and dealer, every round. But players kept constant, and reset for each trial.
-    # NOTE: This can, and will change, if we do repetative simulation, etc.
-    player_one = TripleDrawAIPlayer()
-    player_two = TripleDrawAIPlayer()
-
-    # Optionally, compete against human opponent.
-    if human_player:
-        player_two = TripleDrawHumanPlayer()
-
-    # For easy looking of 'is_human', etc
-    player_one.opponent = player_two
-    player_two.opponent = player_one
-    
-    # Add model, to players.
+    # Add models, to players.
 
     # Player 1 plays the latest model... or a mixed bag of models, if provided. (unless we do A/B testing, in which case latest model only)
     # TODO: Perform massive cleanup, removing passing input, output layers for everything... just layers[0] and layers[-1] should suffice.
@@ -1769,6 +1802,86 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
         if old_bets_layers and len(old_bets_layers) <= 6:
             player_two.is_dense_model = True
 
+    # Return the two players, initialized with correct models, or mixes of models...
+    return (player_one, player_two)
+
+# ACPC line at a time. Loads everything, from hand randomness, to bets, to player names.
+# 1:b333c/kk/kb333b1167c/b4500f:Jh8h|8d4h/Qc3h2h/5h/2c:1500:-1500:Slumbot|moscow25
+# ...
+# 19:b444c/kb444c/b312f:KsJc|Th7s/Js8c4c/Qc:888:-888:Slumbot|moscow25
+# TODO: Even better, to turn this into a generator... especially for large data files.
+acpc_line_regex = re.compile(r'(?:STATE)?:?(\d+):([^:]*):([^|]*)\|([^|/]*)([^:]*):(-?\d+)[:\|](-?\d+):([^|]*)\|([^|]*)')
+# (num, bets, p1_hand, p2_hand, board, p1_result, p2_results, p1_name, p2_name)
+def load_hand_history(hand_history_filename):
+    line_reader = open(hand_history_filename, 'rU')
+    processed_lines = []
+    for line in line_reader:
+        print(line)
+        hand_result = acpc_line_regex.match(line.strip())
+        chomped_line = hand_result.groups()
+        print(chomped_line)
+
+        # NOTE: If doing a generator, we'd return a tuple here.
+        processed_lines.append(chomped_line)
+    print('read %d lines from data file' % len(processed_lines))
+    return processed_lines
+
+# Just run regexp on the line.
+# (num, bets, p1_hand, p2_hand, board, p1_result, p2_results, p1_name, p2_name)
+def chomp_hand_history_line(line):
+    hand_result = acpc_line_regex.match(line.strip()) #match(line.strip())
+    if not hand_result:
+        print('failure ACPC regexp match: %s' % line.strip())
+        return None
+    chomped_line = hand_result.groups()
+    return chomped_line
+
+# Play a bunch of hands.
+# For now... just rush toward full games, and skip details, or fill in with hacks.
+def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_model_filename=None,
+         bets_model_filename=None, old_bets_model_filename=None, other_old_bets_model_filename=None, 
+         human_player=None, compare_models=None, hand_history_filename=None):
+    # If we're given a path to ACPC history file, open a connection, and we'll process lines one at a time.
+    history_line_reader = None
+    if hand_history_filename:
+        # Will throw error if file path is unreadable...
+        history_line_reader = open(hand_history_filename, 'rU')
+
+    # If we get lines back... create two players, name them, and use randomness going forward.
+    if history_line_reader:
+        # Just setup dummy players. 
+        player_one = TripleDrawAIPlayer()
+        player_two = TripleDrawAIPlayer()
+        player_one.opponent = player_two
+        player_two.opponent = player_one
+
+        # TODO: What other minimum do they need, if we are not loading a model? 
+
+    else:
+        # If we load NN-models, do so in this (overly complicated) function
+        (player_one, player_two) = generate_player_models(draw_model_filename=draw_model_filename, 
+                                                          holdem_model_filename=holdem_model_filename,
+                                                          bets_model_filename=bets_model_filename, 
+                                                          old_bets_model_filename=old_bets_model_filename, 
+                                                          other_old_bets_model_filename=other_old_bets_model_filename, 
+                                                          human_player=human_player, 
+                                                          compare_models=compare_models)
+
+    # Compute hand values, or compare hands.
+    if FORMAT == 'holdem' or FORMAT == 'nlh':
+        cashier = HoldemCashier() # Compares by Hold'em (poker high hand) rules
+    else:
+        cashier = DeuceLowball() # Computes categories for hands, compares hands by 2-7 lowball rules
+
+    # TODO: Initialize CSV writer
+    csv_header_map = CreateMapFromCSVKey(TRIPLE_DRAW_EVENT_HEADER)
+    csv_writer=None
+    bufsize = 0 # Write immediately to CSV file. Why? Don't want to lose last hand, etc. Writing to CSV is not dominant operation.
+    if output_file_name:
+        output_file = open(output_file_name, 'a', bufsize) # append to file... 
+        csv_writer = csv.writer(output_file)
+        csv_writer.writerow(TRIPLE_DRAW_EVENT_HEADER)
+
     # Run a bunch of individual hands.
     # Hack: Player one is always on the button...
     round = 1
@@ -1777,13 +1890,59 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
     player_two_results = []
     sb_results = []
     bb_results = []
+    line = None # Only used if loading lines (randomness and moves) from hand histories.
     try:
         now = time.time()
-        while round < sample_size:
-            # TODO: Implement human player.
-            # Switches button, every other hand. Relevant, if one of the players uses a different moves model.
-            if round % 2:
+        if history_line_reader:
+            line = history_line_reader.readline().strip()
+        while (not history_line_reader and round < sample_size) or line:
+            if line:
+                print('\nloading hand from ACPC line: |%s|' % line)
+                # Ugly hack, in case line fails to parse. Just keep going.
+                chomp_result = chomp_hand_history_line(line)
+                if chomp_result:
+                    (history_num, bets_string, p1_hand_string, p2_hand_string, board_string, p1_result, p2_results, p1_name, p2_name) = chomp_result
+                else:
+                    line = history_line_reader.readline().strip()
+                    continue
+            else:
+                # Pass empty declarations, if bets & randomness not set from hand history
+                bets_string = None
+                p1_hand_string = None
+                p2_hand_string = None
+                board_string = None
+
+            # ACPC log can also get weird, to determine players.
+            # We can assume that two players distinct are present, but can't be sure if they trade buttons 100% accurately.
+            # 3 cases: Tags not set, player_one == p1, player_two == p2
+            if not line:
+                # If no ACPC line... alternate button by rounds
+                if round % 2:
+                    player_one_is_button = True
+                else:
+                    player_one_is_button = False
+            elif line and (not(player_one.tag) or not(player_two.tag)):
+                print('New match. Assigning player_one and player_two randomly')
+                player_one_is_button = True
+                player_one.tag = p2_name
+                player_two.tag = p1_name
+                print('Player one starts with the button: %s' % player_one.tag)
+            elif line and player_one.tag and player_one.tag == p2_name and player_two.tag and player_two.tag == p1_name:
+                print('Player_one is button: %s' % player_one.tag)
+                player_one_is_button = True
+            elif line and player_one.tag and player_one.tag == p1_name and player_two.tag and player_two.tag == p2_name:
+                print('Player_two is button: %s' % player_two.tag)
+                player_one_is_button = False
+            elif line and player_one.tag:
+                assert player_one.tag == p1_name or player_one.tag == p2_name, 'Unknown tag |%s| for reading ACPC logs.' % player_one.tag
+            else:
+                assert False, 'Unknown situation, with players, name and buttons.'
+
+            # Switches button, every other hand. Keeps same model, or definition if a human player.
+            if player_one_is_button:
                 (bb_result, sb_result) = game_round(round, cashier, player_button=player_one, player_blind=player_two, 
+                                                    button_hand_string = p2_hand_string, blind_hand_string = p1_hand_string,
+                                                    board_string = board_string, bets_string = bets_string,
                                                     csv_writer=csv_writer, csv_header_map=csv_header_map,
                                                     player_button_average = np.mean(player_one_results),
                                                     player_blind_average = np.mean(player_two_results))
@@ -1791,6 +1950,8 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
                 player_two_result = bb_result
             else:
                 (bb_result, sb_result) = game_round(round, cashier, player_button=player_two, player_blind=player_one, 
+                                                    button_hand_string = p2_hand_string, blind_hand_string = p1_hand_string,
+                                                    board_string = board_string, bets_string = bets_string,
                                                     csv_writer=csv_writer, csv_header_map=csv_header_map,
                                                     player_button_average = np.mean(player_two_results),
                                                     player_blind_average = np.mean(player_one_results))
@@ -1802,6 +1963,9 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
             sb_results.append(sb_result)
             bb_results.append(bb_result)
 
+            # If we loaded ACPC line, check for correctness
+            if line:
+                print('ACPC line: |%s|' % line)
             print ('hand %d took %.1f seconds...\n' % (round, time.time() - now))
 
             print('BB results mean %.2f stdev %.2f: %s (%s)' % (np.mean(bb_results), np.std(bb_results), bb_results[-10:], len(bb_results)))
@@ -1813,7 +1977,10 @@ def play(sample_size, output_file_name=None, draw_model_filename=None, holdem_mo
                                                      np.mean(player_two_results), np.std(player_two_results),
                                                      player_two_results[-10:], len(player_two_results)))
 
+            # Update counter, and read next line if external randomness
             round += 1
+            if history_line_reader:
+                line = history_line_reader.readline().strip()
 
             #sys.exit(-3)
 
@@ -1851,6 +2018,9 @@ if __name__ == '__main__':
     if args.compare_models:
         compare_models = True
 
+    # Alternatively, load ACPC histories (NLH only) 
+    hand_history_filename = args.hand_history
+
     # TODO: Take num samples from command line.
     play(sample_size=samples, output_file_name=output_file_name,
          draw_model_filename=draw_model_filename, 
@@ -1859,4 +2029,5 @@ if __name__ == '__main__':
          old_bets_model_filename=old_bets_model_filename, 
          other_old_bets_model_filename=other_old_bets_model_filename, 
          human_player=human_player,
-         compare_models=compare_models)
+         compare_models=compare_models,
+         hand_history_filename=hand_history_filename)

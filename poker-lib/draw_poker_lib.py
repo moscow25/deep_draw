@@ -131,14 +131,38 @@ class TripleDrawDealer():
         #print('Passed control, to player %s' % self.action_on.name)
             
     # Complete a heads-up betting cycle, in a big-bet game (presumably NLH)
-    def play_big_betting_round(self, round):
+    # NOTE: Optionally, supplied bet string. In which case, we need to take the next action in the string, or throw error if impossible.
+    def play_big_betting_round(self, round, bet_string=None, debug=False):
         # Check for conditions that must be met, to continue.
         if not(self.player_blind.live and self.player_button.live):
             print('Exiting betting round %d. Since one of the players is not live (folded)' % round)
             return
 
         # Debug/check if we are playing the right game.
-        print('\nplay_big_betting_round %d for game type %s' % (round, self.format))
+        print('\nplay_big_betting_round %d for game type %s, bet_string |%s|' % (round, self.format, bet_string))
+
+        # If supplied a bet_string, decode next action, and collect remainder (for possible recursive call)
+        if bet_string:
+            if debug:
+                print('processing bet_string for round: |%s|' % bet_string)
+            # Parse the string as bet, call, check, or fold
+            bet = re.match('\S[0-9]*', bet_string)
+            bet_type = bet.group(0)[0]
+            bet_amount = bet.group(0)[1:]
+            if not bet_amount:
+                bet_amount = 0
+            else:
+                bet_amount = int(bet_amount)
+
+            if debug:
+                print('bet of type |%s| and size |%s|' % (bet_type, bet_amount))
+            
+            # Chop bet_string remainder
+            bet_string_remainder = bet_string[bet.span()[1]:]
+            if debug:
+                print('bet_string remainder: |%s|' % bet_string_remainder)
+        else:
+            bet_string_remainder = None
 
         # Determine, if we are facing a raise, can call, etc. 
         bet_on_action = self.action_on.bet_this_street
@@ -190,18 +214,18 @@ class TripleDrawDealer():
                 # TODO: How to handle already allin? Treat is as check-down, or special move? I guess check.
                 allowed_actions.add(CHECK_HAND)
                 if bet_on_action == 0 and allin_bet > 0:
-                    allowed_actions.add(BET_SMALL_STREET if is_small_street else BET_BIG_STREET)
+                    allowed_actions.add(BET_NO_LIMIT) # BET_SMALL_STREET if is_small_street else BET_BIG_STREET)
                 elif bet_on_action > 0 and allin_bet > 0:
                     # If already put money in, always a raise... BB for example.
-                    allowed_actions.add(RAISE_SMALL_STREET if is_small_street else RAISE_BIG_STREET)
+                    allowed_actions.add(RAISE_NO_LIMIT) # RAISE_SMALL_STREET if is_small_street else RAISE_BIG_STREET)
         else:
             # If we're facing a bet, always option to call or fold.
             allowed_actions.add(FOLD_HAND)
-            allowed_actions.add(CALL_SMALL_STREET if is_small_street else CALL_BIG_STREET)
+            allowed_actions.add(CALL_NO_LIMIT) # CALL_SMALL_STREET if is_small_street else CALL_BIG_STREET)
 
             # If opponent's bet hasn't topped the (limit) max.... we can also raise.
             if min_raise > facing_bet:
-                allowed_actions.add(RAISE_SMALL_STREET if is_small_street else RAISE_BIG_STREET)
+                allowed_actions.add(RAISE_NO_LIMIT) # RAISE_SMALL_STREET if is_small_street else RAISE_BIG_STREET)
 
         # Exit quickly... if there are no actions (thus street is capped out)
         if not allowed_actions:
@@ -223,17 +247,53 @@ class TripleDrawDealer():
         print('bets this street -> %s' % bets_sequence)
         
         # Here the agent... would choose a good action.
-        best_action, bet_amount = self.action_on.choose_action(actions=allowed_actions, 
-                                                               round=round, 
-                                                               bets_this_round = max(bet_on_action, bet_off_action) / (2.0 * min_bet_this_street),
-                                                               bets_sequence=bets_sequence,
-                                                               chip_stack = allin_bet,
-                                                               has_button = (self.action_on == self.player_button),
-                                                               pot_size=self.pot_size, 
-                                                               actions_this_round=self.hand_history_this_round,
-                                                               actions_whole_hand=self.hand_history,
-                                                               cards_kept=self.action_on.num_cards_kept, 
-                                                               opponent_cards_kept=self.action_off.num_cards_kept)
+        # ...unless we have declared a desired "bet_string" from which we already know desired bet_size and action
+        if bet_string:
+            # Ensure that action is legal, and map it to "best_action"
+            assert bet_type, 'Unknown/unparsable next bet_type, for bet_string |%s|' % bet_string
+            if bet_type == 'c':
+                # Backward compatible. 'c' can mean check or call
+                if CALL_NO_LIMIT in allowed_actions:
+                    best_action = CALL_NO_LIMIT
+                elif CHECK_HAND in allowed_actions:
+                    best_action = CHECK_HAND 
+                else:
+                    assert False, 'impossible situation with bet action. bet_string |%s|' % bet_string
+            elif bet_type == 'k':
+                best_action = CHECK_HAND
+            elif bet_type == 'f':
+                best_action = FOLD_HAND
+            elif bet_type == 'b' or bet_type == 'r':
+                if BET_NO_LIMIT in allowed_actions:
+                    best_action = BET_NO_LIMIT
+                elif RAISE_NO_LIMIT in allowed_actions:
+                    best_action = RAISE_NO_LIMIT
+                else:
+                    assert False, 'impossible situation with bet action. bet_string |%s|' % bet_string
+            else:
+                assert False, 'impossible situation with bet action. bet_string |%s|' % bet_string
+
+            # If a bet/raise, bet_amount is a little tricky.
+            # Our agents decide *marginal bet size*, while ACPC gives total this street
+            if best_action in ALL_BETS_SET:
+                # Another backward compatibility issue. pre-2014 ACPC makes bets... in full stack sick. So weird.
+                # STATE:28:r250c/cr500r1250c/r5000c/cr20000f:Ac5d|5hKs/5s5cQh/8h/Kh:-5000|5000:tartanian6|slumbot
+                if USE_2013_ACPC_BETS_FORMAT:
+                    bet_amount = bet_amount - self.action_on.bet_this_hand
+                else:
+                    bet_amount = bet_amount - bet_on_action
+        else:
+            best_action, bet_amount = self.action_on.choose_action(actions=allowed_actions, 
+                                                                   round=round, 
+                                                                   bets_this_round = max(bet_on_action, bet_off_action) / (2.0 * min_bet_this_street),
+                                                                   bets_sequence=bets_sequence,
+                                                                   chip_stack = allin_bet,
+                                                                   has_button = (self.action_on == self.player_button),
+                                                                   pot_size=self.pot_size, 
+                                                                   actions_this_round=self.hand_history_this_round,
+                                                                   actions_whole_hand=self.hand_history,
+                                                                   cards_kept=self.action_on.num_cards_kept, 
+                                                                   opponent_cards_kept=self.action_off.num_cards_kept)
         # What is the best action?
         # If action returned, complete the action... and keep going
         if (best_action):
@@ -302,20 +362,19 @@ class TripleDrawDealer():
                                num_draw_vector = self.action_on.num_draw_vector)
 
             self.process_action(action, pass_control = True)
+
+            # TODO: in 'bet_string' situation... check that we keep_betting and don't keep_betting as string requires.
+            # NOTE: Special case for allin! Handled with check-down or hand just ends??
             if keep_betting:
                 #print('chosen action, allows further betting.')
-                self.play_betting_round(round)
-
-
-        # sys.exit(-5)
-
+                self.play_betting_round(round, bet_string=bet_string_remainder)
 
     # Play full betting round on a loop... until action ends.
-    def play_betting_round(self, round):
+    def play_betting_round(self, round, bet_string = None):
         # Split out for big-bet game... since logic is different! [Even if we call same decision-makers for now!]
         # NOTE: Why not merge with if/thens? Because logic for limit works, so let's not mess it up. 
         if self.format == 'nlh':
-            self.play_big_betting_round(round)
+            self.play_big_betting_round(round, bet_string=bet_string)
 
             # Once play_big_betting_round works... just return control.
             return
@@ -460,12 +519,20 @@ class TripleDrawDealer():
     # Assumes that everything has been initialized, or reset as needed.
     # Through constants, hard-coded to 50-100 blinds. And 100-200 betting. 
     # NOTE: We've expanded it to include flop games. split up later... but good to share common infrastructure.
-    def play_single_hand(self):
+    # NOTE: We can also supply "bets_string" to declare player bets (re-create from logs). NLH only!
+    def play_single_hand(self, bets_string = None):
         # If community card game, create blank community object first.
         if self.format == 'holdem' or self.format == 'nlh':
             self.community = HoldemCommunityHand()
         else:
             self.community = None
+
+        # If supplied bets string, chop into bets by street.
+        street_bets_array = [None, None, None, None] # default == no bets supplied
+        if bets_string:
+            assert self.format == 'nlh', 'bets_string for play_single_hand supported for NLH games only!'
+            street_bets_array = bets_string.split('/')
+            print('bets_string (%d rounds) supplied: %s' % (len(street_bets_array), street_bets_array))
 
         # Deal initial hands to players
         # NOTE: Nice thing with hold'em hands... w're done with player hands, except to update shared community cards.
@@ -540,7 +607,7 @@ class TripleDrawDealer():
         # Will go back & forth between players betting, until
         # A. Player calls (instead of raise or fold)
         # B. Player folds (thus concedes the hand)
-        self.play_betting_round(round = PRE_DRAW_BET_ROUND)
+        self.play_betting_round(round = PRE_DRAW_BET_ROUND, bet_string = (street_bets_array[0] if len(street_bets_array) > 0 else None))
 
         # print(self.hand_history)
 
@@ -632,7 +699,7 @@ class TripleDrawDealer():
         self.player_blind.update_hand_value(num_draws=2)                                                           
         self.player_button.update_hand_value(num_draws=2)
 
-        self.play_betting_round(round = DRAW_1_BET_ROUND)
+        self.play_betting_round(round = DRAW_1_BET_ROUND, bet_string = (street_bets_array[1] if len(street_bets_array) > 1 else None))
         
         # print(self.hand_history)
 
@@ -726,7 +793,7 @@ class TripleDrawDealer():
         self.player_blind.update_hand_value(num_draws=1)                                                           
         self.player_button.update_hand_value(num_draws=1)
 
-        self.play_betting_round(round = DRAW_2_BET_ROUND)
+        self.play_betting_round(round = DRAW_2_BET_ROUND, bet_string = (street_bets_array[2] if len(street_bets_array) > 2 else None))
         
         # print(self.hand_history)
 
@@ -811,7 +878,7 @@ class TripleDrawDealer():
         self.player_blind.update_hand_value(num_draws=0)                                                           
         self.player_button.update_hand_value(num_draws=0)
 
-        self.play_betting_round(round = DRAW_3_BET_ROUND)
+        self.play_betting_round(round = DRAW_3_BET_ROUND, bet_string = (street_bets_array[3] if len(street_bets_array) > 3 else None))
         
         # print(self.hand_history)
 

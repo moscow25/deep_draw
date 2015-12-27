@@ -21,6 +21,16 @@ Anything that's a util, not based on Card or Deck class... belongs in poker_util
 ##########################
 # Values for Hold'em games.
 
+# Specific to encoding.
+# "new" format used by Slumbot, etc:
+# 28:b250b999b3000c/kb1500f:AcQd|As8h/Ks7s6c:-3000:3000:moscow25|Slumbot
+# "old" format exists in 2013 ACPC logs, etc.
+# 73:r200c/cc/cc/r300c:7dKd|QcJc/7c4s7s/Ac/Qd:300|-300:slumbot|tartanian6
+# Main differences:
+# 'c' for check and call. No 'k'
+# "new" format uses per-street bet size. "old" format full bet made by player. Looks weird (but easier to detect allin)
+USE_2013_ACPC_BETS_FORMAT = True
+
 # For NLH, hard-wired allin stack (resets per hand)?
 BIG_BET_FULL_STACK = 200 * 100 # 200 'bigs': ACPC rules
 MAX_STACK_SIZE = BIG_BET_FULL_STACK * 1.0
