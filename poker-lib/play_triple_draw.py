@@ -36,10 +36,13 @@ print('parsing command line args %s' % sys.argv)
 parser = argparse.ArgumentParser(description='Play heads-up triple draw against a convolutional network. Or see two networks battle it out.')
 parser.add_argument('-draw_model', '--draw_model', default=None, help='neural net model for draws, or simulate betting if no bet model') # draws, from 32-length array
 parser.add_argument('-holdem_model', '--holdem_model', default=None, help='neural net model for Holdem hands, with first value 0-1.0 value vs random hand, other values the odds of making specific hand types. Baseline value for any valid hand and flop, turn or river')
-parser.add_argument('-CNN_model', '--CNN_model', default=None, help='neural net model for betting') # Optional CNN model. If not supplied, uses draw model to "sim" decent play
 parser.add_argument('-output', '--output', help='output CSV') # CSV output file, in append mode.
+
+parser.add_argument('-CNN_model', '--CNN_model', default=None, help='neural net model for betting') # Optional CNN model. If not supplied, uses draw model to "sim" decent play
+parser.add_argument('-CNN_model_tag', '--CNN_model_tag', default=None, help='name for CNN_model (compare_models format)') 
 parser.add_argument('--human_player', action='store_true', help='pass for p2 = human player') # Declare if we want a human competitor? (as player_2)
 parser.add_argument('-CNN_old_model', '--CNN_old_model', default=None, help='pass for p2 = old model (or second model)') # useful, if we want to test two CNN models against each other.
+parser.add_argument('-CNN_old_model_tag', '--CNN_old_model_tag', default=None, help='name for CNN_old_model (compare_models format)') 
 parser.add_argument('-CNN_other_old_model', '--CNN_other_old_model', default=None, help='pass for p2 = other old model (or 3rd model)') # and a third model, 
 parser.add_argument('-compare_models', '--compare_models', action='store_true', help="pass for model A vs model B. Needs to input exactly two models") # Useful for A/B testing. Should auto-detect when a model is DNN or CNN. Leave model_2 empty for comp with heuristic. Crashes if 3 models given.
 parser.add_argument('-hand_history', '--hand_history', default=None, help='shortcut to generate CSV from ACPC file (line per hand). NLH only') # Instead of fresh hands, give hand history, and generate CSV
@@ -1887,6 +1890,10 @@ def generate_player_models(draw_model_filename=None, holdem_model_filename=None,
     if compare_models:
         print('In compare_models mode, player_one uses the bets output layer only.')
         assert not human_player, 'Can not have both compare_models and human player.'
+        # If given a tag via args, use it for player_one.
+        if args.CNN_model_tag:
+            player_one.tag = args.CNN_model_tag
+
     elif USE_MIXED_MODEL_WHEN_AVAILABLE and (old_bets_output_layer or other_old_bets_output_layer):
         player_one.bets_output_array = []
         player_one.bets_output_array.append([bets_output_layer, bets_input_layer]) # lastest model
@@ -1906,6 +1913,10 @@ def generate_player_models(draw_model_filename=None, holdem_model_filename=None,
     if not compare_models:
         player_two.bets_output_layer = bets_output_layer
         player_two.bets_input_layer = bets_input_layer
+    else:
+        # If given a tag via args, use it for player_one.
+        if args.CNN_old_model_tag:
+            player_two.tag = args.CNN_old_model_tag
     # enable, to make betting decisions with learned model (instead of heurstics)
     player_two.use_learning_action_model = True
 
