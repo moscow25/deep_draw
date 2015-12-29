@@ -181,7 +181,7 @@ class TripleDrawDealer():
         is_small_street = True
         if round >= DRAW_2_BET_ROUND:
             #print('since round: %d >= %d, this is big-bet street' % (round, DRAW_2_BET_ROUND))
-            min_bet_this_street = BIG_BET_SIZE
+            min_bet_this_street = SMALL_BET_SIZE # BIG_BET_SIZE # Can bet 100 into dry pot in NLH
             is_small_street = False
 
         # D. max bet (size of allin)
@@ -301,6 +301,24 @@ class TripleDrawDealer():
             # Create the action
             # We keep betting after this action... as long last action allows it.
             keep_betting = True
+
+            # In case we get illegal "bet_amount", just cap it with bounds.
+            if best_action in ALL_BETS_SET and (bet_amount <= min_bet_this_street or bet_amount > allin_bet):
+                if bet_amount <= min_bet_this_street:
+                    print('WARNING: resetting illegal bet |%s| to |%s|' % (bet_amount, max(min_raise, min_bet_this_street)))
+                    bet_amount = max(min_raise, min_bet_this_street)
+                    
+                    if best_action in ALL_RAISES_SET:
+                        bet_amount = max(bet_amount, min_bet_this_street * 2)
+
+                    # As a hack, tweak the bet amount semi-randomly.
+                    # TODO: Remove before production!!
+                    #bet_amount *= 3.0 * np.random.random_sample() + 1.0
+                    
+                if bet_amount > allin_bet:
+                    print('WARNING: resetting illegal bet |%s| to |%s|' % (bet_amount, allin_bet))
+                    bet_amount = allin_bet
+            bet_amount = math.floor(bet_amount)
 
             # For ACPC compatibility... we need to encode 3-bet as b100b300b1200 [totals this street]
             # Thus, sum amount we already bet, with this current bet size... 
