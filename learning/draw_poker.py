@@ -1019,12 +1019,16 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                        BET_FACED: adjust_float_value(bet_faced - BIG_BET_FULL_STACK, mode=format),
                        STACK_SIZE: adjust_float_value(stack_size - BIG_BET_FULL_STACK, mode=format),
                        BET_THIS_STREET_ALREADY: adjust_float_value(bet_this_street_already - BIG_BET_FULL_STACK, mode=format),
+                       AGGRESSION_PERCENT: 1.0 if action_taken in ALL_BETS_SET else 0.0, # How often does a good player bet here?
                        }
     if debug:
         print('pot: %.0f\tfaced: %.0f\tstax: %.0f\talready: %.0f' % (pot_size, bet_faced, stack_size, bet_this_street_already))
     for cat in bet_size_values.keys():
         output_array[cat] = bet_size_values[cat]
-        output_mask_classes[cat] = MONTE_CARLO_RESULTS_SCALE
+        if cat == AGGRESSION_PERCENT:
+            output_mask_classes[cat] = AGGRESSION_PERCENT_RESULTS_SCALE
+        else:
+            output_mask_classes[cat] = MONTE_CARLO_RESULTS_SCALE
 
     # We also want to encode bet-value buckets. Essentially, this means having outputs for
     # [0.25, 0.5, 1.0, 2.0] X pot (or whatever categories). We ask network to predict:
@@ -1127,7 +1131,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
 
     # Match Monte Carlo outputs to output array indices
     monte_carlo_values = {ALLIN_VS_OPPONENT: allin_vs_oppn, # STDEV_VS_OPPONENT: stdev_vs_oppn,
-                          ALLIN_VS_RANDOM: allin_vs_random, STDEV_VS_RANDOM: stdev_vs_random}
+                          ALLIN_VS_RANDOM: allin_vs_random,} #STDEV_VS_RANDOM: stdev_vs_random}
     assert len(value_categories) == len(HIGH_HAND_CATEGORIES), 'Mismatch in vector for high hand categories %s' % value_categories
     for cat, val in zip(HIGH_HAND_CATEGORIES, value_categories):
         # NOTE: category is FLUSH or ONE_PAIR. We want index of this category.
