@@ -113,10 +113,10 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 1.0 # 0.2 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 IMPORTANT_CASES_SAMPLE_RATE = min(3.0 * SAMPLE_RATE_DEUCE_EVENTS, 1.0)
 
-# Are the some cases that are important, and should always be selected?
+# For DEUCE hands: are the some cases that are important, and should always be selected?
 LOW_STRAIGHTS_ARE_IMPORTANT = True
 PAT_DRAWS_ARE_IMPORTANT = True
 
@@ -1421,7 +1421,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                         #    print(line)
                         #    print('Skipping item with %s hold value!\n' % hold_value)
                         continue
-                elif format == 'deuce_events' or format == 'holdem_events':
+                elif format == 'deuce_events' or format == 'holdem_events' or format == 'nlh_events':
                     # For 'deuce_events', randomly down-sample from full set of events. 
                     # NOTE: We do this, to cover more hands, and to not over-train on specific hand situation.
                     # TODO: Control this by flag, or pre-compute data before choosing sample policy
@@ -1429,7 +1429,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     sample_rate = SAMPLE_RATE_DEUCE_EVENTS
                     important_cases_sample_rate = max(sample_rate, IMPORTANT_CASES_SAMPLE_RATE)
                     if not important_training_case and random.random() > sample_rate:
-                        #print('\nskipping form sample %s\n' % sample_rate)
+                        #print('\nskipping from sample %s\n' % sample_rate)
                         continue
                     elif important_training_case and random.random() <= important_cases_sample_rate:
                         important_training_cases += 1
