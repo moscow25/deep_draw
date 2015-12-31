@@ -215,7 +215,7 @@ ALLIN_VS_RANDOM = 19
 # Aggressive% = (ber/raise%) / (check/call/fold%)
 # The case we care about: good hand (or not): hand_val(bet) close to hand_val(check). When to explore a bet more?
 AGGRESSION_PERCENT = 20
-AGGRESSION_PERCENT_RESULTS_SCALE = 0.1 # Really volatile number, so reduce its relevence in the model (or just track seprately)
+AGGRESSION_PERCENT_RESULTS_SCALE = 0.2 # 0.1 # Really volatile number, so reduce its relevence in the model (or just track seprately)
 ## STDEV_VS_RANDOM = 20
 # Also, output all (11) High-hand categories, from this offset.
 # So flush value would be stored at (offset + high_hand_categories_index[FLUSH]). Too much... but ok since categories order fixed.

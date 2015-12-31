@@ -113,7 +113,7 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.5 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 IMPORTANT_CASES_SAMPLE_RATE = min(3.0 * SAMPLE_RATE_DEUCE_EVENTS, 1.0)
 
 # For DEUCE hands: are the some cases that are important, and should always be selected?
@@ -121,12 +121,18 @@ LOW_STRAIGHTS_ARE_IMPORTANT = True
 PAT_DRAWS_ARE_IMPORTANT = True
 
 # Betting decisions. Train on these... but don't over-train. Be careful.
-RIVER_CALLS_ARE_IMPORTANT = False
+RIVER_CALLS_ARE_IMPORTANT = True
 RIVER_RAISES_ARE_IMPORTANT = True # False [river raises are greats, since we also get the 'call' counter-factuals]
 
 # For HE, boost other cases also
 HOLDEM_TWO_PAIR_ARE_IMPORTANT = True # 'big hands,' whether that be big board w/o private cards, or hand that helps
 HOLDEM_RIVER_PLAY_BOARD_ARE_IMPORTANT = True # same category as the "board" cards (could be Ace-high though)
+
+# For NLH, boost cases based on betting
+NLH_BIG_BETS_ARE_IMPORTANT = True # Big bet being made, or big bet being considered called
+BIG_BET_FOR_IMPORTANT_CASE = MAX_STACK_SIZE / 10 # in raw chips. What would be a big bet? 
+NLH_BIG_POTS_ARE_IMPORTANT = True # Pot above a threshold... we care about every subsequent move
+BIG_POT_FOR_IMPORTANT_CASE = (2.0 * MAX_STACK_SIZE) / 10 # in raw chips. How big does the pot have to be to be important?
 
 # Use this to train only on results of intelligent players, if different versions available
 # Question: Do we include "DNN_2_per" hands? DNN is a good aggro opponent, but we don't necessarily want to learn its actions. 
@@ -1009,6 +1015,13 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
     bet_this_street_already = bet_this_street - bet_size # How much did we already commit to this pot, on this street
     # TODO: Compute min raise from stats above. [In terms of fresh chips to wager]
     min_bet = min(max(bet_faced, SMALL_BET_SIZE), stack_size)
+
+    # Consider the hand an "important case" for training, if large bet made or being faced.
+    if format=='nlh_events' and NLH_BIG_BETS_ARE_IMPORTANT and max(bet_faced, bet_this_street) >= BIG_BET_FOR_IMPORTANT_CASE:
+        important_training_case = True
+    # And similarly for big pots.
+    if format=='nlh_events' and NLH_BIG_POTS_ARE_IMPORTANT and pot_size >= BIG_POT_FOR_IMPORTANT_CASE:
+        important_training_case = True
 
     # Encode a few bet sizes for output: pot_size, stack_size (before current bet), bet_faced, bet_this_street_already (not including this bet)
     # Why these values? We want stats that can be computed directly from hand history. Make sure this info is getting through (autoencoder)
