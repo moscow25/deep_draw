@@ -91,7 +91,7 @@ def hand_rank_community_cards(dealt_cards, community_cards):
 
     # For now, can support only 5-7 cards in hand
     if len(all_cards) < 5 or len(all_cards) > 7:
-        print('Illegal number of cards for evaluation! %s' % hand_string(all_cards))
+        #print('Illegal number of cards for evaluation! %s' % hand_string(all_cards))
         return
     elif len(all_cards) == 5:
         return hand_rank_five_card(all_cards)
@@ -268,8 +268,8 @@ class HoldemHand(object):
 
     # Look up with hash tables. Can only evaluate if community cards present
     def evaluate(self):
-        if not self.community:
-            print('Can not evaluate Holdem hand without community cards!')
+        if not self.community or (self.community and (not self.community.flop)):
+            # print('Can not evaluate Holdem hand without community cards!')
             return
 
         self.rank = hand_rank_community_cards(self.dealt_cards, self.community.cards())
