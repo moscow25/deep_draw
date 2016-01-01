@@ -602,7 +602,8 @@ class PokerAction:
             output_map['bet_val_vector'] = self.bet_val_vector
             output_map['act_val_vector'] = self.act_val_vector
             # Don't save draws vector... for a non-draw game!
-            if self.format == 'deuce':
+            # HACK: NLH uses it too, for something else
+            if self.format == 'deuce' or self.format == 'nlh':
                 output_map['num_draw_vector'] = self.num_draw_vector
 
         # If we choose to compute these, allin values vs current opponent, and vs random player.
