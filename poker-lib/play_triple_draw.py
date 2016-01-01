@@ -1062,8 +1062,19 @@ class TripleDrawAIPlayer():
 
             # Save for debug
             self.bet_val_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[:5]]]
-            self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/max(np.sum([val for val in bets_vector[5:10]]), 0.01) for val in bets_vector[5:10]]]
-            self.num_draw_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]]
+            if FORMAT == 'nlh':
+                # Values for bet sizes
+                self.act_val_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[5:13]]] 
+                # Chips bet, odds, etc
+                self.num_draw_vector = [int(x * 100000) / 100000.0 for x in [val for val in bets_vector[13:21]]]
+            else:
+                # Limit games, save act%
+                self.act_val_vector = [int(x * 100000) / 100000.0 for x in [val/max(np.sum([val for val in bets_vector[5:10]]), 0.01) for val in bets_vector[5:10]]]
+                # Save draw hand... for non-holdem limit
+                if FORMAT == 'holdem':
+                    self.num_draw_vector = []
+                else:
+                    self.num_draw_vector = [int(x * 100000) / 100000.0 for x in [(val - 2.0) for val in bets_vector[KEEP_0_CARDS:(KEEP_5_CARDS+1)]]]
 
             # Now we have a choice.
             # A. Add noise to action values, and take action with highest post-noise value. This is a good option. Directly from RL
@@ -1382,9 +1393,51 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
         TripleDrawAIPlayer.__init__(self)
         self.is_human = True
 
-    def choose_action(self, actions, round, bets_this_round = 0, 
+    #def choose_action(self, actions, round, bets_this_round = 0, 
+    #                  has_button = True, pot_size=0, actions_this_round=[], actions_whole_hand=[],
+    #                  cards_kept=0, opponent_cards_kept=0, ):
+    def choose_action(self, actions, round, bets_this_round = 0, bets_sequence = [], chip_stack = 0,
                       has_button = True, pot_size=0, actions_this_round=[], actions_whole_hand=[],
-                      cards_kept=0, opponent_cards_kept=0, ):
+                      cards_kept=0, opponent_cards_kept=0, 
+                      debug = True, retry = False):
+        # Write up bets made so far, to (optionally) show the player
+        bets_string = ''
+        # print('actions_this_round: |%s|' % actions_this_round)
+        if FORMAT == 'nlh':
+            bets_string = encode_big_bets_string(actions_this_round)
+        elif actions_this_round and isinstance(actions_this_round, basestring):
+            print('detected actions_this_round is string: %s' % actions_this_round)
+            for action in actions_this_round:
+                if action == 'r':
+                    bets_string += '1'
+                elif action == 'c':
+                    bets_string += '0'
+                else:
+                    # Don't encode non-bets
+                    continue
+            print(bets_string)
+        else:
+            bets_string = encode_limit_bets_string(actions_this_round)
+
+        # And for all bets made this hand
+        all_rounds_bets_string = ''
+        # print('actions_whole_hand %s' % actions_whole_hand)
+        if FORMAT == 'nlh':
+            all_rounds_bets_string = encode_big_bets_string(actions_whole_hand)
+        elif actions_whole_hand and isinstance(actions_whole_hand, basestring):
+            print('detected actions_whole_hand is string: %s' % actions_whole_hand)
+            for action in actions_whole_hand:
+                if action == 'r':
+                    all_rounds_bets_string += '1'
+                elif action == 'c':
+                    all_rounds_bets_string += '0'
+                else:
+                    # Don't encode non-bets
+                    continue
+            print(all_rounds_bets_string)
+        else:
+            all_rounds_bets_string = encode_limit_bets_string(actions_whole_hand)
+
         print('Choosing among actions %s for round %s' % ([actionName[action] for action in actions], round))
         if SHOW_HUMAN_DEBUG and not (FORMAT == 'holdem' or FORMAT == 'nlh'):
             # First show the context for this hand.
@@ -1436,15 +1489,18 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
             
             # show basic debug for human hand...
             print('context %s' % ([hand_string(self.cards), hand_string(self.flop), hand_string(self.turn), hand_string(self.river)]))
+            if FORMAT == 'nlh':
+                print('context %s' % ([has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
             
         # Prompt user for action, and see if it parses...
-        # TODO: Separate function, or library method...
+        # Usually only considers the first character. Unless NLH then expects bet size after the "b/r"
         user_action = None
         while not user_action:
             user_move_string = raw_input("Please select action %s -->   " % [actionName[action] for action in actions])
             print('User action: |%s|' % user_move_string)
             if len(user_move_string) > 0:
                 user_char = user_move_string.lower()[0]
+                bet_size = 0 # placeholder
                 if user_char == 'c':
                     print('action check/call')
                     allowed_actions = set(list(ALL_CALLS_SET) + [CHECK_HAND])
@@ -1455,6 +1511,15 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
                     # If we are capped out, and can't raise but only call... parse that too.
                     if len(list(set.intersection(set(actions), ALL_BETS_SET))) == 0:
                         allowed_actions = set(list(ALL_CALLS_SET))
+                    elif FORMAT == 'nlh':
+                        # If NLH, expect to match a number, after the b/r
+                        bet_size_match = re.match('\S*([0-9]*)+', user_move_string[1:])
+                        try: 
+                            if bet_size_match:
+                                bet_size = int(bet_size_match.group(0))
+                                print('bet size %s' % bet_size)
+                        except ValueError:
+                            bet_size = 0
                 elif user_char == 'f':
                     print('action FOLD')
                     allowed_actions = set([FOLD_HAND])
@@ -1463,10 +1528,10 @@ class TripleDrawHumanPlayer(TripleDrawAIPlayer):
                     continue
 
                 user_actions = list(set.intersection(set(actions), allowed_actions))
-                if (not user_actions) or len(user_actions) != 1:
+                if (not user_actions) or len(user_actions) != 1 or (FORMAT == 'nlh' and user_actions[0] in ALL_BETS_SET and not bet_size):
                     print('unparseable action... try again')
                     continue
-                user_action = user_actions[0]
+                user_action = (user_actions[0], bet_size)
 
         # Unless we check what AI does here, don't put in the vector values
         self.bet_val_vector = []
