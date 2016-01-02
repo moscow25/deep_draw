@@ -210,7 +210,13 @@ BET_THIS_STREET_ALREADY = 17
 ALLIN_VS_OPPONENT = 18
 # STDEV_VS_OPPONENT = 18 # Exclude. This just don't make sense!
 ALLIN_VS_RANDOM = 19
-STDEV_VS_RANDOM = 20
+# Replacing STDEV_VS_RANDOM -- useful but not used -- with AGGRESSION_PERCENT -- from observed data
+# NOTE: Just like "BET_SIZE_MADE" -- it's only useful for debug, or if training on high-quality data
+# Aggressive% = (ber/raise%) / (check/call/fold%)
+# The case we care about: good hand (or not): hand_val(bet) close to hand_val(check). When to explore a bet more?
+AGGRESSION_PERCENT = 20
+AGGRESSION_PERCENT_RESULTS_SCALE = 0.2 # 0.1 # Really volatile number, so reduce its relevence in the model (or just track seprately)
+## STDEV_VS_RANDOM = 20
 # Also, output all (11) High-hand categories, from this offset.
 # So flush value would be stored at (offset + high_hand_categories_index[FLUSH]). Too much... but ok since categories order fixed.
 # NOTE: We could combine Royal, Str8 flush and Quads into one super-category... but easier to keep structure

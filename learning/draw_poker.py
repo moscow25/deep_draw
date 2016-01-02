@@ -113,20 +113,26 @@ FUTURE_DISCOUNT = 0.9
 # Keep less than 100% of deuce events, to cover more hands, etc. Currently events from hands are in order.
 # With plenty data, something like 0.3 is best. Less over-training... and can re-use data later if only fractionally more new hands.
 # NOTE: We process each line first, before selection. So for slow per-line processing... we pay full price of loading if sample_rate < 1.0
-SAMPLE_RATE_DEUCE_EVENTS = 1.0 # 0.2 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
+SAMPLE_RATE_DEUCE_EVENTS = 0.5 # 0.3 # 0.8 # 0.3 # 0.8 # 0.6 # 1.0 # 0.50 # 0.33
 IMPORTANT_CASES_SAMPLE_RATE = min(3.0 * SAMPLE_RATE_DEUCE_EVENTS, 1.0)
 
-# Are the some cases that are important, and should always be selected?
+# For DEUCE hands: are the some cases that are important, and should always be selected?
 LOW_STRAIGHTS_ARE_IMPORTANT = True
 PAT_DRAWS_ARE_IMPORTANT = True
 
 # Betting decisions. Train on these... but don't over-train. Be careful.
-RIVER_CALLS_ARE_IMPORTANT = False
+RIVER_CALLS_ARE_IMPORTANT = True
 RIVER_RAISES_ARE_IMPORTANT = True # False [river raises are greats, since we also get the 'call' counter-factuals]
 
 # For HE, boost other cases also
 HOLDEM_TWO_PAIR_ARE_IMPORTANT = True # 'big hands,' whether that be big board w/o private cards, or hand that helps
 HOLDEM_RIVER_PLAY_BOARD_ARE_IMPORTANT = True # same category as the "board" cards (could be Ace-high though)
+
+# For NLH, boost cases based on betting
+NLH_BIG_BETS_ARE_IMPORTANT = True # Big bet being made, or big bet being considered called
+BIG_BET_FOR_IMPORTANT_CASE = MAX_STACK_SIZE / 10 # in raw chips. What would be a big bet? 
+NLH_BIG_POTS_ARE_IMPORTANT = True # Pot above a threshold... we care about every subsequent move
+BIG_POT_FOR_IMPORTANT_CASE = (2.0 * MAX_STACK_SIZE) / 10 # in raw chips. How big does the pot have to be to be important?
 
 # Use this to train only on results of intelligent players, if different versions available
 # Question: Do we include "DNN_2_per" hands? DNN is a good aggro opponent, but we don't necessarily want to learn its actions. 
@@ -1010,6 +1016,13 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
     # TODO: Compute min raise from stats above. [In terms of fresh chips to wager]
     min_bet = min(max(bet_faced, SMALL_BET_SIZE), stack_size)
 
+    # Consider the hand an "important case" for training, if large bet made or being faced.
+    if format=='nlh_events' and NLH_BIG_BETS_ARE_IMPORTANT and max(bet_faced, bet_this_street) >= BIG_BET_FOR_IMPORTANT_CASE:
+        important_training_case = True
+    # And similarly for big pots.
+    if format=='nlh_events' and NLH_BIG_POTS_ARE_IMPORTANT and pot_size >= BIG_POT_FOR_IMPORTANT_CASE:
+        important_training_case = True
+
     # Encode a few bet sizes for output: pot_size, stack_size (before current bet), bet_faced, bet_this_street_already (not including this bet)
     # Why these values? We want stats that can be computed directly from hand history. Make sure this info is getting through (autoencoder)
     # NOTE: We encode ( - BIG_BET_FULL_STACK) to make output sizes smaller. These are all positive numbers, so no need to center zero at +20.0, etc
@@ -1019,12 +1032,16 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                        BET_FACED: adjust_float_value(bet_faced - BIG_BET_FULL_STACK, mode=format),
                        STACK_SIZE: adjust_float_value(stack_size - BIG_BET_FULL_STACK, mode=format),
                        BET_THIS_STREET_ALREADY: adjust_float_value(bet_this_street_already - BIG_BET_FULL_STACK, mode=format),
+                       AGGRESSION_PERCENT: 1.0 if action_taken in ALL_BETS_SET else 0.0, # How often does a good player bet here?
                        }
     if debug:
         print('pot: %.0f\tfaced: %.0f\tstax: %.0f\talready: %.0f' % (pot_size, bet_faced, stack_size, bet_this_street_already))
     for cat in bet_size_values.keys():
         output_array[cat] = bet_size_values[cat]
-        output_mask_classes[cat] = MONTE_CARLO_RESULTS_SCALE
+        if cat == AGGRESSION_PERCENT:
+            output_mask_classes[cat] = AGGRESSION_PERCENT_RESULTS_SCALE
+        else:
+            output_mask_classes[cat] = MONTE_CARLO_RESULTS_SCALE
 
     # We also want to encode bet-value buckets. Essentially, this means having outputs for
     # [0.25, 0.5, 1.0, 2.0] X pot (or whatever categories). We ask network to predict:
@@ -1127,7 +1144,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
 
     # Match Monte Carlo outputs to output array indices
     monte_carlo_values = {ALLIN_VS_OPPONENT: allin_vs_oppn, # STDEV_VS_OPPONENT: stdev_vs_oppn,
-                          ALLIN_VS_RANDOM: allin_vs_random, STDEV_VS_RANDOM: stdev_vs_random}
+                          ALLIN_VS_RANDOM: allin_vs_random,} #STDEV_VS_RANDOM: stdev_vs_random}
     assert len(value_categories) == len(HIGH_HAND_CATEGORIES), 'Mismatch in vector for high hand categories %s' % value_categories
     for cat, val in zip(HIGH_HAND_CATEGORIES, value_categories):
         # NOTE: category is FLUSH or ONE_PAIR. We want index of this category.
@@ -1417,7 +1434,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                         #    print(line)
                         #    print('Skipping item with %s hold value!\n' % hold_value)
                         continue
-                elif format == 'deuce_events' or format == 'holdem_events':
+                elif format == 'deuce_events' or format == 'holdem_events' or format == 'nlh_events':
                     # For 'deuce_events', randomly down-sample from full set of events. 
                     # NOTE: We do this, to cover more hands, and to not over-train on specific hand situation.
                     # TODO: Control this by flag, or pre-compute data before choosing sample policy
@@ -1425,7 +1442,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     sample_rate = SAMPLE_RATE_DEUCE_EVENTS
                     important_cases_sample_rate = max(sample_rate, IMPORTANT_CASES_SAMPLE_RATE)
                     if not important_training_case and random.random() > sample_rate:
-                        #print('\nskipping form sample %s\n' % sample_rate)
+                        #print('\nskipping from sample %s\n' % sample_rate)
                         continue
                     elif important_training_case and random.random() <= important_cases_sample_rate:
                         important_training_cases += 1
