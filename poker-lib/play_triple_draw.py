@@ -1779,9 +1779,9 @@ def game_round(round, cashier, player_button=None, player_blind=None,
 
     
     # Set BB's hand for testing.    
-    deck.set_card(Card(suit=DIAMOND, value=Ace), pos=2)
-    deck.set_card(Card(suit=SPADE, value=Ace), pos=3)
-    deck.set_card(Card(suit=DIAMOND, value=Ace), pos=2) # set it twice. Why? pop/push problem if Ax at position 0 or 1!
+    #deck.set_card(Card(suit=DIAMOND, value=Ace), pos=2)
+    #deck.set_card(Card(suit=SPADE, value=Ace), pos=3)
+    #deck.set_card(Card(suit=DIAMOND, value=Ace), pos=2) # set it twice. Why? pop/push problem if Ax at position 0 or 1!
 
     """
     # NOTE: This is the spot to insert a deck setup, if needed for testing
