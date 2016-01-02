@@ -1001,7 +1001,8 @@ class TripleDrawAIPlayer():
                                 action = prediction[1]
                                 value = prediction[0]
                                 if action in ALL_BETS_SET:
-                                    prediction[0] = max(value, raw_check_call_value + (SMALL_BET_SIZE) / chip_bet_ratio)
+                                    prediction[0] = max(value, raw_check_call_value + (SMALL_BET_SIZE / chip_bet_ratio))
+                                    prediction[0] = max(prediction[0], 1.5 * SMALL_BET_SIZE / chip_bet_ratio) # in case we boost the call higher...
                         else:
                             print('Choose passive action! C/K: %.5f' % (raw_check_call_value))
                             if raw_bet_value > raw_check_call_value:
@@ -1779,9 +1780,9 @@ def game_round(round, cashier, player_button=None, player_blind=None,
 
     
     # Set BB's hand for testing.    
-    #deck.set_card(Card(suit=DIAMOND, value=Ace), pos=2)
-    #deck.set_card(Card(suit=SPADE, value=Ace), pos=3)
-    #deck.set_card(Card(suit=DIAMOND, value=Ace), pos=2) # set it twice. Why? pop/push problem if Ax at position 0 or 1!
+    #deck.set_card(Card(suit=DIAMOND, value=King), pos=0)
+    #deck.set_card(Card(suit=SPADE, value=King), pos=1)
+    #deck.set_card(Card(suit=DIAMOND, value=King), pos=2) # set it twice. Why? pop/push problem if Ax at position 0 or 1!
 
     """
     # NOTE: This is the spot to insert a deck setup, if needed for testing
