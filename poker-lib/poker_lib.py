@@ -201,8 +201,9 @@ BET_SIZE_MADE = 13
 MONTE_CARLO_RESULTS_SCALE = 1.0 # 0.1
 POT_SIZE = 14
 BET_FACED = 15
-STACK_SIZE = 16
-BET_THIS_STREET_ALREADY = 17
+STACK_SIZE = 16 
+FOLD_PERCENT = 17 # Same as aggressive%, we need to estimate how often good training data (CFR) folds in this similar spot?
+#BET_THIS_STREET_ALREADY = 17 # Exclude. We need "fold%" instead
 
 # If available for high hand (LHE and NLH), output odds from Monte Carlo
 # 0.0-1.0 odds the describe strength of our current hand. Abstractly, and vs opponent
