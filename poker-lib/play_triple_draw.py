@@ -157,7 +157,19 @@ if FORMAT == 'nlh':
     # NOTE: This compares to model's internal value.
     # NOTE: Can be super-conservative and set this to 0.80, etc. But need to give a value
     # TODO: Different value for preflop? Or for small pots in general??
-    NEVERFOLD_ALLIN_VALUE_ESTIMATE = 0.485 
+    NEVERFOLD_ALLIN_VALUE_ESTIMATE = 0.485 # 0.510 # Use larger value as we move into production. Good to keep 48-49% for self-play!
+
+# For NLH model trained on good data, consider bet/nonbet choice, based on "aggressive%" learned from data (similar context)
+USE_AGGRO_CUTOFFS = True # Do we prevent NL model from betting, even if high +EV, but learned "aggressive%" basically zero
+MINIMUM_AGGRO_RATE_TO_BET = 0.03 # With leaky ReLU, no-bet cases will usually be negative. To be safe, use a very small (-) number
+MAXIMUM_AGGRO_RATE_TO_NOT_BET = 1.0 - MINIMUM_AGGRO_RATE_TO_BET # If model says 100% betting here, reduce value of check/call, as long as bet value is positive (don't fold by accident)
+# As sanity check, don't discount call values over X, not matter what (even allin pot, negative FOLD value)
+MAXIMUM_MIN_CALL_CHIP_VALUE = 300.0
+
+# Do we ask the player to make highest-value play, or to follow CFR as close as possible?
+IMITATE_CFR_AGGRO_STRATEGY = True 
+IMITATE_CFR_BETTING_PERCENTAGE = 0.8 # 0.7 # How often to imitate CFR, and how often to choose best-value action? (per-hand basis)
+CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR = 0.3 # pretty liberal ratio, in terms of pot size, to choose bet based on CFR aggro%
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponen), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -255,6 +267,9 @@ class TripleDrawAIPlayer():
         self.use_action_percent_model = False # Make moves from CNN action-values (with noise added), or from action percentages from CNN?
         self.is_dense_model = False # neural network is DNN?
         self.is_human = False
+
+        # Special cases for NLH
+        self.imitate_CFR_betting = False # Try to check/bet at ration learned from CFR training??
 
         # Current 0-1000 value, based on cards held, and approximation of value from draw model.
         # For example, if no more draws... heuristic is actual hand.
@@ -876,6 +891,128 @@ class TripleDrawAIPlayer():
             min_bet = max(min_bet, SMALL_BET_SIZE)
             max_bet = chip_stack
             min_bet = min(min_bet, max_bet)
+
+            # Since model is trained on high-quality ACPC games, we also learn "aggro%."
+            # How often does a good player bet or raise here?
+            aggro_rate = bets_vector[AGGRESSION_PERCENT]
+            
+            # We can use this in two ways:
+            # A. Remove the "bet" option completely, if aggro_rate is very low (near 0%). 
+            # B. Create a player that follows the aggro% rate precisely. So if raising 30% of the time... that's what we do.
+            # Both players have value.
+            # [A] is needed, because until and unless we explore all states, value of bets in unknown cases is unreliable.
+            # (and the model is heavily biased to toward betting, since good CFR players bet with an advantage)
+            # [B] is useful, at the very least for training. Our best chance to create a CFR-like player.
+            # (that said, we should also mix in [B] in production at some rate, to make model stochastic)
+            # TODO: Best solution is probably a mix of [A] and [B]. Sometimes we exploit, given that state is understood,
+            # Other cases we mimick the CFR ratio. 
+            # TODO: Lastly, we could *also* mix in some rare bets outside of [A], using an epsilon, and non-trivial model advantage bet > call.
+
+            # Pre-compute some values, for easy comparison.
+            # Are we allowed to bet? Is the value of betting positive or negative (before adjustment)?
+            all_bets_set = set([prediction[1] for prediction in value_predictions])
+            raw_bet_value = 0.0
+            raw_fold_value = 0.0 # look for model over-valuing fold (should also adjust call value, perhaps)
+            raw_check_call_value = 0.0
+            for prediction in value_predictions:
+                action = prediction[1]
+                value = prediction[0]
+                if action in ALL_BETS_SET:
+                    raw_bet_value = value
+                elif action == FOLD_HAND:
+                    raw_fold_value = value
+                elif action == CHECK_HAND or action == CALL_NO_LIMIT:
+                    raw_check_call_value = value
+
+            # A. Remove the "bet" option completely, if aggro_rate is very low (near 0%). 
+            # TODO: Add logic for epsilon...
+            if USE_AGGRO_CUTOFFS:
+                # Now iterate over actions, and make adjustments based on "aggro%"
+                for prediction in value_predictions:
+                    action = prediction[1]
+                    value = prediction[0]
+                    # TODO: Consider if bet/raise, but all bet-sizes are negative (or only allin is positive).
+                    # In that case, consider not betting.
+                    if action in ALL_BETS_SET and aggro_rate <= MINIMUM_AGGRO_RATE_TO_BET and value >= 0.0:
+                        # If bet value > 0.0 but aggro_rate effectively zero, Fix bet/raise value at small negative value.
+                        # TODO: Consider an epsilon. Especially with very high expected +EV value
+                        prediction[0] = -1.0 * SMALL_BET_SIZE / chip_bet_ratio
+                        if debug:
+                            print('--> With aggro %.3f, supress the +EV bet action %.5f.' % (aggro_rate, value))
+                    elif ((action in ALL_CALLS_SET) or (action == CHECK_HAND)) and (all_bets_set.intersection(ALL_BETS_SET)) and (raw_bet_value >= 1.0 * SMALL_BET_SIZE / chip_bet_ratio):
+                        if debug:
+                            print('Considering check/call adjustment toward raise/bet. Since bet exists, and has +EV raw value: %.4f' % raw_bet_value)
+                        if aggro_rate >= MAXIMUM_AGGRO_RATE_TO_NOT_BET and value > 0.0001:
+                            # Adjusting check/call value to one min bet below raw bet value.
+                            prediction[0] = max(0.0001, raw_bet_value - (1.0 * SMALL_BET_SIZE / chip_bet_ratio))
+                            if debug:
+                                print('--> Aggro percent very high and bet value +EV, so adjusting check/call value down %.4f -> %.4f' % (value, prediction[0]))
+                            value = prediction[0] # in case we need to adjust again
+
+                    # This one is tricky. Look for cases that are 100% folds in the data. Rule somewhat nuanced, to idea is clear.
+                    # Basically, if there is strong evidence that call_value close to 0%, hand is bad (in this context), and model always folds, then fold.
+                    # Tricky, because a few things to look at:
+                    # - call_value below $50
+                    # - call_value below 10% of the pot
+                    # - call_value below 10% of the pot (or below $50) if we subtract positive-fold from model
+                    # [for large pots, no unusual for fold value to be > $0. This noise spreads to the call, also]
+                    # NOTE: This only applies if aggro% == 0.0, since we are looking for auto-fold spots.
+                    if action == CALL_NO_LIMIT and aggro_rate <= MINIMUM_AGGRO_RATE_TO_BET and value >= 0.0:
+                        # What cutoff is appropriate for this hand?
+                        minimum_bet_value = max(0.0, (0.5 * SMALL_BET_SIZE / chip_bet_ratio)) # 1/2 of bet, or $50
+                        minimum_bet_value = max(minimum_bet_value, 0.05 * (pot_size) / chip_bet_ratio) # or 5% of the pot
+                        # Add "raw_bet_value" if FOLD  > 0.0... up to 10% of the current pot (minus a min bet)
+                        minimum_bet_value = min(minimum_bet_value + max(raw_fold_value, 0.0), 0.10 * (pot_size - SMALL_BET_SIZE) / chip_bet_ratio + 0.20 * max(raw_fold_value, 0.0))
+                        # Avoid folding for very small bets, if still slightly +EV
+                        minimum_bet_value = min(minimum_bet_value, 0.3 * bet_faced / chip_bet_ratio) 
+                        # Final sanity check... don't block call values above a certain threshold.
+                        minimum_bet_value = min(minimum_bet_value, MAXIMUM_MIN_CALL_CHIP_VALUE / chip_bet_ratio)
+
+                        if debug:
+                            print('Looking at call_value [bet_faced %.2f], since aggro low (%.3f), call_value %.4f. Make sure not auto-fold spot. raw_fold %.4f' % (bet_faced, aggro_rate, value, raw_fold_value))
+                            print('--> Minimum chips for this hand to call: %.2f' % (minimum_bet_value * chip_bet_ratio))
+    
+                        if value < minimum_bet_value:
+                            print('--> Minimum chips to call %.2f > %.2f chips call. Turning call into fold...' % (minimum_bet_value * chip_bet_ratio, 
+                                                                                                                   value * chip_bet_ratio))
+                            prediction[0] = -1.0 * SMALL_BET_SIZE / chip_bet_ratio
+                            value = prediction[0] # in case we need to adjust again
+                                
+                                
+            # Now consider the case where we want to imitate CFR, rather than choose highest-value bet.
+            # A. Still apply cutoffs above.
+            # B. If aggro% between min and max, we are allowed to bet/raise, and bet/raise val "reasonably close" to "check/call" value
+            # --> also make sure that it's not all negative values (for example, preflop bad hand)
+            # C. Flip a weighted coin, and promote the lower value, just above the higher value
+            #bet_aggression_strategy = IMITATE_CFR_AGGRO_STRATEGY # TODO: Assign this per-hand, or some % of the time.
+            imitate_CFR_strategy = self.imitate_CFR_betting
+            if imitate_CFR_strategy and IMITATE_CFR_AGGRO_STRATEGY:
+                agressive_action_difference = abs(raw_bet_value - raw_check_call_value)
+                if aggro_rate <= MAXIMUM_AGGRO_RATE_TO_NOT_BET and aggro_rate >= MINIMUM_AGGRO_RATE_TO_BET and (all_bets_set.intersection(ALL_BETS_SET)) and (raw_bet_value > 0.0 or raw_check_call_value > 0.0):
+                    close_bet_ratio = agressive_action_difference / max((pot_size + 2 * SMALL_BET_SIZE) / chip_bet_ratio, raw_bet_value)
+                    print('\nConsidering imitating CFR for active/passive choice. B/R: %.5f C/K: %.5f. Aggro: %.3f\nClose bet ratio: %.3f\n' % (raw_bet_value, raw_check_call_value, aggro_rate, close_bet_ratio)) 
+                    if close_bet_ratio <= CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR:
+                        print('Close_bet ratio %.3f close enough. Flip coins to aggro or not.\n' % close_bet_ratio)
+                        if np.random.random() <= aggro_rate:
+                            print('Choose aggressive action! B/R: %.5f' % (raw_bet_value))
+                            if raw_bet_value < raw_check_call_value:
+                                print('--> making a change to the best-move in favor of aggression\n')
+                            for prediction in value_predictions:
+                                action = prediction[1]
+                                value = prediction[0]
+                                if action in ALL_BETS_SET:
+                                    prediction[0] = max(value, raw_check_call_value + (SMALL_BET_SIZE / chip_bet_ratio))
+                                    prediction[0] = max(prediction[0], 1.5 * SMALL_BET_SIZE / chip_bet_ratio) # in case we boost the call higher...
+                        else:
+                            print('Choose passive action! C/K: %.5f' % (raw_check_call_value))
+                            if raw_bet_value > raw_check_call_value:
+                                print('--> making a change to the best-move in favor of passivity\n')
+                            for prediction in value_predictions:
+                                action = prediction[1]
+                                value = prediction[0]
+                                if action == CHECK_HAND or action == CALL_NO_LIMIT:
+                                    prediction[0] = max(value, raw_bet_value + (SMALL_BET_SIZE) / chip_bet_ratio)
+            
 
 
             # B. All bet sizes, corresponding to bet sizes array
@@ -1641,8 +1778,11 @@ def game_round(round, cashier, player_button=None, player_blind=None,
     if board_string:
         set_deck_with_cards_string(deck, board_string, 0, BOARD_HAND_OFFSET)
 
-    # NOTE: Cards are popped from the back of the deck... but just set them in the front, then reverse()
-    deck.cards.reverse()
+    
+    # Set BB's hand for testing.    
+    #deck.set_card(Card(suit=DIAMOND, value=King), pos=0)
+    #deck.set_card(Card(suit=SPADE, value=King), pos=1)
+    #deck.set_card(Card(suit=DIAMOND, value=King), pos=2) # set it twice. Why? pop/push problem if Ax at position 0 or 1!
 
     """
     # NOTE: This is the spot to insert a deck setup, if needed for testing
@@ -1656,6 +1796,19 @@ def game_round(round, cashier, player_button=None, player_blind=None,
     deck.set_card(Card(suit=CLUB, value=Eight), pos=7)
     deck.cards.reverse()
     """
+
+    # NOTE: Cards are popped from the back of the deck... but just set them in the front, then reverse()
+    deck.cards.reverse()
+
+    # HACK: Set players to "imitate CFR ratio" some X% of the time
+    for player in [player_blind, player_button]:
+        if IMITATE_CFR_AGGRO_STRATEGY and np.random.random() < IMITATE_CFR_BETTING_PERCENTAGE: 
+            player.imitate_CFR_betting = True
+            print('Setting player %s to use IMITATE_CFR_BETTING for next hand.' % (player.player_tag()))
+        elif IMITATE_CFR_AGGRO_STRATEGY:
+            # Make sure to reset the value to false, if we are flipping coins and lost.
+            player.imitate_CFR_betting = False
+            print('Setting player %s with IMITATE_CFR_BETTING *off* for next hand.' % (player.player_tag()))
 
     dealer = TripleDrawDealer(deck=deck, player_button=player_button, player_blind=player_blind, format=FORMAT)
     dealer.play_single_hand(bets_string=bets_string) # Pass empty bets string, to allow players to make actual choices

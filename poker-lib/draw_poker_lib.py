@@ -233,7 +233,7 @@ class TripleDrawDealer():
             return
         
         # If still here... ther are legal actions that a player may take!
-        print('Allowed big-bet actions for player %s: %s' % (self.action_on.name, [actionName[action] for action in allowed_actions]))
+        print('Allowed big-bet actions for player %s [%s]: %s' % (self.action_on.name, self.action_on.player_tag(), [actionName[action] for action in allowed_actions]))
         
         ###########################
         # Ok, now ask an action, from big-bet model. 
