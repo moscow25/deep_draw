@@ -1031,14 +1031,15 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                        POT_SIZE: adjust_float_value(pot_size - BIG_BET_FULL_STACK, mode=format),
                        BET_FACED: adjust_float_value(bet_faced - BIG_BET_FULL_STACK, mode=format),
                        STACK_SIZE: adjust_float_value(stack_size - BIG_BET_FULL_STACK, mode=format),
-                       BET_THIS_STREET_ALREADY: adjust_float_value(bet_this_street_already - BIG_BET_FULL_STACK, mode=format),
+                       #BET_THIS_STREET_ALREADY: adjust_float_value(bet_this_street_already - BIG_BET_FULL_STACK, mode=format),
                        AGGRESSION_PERCENT: 1.0 if action_taken in ALL_BETS_SET else 0.0, # How often does a good player bet here?
+                       FOLD_PERCENT: 1.0 if action_taken == FOLD_HAND else 0.0, # How often does a player fold, in this situatin?
                        }
     if debug:
         print('pot: %.0f\tfaced: %.0f\tstax: %.0f\talready: %.0f' % (pot_size, bet_faced, stack_size, bet_this_street_already))
     for cat in bet_size_values.keys():
         output_array[cat] = bet_size_values[cat]
-        if cat == AGGRESSION_PERCENT:
+        if cat == AGGRESSION_PERCENT or cat == FOLD_PERCENT:
             output_mask_classes[cat] = AGGRESSION_PERCENT_RESULTS_SCALE
         else:
             output_mask_classes[cat] = MONTE_CARLO_RESULTS_SCALE
