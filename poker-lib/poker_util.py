@@ -7,8 +7,9 @@ Re-usable & utility functions, for poker game network.
 
 # Math functions
 import numpy as np
-from scipy.stats import beta
-
+from scipy.stats import beta 
+# from scipy.optimize import curve_fit
+from scipy.ndimage import gaussian_filter1d
 
 # Fill in dense features vector from sparse features map. Keys: 'key':row, Data: 'key':datum.
 def VectorFromKeysAndSparseMap(keys, sparse_data_map, default_value = 0):
@@ -87,4 +88,37 @@ def sample_bets_range(pot_size, min_bet, max_bet):
     bets = np.clip(bets, min_bet, max_bet) # snip out-of-range bets
     bets = np.unique(np.append(bets, [min_bet, max_bet]))
     return bets
-                    
+                   
+# Given 1-x data points, use Gaussian smoothing (in both X and Y) to create a better curve.
+# In our case, for (bet_size, bet_value) pairs.
+# NOTE: Order matters. Since bet_size == $200 in position[0] is not quite the same output as bet_size == $200 in position[3]
+# TODO: Create a stochastic version, but permuting outputs randomly, and re-fitting.
+# Code example from: http://stackoverflow.com/questions/15178146/line-smoothing-algorithm-in-python
+def best_bet_with_smoothing(bets, values, debug = False):
+    # bets_data
+    x = bets
+    y = values
+
+    t = np.linspace(0, 1, len(x))
+    t2 = np.linspace(0, 1, 100) # 100 points, for which we interpolate
+
+    x2 = np.interp(t2, t, x)
+    y2 = np.interp(t2, t, y)
+    sigma = 10
+    x3 = gaussian_filter1d(x2, sigma)
+    y3 = gaussian_filter1d(y2, sigma)
+
+    x4 = np.interp(t, t2, x3)
+    y4 = np.interp(t, t2, y3)
+
+    # X3 and Y3 are the final point estimates. What is the largest point?
+    # print(zip(x3,y3))
+    max_arg = np.argmax(y3)
+    if debug:
+        print([x3[max_arg], y3[max_arg]])
+
+    # X4 and Y4 are the regressed points...  [one each for prior bet size)
+    if debug:
+        print(zip(x4, y4))
+
+    return (x3[max_arg], y3[max_arg])
