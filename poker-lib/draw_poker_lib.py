@@ -297,6 +297,9 @@ class TripleDrawDealer():
         # What is the best action?
         # If action returned, complete the action... and keep going
         if (best_action):
+            if not(best_action in ALL_BETS_SET):
+                 bet_amount = 0.0
+
             print('\nBest action for nlh chose ->  %s\nSuggested bet amount -> %s\n' % (actionName[best_action], bet_amount))
             # Create the action
             # We keep betting after this action... as long last action allows it.

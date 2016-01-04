@@ -170,8 +170,27 @@ MAXIMUM_MIN_CALL_CHIP_VALUE = 300.0
 
 # Do we ask the player to make highest-value play, or to follow CFR as close as possible?
 IMITATE_CFR_AGGRO_STRATEGY = True 
-IMITATE_CFR_BETTING_PERCENTAGE = 0.8 # 0.7 # How often to imitate CFR, and how often to choose best-value action? (per-hand basis)
+IMITATE_CFR_FOLD_STRATEGY = True # Parallel adjustment, for fold vs call [if EV close, use the percentage]
+IMITATE_CFR_BETTING_PERCENTAGE = 0.95 # 0.8 # 0.7 # How often to imitate CFR, and how often to choose best-value action? (per-hand basis)
 CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR = 0.3 # pretty liberal ratio, in terms of pot size, to choose bet based on CFR aggro%
+
+# If we are given FOLD%... use it to
+# A. Stop aggressive pruning on FOLD, when EV close to flat (especially preflop)
+# B. If close, and IMITATE_CFR_AGGRO_STRATEGY, use it to actually determine with which rate to fold.
+# NOTE: It's all about close calls! Don't use CFR to over-rule a strong call, or a strong fold.
+# It's about being unpredictable when it's close, and about reducing model sensitively.
+# TODO: A true Bayesian approach would be excellent. 
+USE_FOLD_PERCENTAGE = True
+MINIMUM_FOLD_RATE_TO_FOLD = 0.03
+MAXIMUM_FOLD_RATE_TO_CALL = 1.0 - MINIMUM_FOLD_RATE_TO_FOLD
+MAXIMUM_CALL_TO_FOLD_WITH_CFR = 300.0 # The *best* hand we'd ever fold, based on CFR strategy?
+MINIMUM_CALL_VALUE_TO_CALL_WITH_CFR = -1.0 * MAXIMUM_CALL_TO_FOLD_WITH_CFR # The *worst* had we'll ever call, based on CFR strategy?
+
+# Do we choose bet sizing from smoothed bet-values?
+# NOTE: Gaussian smoothing, in both x (bet size) and y (value).
+# For now, just take best value. Could (easily) make it a little stochastic.
+# NOTE: Order of inputs matters (for smoothing), even if multiple x == same. Why? min-bet has meaning. Also, easier.
+BET_SIZE_FROM_SMOOTHED = True
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponen), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -851,8 +870,8 @@ class TripleDrawAIPlayer():
                 if FORMAT == 'nlh':
                     print(('vals\t%s' % (['%.5f' % (val - 2.0) for val in bets_vector[:5]])).replace("'", ''))
                     print(('betsize\t%s' % (['%.2f' % ((val - 2.0) * 10000) for val in bets_vector[5:13]])).replace("'", '')) # If betting, value by size
-                    print(('chips\t%s' % (['%.2f' % ((val) * 10000) for val in bets_vector[13:18]])).replace("'", '')) # chips already in the pot
-                    print(('allins\t%s' % (['%.4f' % (val) for val in bets_vector[18:]])).replace("'", '')) # Odds and chances to make a hand
+                    print(('chips\t%s' % (['%.2f' % ((val) * 10000) for val in bets_vector[13:17]])).replace("'", '')) # chips already in the pot
+                    print(('allins\t%s' % (['%.4f' % (val) for val in bets_vector[17:]])).replace("'", '')) # Odds and chances to make a hand
                 else:
                     print('vals\t%s' % ([(val - 2.0) for val in bets_vector[:5]]))
                     print('acts\t%s' % ([val for val in bets_vector[5:10]]))
@@ -867,8 +886,6 @@ class TripleDrawAIPlayer():
             # Anything else worth saving?
             # Look at bet sizes. Easiest: recommended bet size.
             recommended_bet_size = bets_vector[BET_SIZE_MADE] * chip_bet_ratio
-            if debug:
-                print('ultra-simple bet recommendation: %.2f' % recommended_bet_size)
 
             # Now look at values for various bet sizes.
             # TODO: Split this into functions, whenever possible!
@@ -896,7 +913,10 @@ class TripleDrawAIPlayer():
 
             # Since model is trained on high-quality ACPC games, we also learn "aggro%."
             # How often does a good player bet or raise here?
+            fold_rate = bets_vector[FOLD_PERCENT]
             aggro_rate = bets_vector[AGGRESSION_PERCENT]
+            if debug:
+                print('\tfrom CFR:\tfold: %.3f\taggro: %.3f' % (fold_rate, aggro_rate))
             
             # We can use this in two ways:
             # A. Remove the "bet" option completely, if aggro_rate is very low (near 0%). 
@@ -960,14 +980,27 @@ class TripleDrawAIPlayer():
                         if debug:
                             print('--> With aggro %.3f, supress the +EV bet action %.5f.' % (aggro_rate, value))
                     elif ((action in ALL_CALLS_SET) or (action == CHECK_HAND)) and (all_bets_set.intersection(ALL_BETS_SET)) and (raw_bet_value >= 1.0 * SMALL_BET_SIZE / chip_bet_ratio):
-                        if debug:
-                            print('Considering check/call adjustment toward raise/bet. Since bet exists, and has +EV raw value: %.4f' % raw_bet_value)
+                        #if debug:
+                        #    print('Considering check/call adjustment toward raise/bet. Since bet exists, and has +EV raw value: %.4f' % raw_bet_value)
                         if aggro_rate >= MAXIMUM_AGGRO_RATE_TO_NOT_BET and value > 0.0001:
                             # Adjusting check/call value to one min bet below raw bet value.
                             prediction[0] = max(0.0001, raw_bet_value - (1.0 * SMALL_BET_SIZE / chip_bet_ratio))
                             if debug:
                                 print('--> Aggro percent very high and bet value +EV, so adjusting check/call value down %.4f -> %.4f' % (value, prediction[0]))
                             value = prediction[0] # in case we need to adjust again
+                    
+                    # Separate loop, to push down up the value of calling, if fold% very very low (and call-value is not terrible)
+                    if (action == CALL_NO_LIMIT) and (raw_check_call_value >= MINIMUM_CALL_VALUE_TO_CALL_WITH_CFR / chip_bet_ratio):
+                        #if debug:
+                        #    print('Considering fold-hand adjustment toward a call. Since call exist, and has non-bad raw value: %.4f' % raw_check_call_value)
+                        if fold_rate <= MINIMUM_FOLD_RATE_TO_FOLD:
+                            # If fold rate is less than 2% and call is non-terrible, just lower the fold rate, below a call. 
+                            prediction[0] = max(value + (0.1 * SMALL_BET_SIZE / chip_bet_ratio), 0.0 + (0.5 * SMALL_BET_SIZE / chip_bet_ratio))
+                            if debug:
+                                print('--> Fold percent very low and call value OK, so incrase CALL value up %.4f --> %.4f' % (value, prediction[0]))
+                            value = prediction[0] # in case we need to adjust again
+
+
 
                     # This one is tricky. Look for cases that are 100% folds in the data. Rule somewhat nuanced, to idea is clear.
                     # Basically, if there is strong evidence that call_value close to 0%, hand is bad (in this context), and model always folds, then fold.
@@ -977,7 +1010,7 @@ class TripleDrawAIPlayer():
                     # - call_value below 10% of the pot (or below $50) if we subtract positive-fold from model
                     # [for large pots, no unusual for fold value to be > $0. This noise spreads to the call, also]
                     # NOTE: This only applies if aggro% == 0.0, since we are looking for auto-fold spots.
-                    if action == CALL_NO_LIMIT and aggro_rate <= MINIMUM_AGGRO_RATE_TO_BET and value >= 0.0:
+                    if action == CALL_NO_LIMIT and aggro_rate <= MINIMUM_AGGRO_RATE_TO_BET and value >= 0.0 and not (USE_FOLD_PERCENTAGE and fold_rate <= MAXIMUM_FOLD_RATE_TO_CALL) :
                         # What cutoff is appropriate for this hand?
                         minimum_bet_value = max(0.0, (0.5 * SMALL_BET_SIZE / chip_bet_ratio)) # 1/2 of bet, or $50
                         minimum_bet_value = max(minimum_bet_value, 0.05 * (pot_size) / chip_bet_ratio) # or 5% of the pot
@@ -987,7 +1020,7 @@ class TripleDrawAIPlayer():
                         minimum_bet_value = min(minimum_bet_value, 0.3 * bet_faced / chip_bet_ratio) 
                         # Final sanity check... don't block call values above a certain threshold.
                         minimum_bet_value = min(minimum_bet_value, MAXIMUM_MIN_CALL_CHIP_VALUE / chip_bet_ratio)
-
+                        
                         if debug:
                             print('Looking at call_value [bet_faced %.2f], since aggro low (%.3f), call_value %.4f. Make sure not auto-fold spot. raw_fold %.4f' % (bet_faced, aggro_rate, value, raw_fold_value))
                             print('--> Minimum chips for this hand to call: %.2f' % (minimum_bet_value * chip_bet_ratio))
@@ -1010,13 +1043,15 @@ class TripleDrawAIPlayer():
                 agressive_action_difference = abs(raw_bet_value - raw_check_call_value)
                 if aggro_rate <= MAXIMUM_AGGRO_RATE_TO_NOT_BET and aggro_rate >= MINIMUM_AGGRO_RATE_TO_BET and (all_bets_set.intersection(ALL_BETS_SET)) and (raw_bet_value > 0.0 or raw_check_call_value > 0.0):
                     close_bet_ratio = agressive_action_difference / max((pot_size + 2 * SMALL_BET_SIZE) / chip_bet_ratio, raw_bet_value)
-                    print('\nConsidering imitating CFR for active/passive choice. B/R: %.5f C/K: %.5f. Aggro: %.3f\nClose bet ratio: %.3f\n' % (raw_bet_value, raw_check_call_value, aggro_rate, close_bet_ratio)) 
+                    #print('\nConsidering imitating CFR for active/passive choice. B/R: %.5f C/K: %.5f. Aggro: %.3f\nClose bet ratio: %.3f\n' % (raw_bet_value, raw_check_call_value, aggro_rate, close_bet_ratio)) 
                     if close_bet_ratio <= CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR:
-                        print('Close_bet ratio %.3f close enough. Flip coins to aggro or not.\n' % close_bet_ratio)
+                        if debug:
+                            print('Close_bet ratio %.3f close enough. Flip coins to aggro or not.' % close_bet_ratio)
                         if np.random.random() <= aggro_rate:
-                            print('Choose aggressive action! B/R: %.5f' % (raw_bet_value))
-                            if raw_bet_value < raw_check_call_value:
-                                print('--> making a change to the best-move in favor of aggression\n')
+                            if debug:
+                                print('Choose aggressive action! B/R: %.5f' % (raw_bet_value))
+                                if raw_bet_value < raw_check_call_value:
+                                    print('\t--> making a change to the best-move in favor of aggression')
                             for prediction in value_predictions:
                                 action = prediction[1]
                                 value = prediction[0]
@@ -1024,15 +1059,50 @@ class TripleDrawAIPlayer():
                                     prediction[0] = max(value, raw_check_call_value + (SMALL_BET_SIZE / chip_bet_ratio))
                                     prediction[0] = max(prediction[0], 1.5 * SMALL_BET_SIZE / chip_bet_ratio) # in case we boost the call higher...
                         else:
-                            print('Choose passive action! C/K: %.5f' % (raw_check_call_value))
-                            if raw_bet_value > raw_check_call_value:
-                                print('--> making a change to the best-move in favor of passivity\n')
+                            if debug:
+                                print('Choose passive action! C/K: %.5f' % (raw_check_call_value))
+                                if raw_bet_value > raw_check_call_value:
+                                    print('\t--> making a change to the best-move in favor of passivity')
                             for prediction in value_predictions:
                                 action = prediction[1]
                                 value = prediction[0]
                                 if action == CHECK_HAND or action == CALL_NO_LIMIT:
                                     prediction[0] = max(value, raw_bet_value + (SMALL_BET_SIZE) / chip_bet_ratio)
             
+            # Now repeat the imitate_CFR... for call/FOLD
+            if imitate_CFR_strategy and IMITATE_CFR_FOLD_STRATEGY:
+                fold_action_difference = abs(raw_check_call_value) # Should be abstracted out for FOLD already
+                # MINIMUM_FOLD_RATE_TO_FOLD = 0.03 -- MAXIMUM_FOLD_RATE_TO_CALL = 0.97
+                if fold_rate <= MAXIMUM_FOLD_RATE_TO_CALL and fold_rate >= MINIMUM_FOLD_RATE_TO_FOLD and (CALL_NO_LIMIT in all_bets_set) and (raw_check_call_value >= MINIMUM_CALL_VALUE_TO_CALL_WITH_CFR / chip_bet_ratio):
+                    close_bet_ratio = fold_action_difference / ((pot_size + 1.0 * SMALL_BET_SIZE) / chip_bet_ratio)
+                    #print('\nConsidering imitating CFR for call/fold choice. Call: %.5f FOLD: %.5f. FOLD: %.3f\nClose bet ratio: %.3f\n' % (raw_check_call_value, raw_fold_value, fold_rate, close_bet_ratio)) 
+                    if close_bet_ratio <= CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR:
+                        if debug:
+                            print('Close_bet ratio %.3f close enough. Flip coins to call or fold.' % close_bet_ratio)
+                        if np.random.random() >= fold_rate:
+                            if debug:
+                                print('Choose passive action! C/K: %.5f' % (raw_check_call_value))
+                                if raw_check_call_value < 0.0:
+                                    print('\t--> making a change to the best-move in favor of calling')
+                            for prediction in value_predictions:
+                                action = prediction[1]
+                                value = prediction[0]
+                                if action == CALL_NO_LIMIT:
+                                    prediction[0] = max(value, 0.0 + (SMALL_BET_SIZE) / chip_bet_ratio)
+                        else:
+                            if debug:
+                                print('Choose FOLD action! C/K: %.5f' % (raw_check_call_value))
+                                if raw_check_call_value > 0.0:
+                                    print('\t--> making a change to the call-value in favor of folding')
+                            for prediction in value_predictions:
+                                action = prediction[1]
+                                value = prediction[0]
+                                if action == CALL_NO_LIMIT:
+                                    # Don't over-rule call value that's actually pretty good.
+                                    if value <= (MAXIMUM_CALL_TO_FOLD_WITH_CFR / chip_bet_ratio):
+                                        prediction[0] = min(value, 0.0 - (1.0 * SMALL_BET_SIZE) / chip_bet_ratio)
+                                    elif debug:
+                                        print('Chosen to FOLD by CFR, but cant overrule call value %.4f > %.4f' % (value,  (MAXIMUM_CALL_TO_FOLD_WITH_CFR / chip_bet_ratio)))
 
 
             # B. All bet sizes, corresponding to bet sizes array
@@ -1048,23 +1118,30 @@ class TripleDrawAIPlayer():
             # Attempt crude value-at-risk adjustment. [1.0 if negative value]
             value_at_risk_factor = [np.sqrt(pot_size + min_bet)/np.sqrt(value + pot_size) for value in bet_sizes_vector]
             value_at_risk_factor = [(factor if value >= 0 else 1.0) for (factor, value) in zip(value_at_risk_factor, bet_sizes_values)]
-            if debug:
-                print('VARisk factors\t%s' % value_at_risk_factor)
+            #if debug:
+            #    print('VARisk factors\t%s' % value_at_risk_factor)
             bet_sizes_values = np.multiply(bet_sizes_values, value_at_risk_factor)
-            if debug:
-                print('bet values (for buckets)\t%s' %  bet_sizes_values)
+            #if debug:
+            #    print('bet values (for buckets)\t%s' %  bet_sizes_values)
 
             # E. Now... try to map gaussian mixture distribution from the data
             # F. Choose a bet size... from the Gaussian mixture.
             # G. [Option to adjust risk-adjusted model?] Ok to bet big... but bias against large bets.
             max_value_index = np.argmax(bet_sizes_values)
             best_bet_size = bet_sizes_vector[max_value_index]
-            if debug:
-                print('best bet: %s' % best_bet_size)
+            #if debug:
+            #    print('best bet: %s' % best_bet_size)
             recommended_bet_size = best_bet_size
             # --> bounds checking to make sure nothing crazy
 
-
+            
+            # Do we (instead) choose bet size from the smoothing of these values?
+            # TODO: Skip this (slightly) expensive step, if we are not making a bet/raise.
+            if BET_SIZE_FROM_SMOOTHED:
+                best_bet_size, value = best_bet_with_smoothing(bets = bet_sizes_vector, values = bet_sizes_values)
+                if debug:
+                    print('\tsmoothing recommends:\tbet: %d\tvalue: %.2f' % (best_bet_size, value))
+                recommended_bet_size = np.clip(best_bet_size, min_bet, stack_size)
 
 
             # Use this space to fix bad logic in the values. Things that could not *possibly* be true.
