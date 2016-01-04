@@ -141,6 +141,8 @@ SHOW_MACHINE_DEBUG_AGAINST_HUMAN = False # True, to see machine logic when playi
 USE_MIXED_MODEL_WHEN_AVAILABLE = True # When possible, including against human, use 2 or 3 models, and choose randomly which one decides actions.
 RETRY_FOLD_ACTION = True # If we get a model that says fold preflop... try again. But just once. We should avoid raise/fold pre
 ADJUST_VALUES_TO_FIX_IMPOSSIBILITY = True # Do we fix impossile values? Like check < 0.0, or calling on river > pot + bet
+# TODO: Cap adjustment from RAW_FOLD_VALUE? Or apply it with a discount...
+ADJUST_TO_RAW_FOLD_VALUE = True # Subtract out "fold value." Can get rather positive, on a good board, and rather negative preflop, and other times.
 
 # Turn this on... only if we are not vulnerable to super-aggro patting machine. In the end... should be off. Gotta pay off sometimes.
 USE_NEGATIVE_RIVER_CALL_VALUE = False #  True # Prevent action% model, when river negative value to call? (still allowed to tweak values and call)
@@ -924,6 +926,24 @@ class TripleDrawAIPlayer():
                 elif action == CHECK_HAND or action == CALL_NO_LIMIT:
                     raw_check_call_value = value
 
+            # Since we do comparisons, (might be) better to subract the raw fold from CALL and RAISE.
+            # NOTE: Especially with CFR model, we tend to see significant +EV for fold, in big-board cases
+            # NOTE: While preflop, significantly -EV for fold. 
+            # Obviously FOLD === 0.0, and we reset that. So need to adjust the others.
+            # TODO: We could ajust the FOLD at a discount, or cap it, etc.
+            if ADJUST_TO_RAW_FOLD_VALUE and raw_fold_value != 0.0:
+                if debug and abs(raw_fold_value) >= SMALL_BET_SIZE / chip_bet_ratio:
+                    print('--> non-trivial fold value %.5f, to be added to checks and calls' % raw_fold_value)
+                for prediction in value_predictions:
+                    action = prediction[1]
+                    value = prediction[0]
+                    if action in ALL_BETS_SET:
+                        prediction[0] -= raw_fold_value
+                        raw_bet_value = prediction[0]
+                    elif action == CHECK_HAND or action == CALL_NO_LIMIT:
+                        prediction[0] -= raw_fold_value
+                        raw_check_call_value = prediction[0]
+
             # A. Remove the "bet" option completely, if aggro_rate is very low (near 0%). 
             # TODO: Add logic for epsilon...
             if USE_AGGRO_CUTOFFS:
@@ -962,7 +982,7 @@ class TripleDrawAIPlayer():
                         minimum_bet_value = max(0.0, (0.5 * SMALL_BET_SIZE / chip_bet_ratio)) # 1/2 of bet, or $50
                         minimum_bet_value = max(minimum_bet_value, 0.05 * (pot_size) / chip_bet_ratio) # or 5% of the pot
                         # Add "raw_bet_value" if FOLD  > 0.0... up to 10% of the current pot (minus a min bet)
-                        minimum_bet_value = min(minimum_bet_value + max(raw_fold_value, 0.0), 0.10 * (pot_size - SMALL_BET_SIZE) / chip_bet_ratio + 0.20 * max(raw_fold_value, 0.0))
+                        minimum_bet_value = min(minimum_bet_value, 0.10 * (pot_size - SMALL_BET_SIZE) / chip_bet_ratio)
                         # Avoid folding for very small bets, if still slightly +EV
                         minimum_bet_value = min(minimum_bet_value, 0.3 * bet_faced / chip_bet_ratio) 
                         # Final sanity check... don't block call values above a certain threshold.
@@ -1780,9 +1800,9 @@ def game_round(round, cashier, player_button=None, player_blind=None,
 
     
     # Set BB's hand for testing.    
-    #deck.set_card(Card(suit=DIAMOND, value=King), pos=0)
-    #deck.set_card(Card(suit=SPADE, value=King), pos=1)
-    #deck.set_card(Card(suit=DIAMOND, value=King), pos=2) # set it twice. Why? pop/push problem if Ax at position 0 or 1!
+    #deck.set_card(Card(suit=SPADE, value=Jack), pos=2)
+    #deck.set_card(Card(suit=SPADE, value=Ten), pos=3)
+    #deck.set_card(Card(suit=SPADE, value=Jack), pos=2) # set it twice. Why? pop/push problem if Ax at position 0 or 1!
 
     """
     # NOTE: This is the spot to insert a deck setup, if needed for testing
