@@ -159,7 +159,7 @@ if FORMAT == 'nlh':
     # NOTE: This compares to model's internal value.
     # NOTE: Can be super-conservative and set this to 0.80, etc. But need to give a value
     # TODO: Different value for preflop? Or for small pots in general??
-    NEVERFOLD_ALLIN_VALUE_ESTIMATE = 0.485 # 0.510 # Use larger value as we move into production. Good to keep 48-49% for self-play!
+    NEVERFOLD_ALLIN_VALUE_ESTIMATE = 0.505 # 0.485 # 0.510 # Use larger value as we move into production. Good to keep 48-49% for self-play!
 
 # For NLH model trained on good data, consider bet/nonbet choice, based on "aggressive%" learned from data (similar context)
 USE_AGGRO_CUTOFFS = True # Do we prevent NL model from betting, even if high +EV, but learned "aggressive%" basically zero
@@ -191,6 +191,30 @@ MINIMUM_CALL_VALUE_TO_CALL_WITH_CFR = -1.0 * MAXIMUM_CALL_TO_FOLD_WITH_CFR # The
 # For now, just take best value. Could (easily) make it a little stochastic.
 # NOTE: Order of inputs matters (for smoothing), even if multiple x == same. Why? min-bet has meaning. Also, easier.
 BET_SIZE_FROM_SMOOTHED = True
+
+# Given a check/bet number in range [not 0.0 or 1.0], do we need to add in a bias?
+# Why? Experimentally, the system imitates CFR, but plays too passively. 
+# Read 160000 lines
+# ['bet', 11567, '15.6%']
+# ['raise', 9700, '13.1%']
+# ['check', 30047, '40.6%']
+# ['call', 13712, '18.5%']
+# ['fold', 8974, '12.1%']
+# 
+# compare to CFR:
+# Read 1700000 lines
+# ['bet', 125962, '17.0%']
+# ['raise', 123090, '16.6%']
+# ['check', 243369, '32.9%']
+# ['call', 136800, '18.5%']
+# ['fold', 110779, '15.0%']
+# 
+# The biggest difference is [40.6% check, 15.6% bet] vs [32.9% check, 17.0% bet]
+# The CFR is also significantly more likely to raise, when bet into.
+#
+# Solution: twist aggro% from model, by X%. Now obviously it's not (aggro + X) --> aggro.
+# So largest difference is applied at the 50/50 mark. Take that +20%: 50% -> 60% aggressive.
+AGGRESSION_PERCENTAGE_TWIST_FACTOR = 0.25
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponen), at this point?
 # TODO: Consider action so far (# of bets made this round)
@@ -902,7 +926,7 @@ class TripleDrawAIPlayer():
             max_bet = 0.0
             # Bet faced is the previous bet, if any. Minimum raise requires us to bet (bet_faced + minimum raise amount)
             if bets_sequence:
-                bet_faced = max(bets_sequence[-1], SMALL_BET_SIZE)
+                bet_faced = max(bets_sequence[-1], 0.0)
                 raise_amount = bet_faced
                 if len(bets_sequence) >= 2:
                     raise_amount = max(bets_sequence[-1] - bets_sequence[-2], SMALL_BET_SIZE)
@@ -910,6 +934,9 @@ class TripleDrawAIPlayer():
             min_bet = max(min_bet, SMALL_BET_SIZE)
             max_bet = chip_stack
             min_bet = min(min_bet, max_bet)
+
+            # With min bets, where are we going wrong?
+            print('min_bet: %d\tbet_faced: %d\traise_amount: %d\tmax_bet:%d\t(sequence %s)' % (min_bet, bet_faced, raise_amount, max_bet, bets_sequence))
 
             # Since model is trained on high-quality ACPC games, we also learn "aggro%."
             # How often does a good player bet or raise here?
@@ -1040,14 +1067,26 @@ class TripleDrawAIPlayer():
             #bet_aggression_strategy = IMITATE_CFR_AGGRO_STRATEGY # TODO: Assign this per-hand, or some % of the time.
             imitate_CFR_strategy = self.imitate_CFR_betting
             if imitate_CFR_strategy and IMITATE_CFR_AGGRO_STRATEGY:
+                # Use a "twist" to bias the model in favor of more aggressive actions.
+                if AGGRESSION_PERCENTAGE_TWIST_FACTOR and aggro_rate < 1.0 and aggro_rate > 0.0:
+                    aggro_rate_twist = min(aggro_rate, abs(aggro_rate - 1.0)) * AGGRESSION_PERCENTAGE_TWIST_FACTOR
+                    if debug:
+                        print('\ttwisting aggro_rate:\t%.4f -> %.4f (%.3f factor)' % (aggro_rate, aggro_rate + aggro_rate_twist, AGGRESSION_PERCENTAGE_TWIST_FACTOR))
+                    aggro_rate += aggro_rate_twist
+
                 agressive_action_difference = abs(raw_bet_value - raw_check_call_value)
                 if aggro_rate <= MAXIMUM_AGGRO_RATE_TO_NOT_BET and aggro_rate >= MINIMUM_AGGRO_RATE_TO_BET and (all_bets_set.intersection(ALL_BETS_SET)) and (raw_bet_value > 0.0 or raw_check_call_value > 0.0):
-                    close_bet_ratio = agressive_action_difference / max((pot_size + 2 * SMALL_BET_SIZE) / chip_bet_ratio, raw_bet_value)
+                    close_bet_ratio = (agressive_action_difference - ( 0.5 * SMALL_BET_SIZE) / chip_bet_ratio) / max((pot_size + 2.0 * SMALL_BET_SIZE) / chip_bet_ratio, raw_bet_value)
                     #print('\nConsidering imitating CFR for active/passive choice. B/R: %.5f C/K: %.5f. Aggro: %.3f\nClose bet ratio: %.3f\n' % (raw_bet_value, raw_check_call_value, aggro_rate, close_bet_ratio)) 
-                    if close_bet_ratio <= CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR:
+                    if close_bet_ratio > CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR:
                         if debug:
-                            print('Close_bet ratio %.3f close enough. Flip coins to aggro or not.' % close_bet_ratio)
-                        if np.random.random() <= aggro_rate:
+                            print('Close_bet ratio %.3f too *wide*. Take highest value play' % close_bet_ratio)
+                    else:
+                        # NOTE: Dumb, but if paranoid, see the coin.
+                        coin = np.random.random()
+                        if debug:
+                            print('Close_bet ratio %.3f close enough. Flip coin %.4f to aggro or not.' % (close_bet_ratio, coin))
+                        if coin <= aggro_rate:
                             if debug:
                                 print('Choose aggressive action! B/R: %.5f' % (raw_bet_value))
                                 if raw_bet_value < raw_check_call_value:
@@ -1074,12 +1113,17 @@ class TripleDrawAIPlayer():
                 fold_action_difference = abs(raw_check_call_value) # Should be abstracted out for FOLD already
                 # MINIMUM_FOLD_RATE_TO_FOLD = 0.03 -- MAXIMUM_FOLD_RATE_TO_CALL = 0.97
                 if fold_rate <= MAXIMUM_FOLD_RATE_TO_CALL and fold_rate >= MINIMUM_FOLD_RATE_TO_FOLD and (CALL_NO_LIMIT in all_bets_set) and (raw_check_call_value >= MINIMUM_CALL_VALUE_TO_CALL_WITH_CFR / chip_bet_ratio):
-                    close_bet_ratio = fold_action_difference / ((pot_size + 1.0 * SMALL_BET_SIZE) / chip_bet_ratio)
+                    close_bet_ratio = (fold_action_difference - ( 0.5 * SMALL_BET_SIZE) / chip_bet_ratio) / ((pot_size + 2.0 * SMALL_BET_SIZE) / chip_bet_ratio)
                     #print('\nConsidering imitating CFR for call/fold choice. Call: %.5f FOLD: %.5f. FOLD: %.3f\nClose bet ratio: %.3f\n' % (raw_check_call_value, raw_fold_value, fold_rate, close_bet_ratio)) 
-                    if close_bet_ratio <= CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR:
+                    if close_bet_ratio > CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR:
                         if debug:
-                            print('Close_bet ratio %.3f close enough. Flip coins to call or fold.' % close_bet_ratio)
-                        if np.random.random() >= fold_rate:
+                            print('Close_bet ratio %.3f too *wide*. Take highest value play' % close_bet_ratio)
+                    else:
+                        # NOTE: Dumb, but if paranoid, see the coin.
+                        coin = np.random.random()
+                        if debug:
+                            print('Close_bet ratio %.3f close enough. Flip coin %.4f to call or fold.' % (close_bet_ratio, coin))
+                        if coin >= fold_rate:
                             if debug:
                                 print('Choose passive action! C/K: %.5f' % (raw_check_call_value))
                                 if raw_check_call_value < 0.0:
@@ -1140,8 +1184,10 @@ class TripleDrawAIPlayer():
             # Do we (instead) choose bet size from the smoothing of these values?
             # TODO: Skip this (slightly) expensive step, if we are not making a bet/raise.
             if BET_SIZE_FROM_SMOOTHED:
+                # Internal model parameter. Estimate of own odds to win allin vs opponent, given the action.
+                allin_vs_oppn = bets_vector[ALLIN_VS_OPPONENT]
                 best_bet_size, value = best_bet_with_smoothing(bets = bet_sizes_vector, values = bet_sizes_values,
-                                                               min_bet = min_bet, pot_size = pot_size)
+                                                               min_bet = min_bet, pot_size = pot_size, allin_win = allin_vs_oppn)
                 if debug:
                     print('\tsmoothing recommends:\tbet: %d\tvalue: %.2f' % (best_bet_size, value))
                 recommended_bet_size = np.clip(best_bet_size, min_bet, stack_size)
