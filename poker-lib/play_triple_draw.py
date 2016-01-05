@@ -1115,6 +1115,7 @@ class TripleDrawAIPlayer():
             if debug:
                 print('bet values (for buckets)\t%s' %  bet_sizes_values)
             
+            """
             # Attempt crude value-at-risk adjustment. [1.0 if negative value]
             value_at_risk_factor = [np.sqrt(pot_size + min_bet)/np.sqrt(value + pot_size) for value in bet_sizes_vector]
             value_at_risk_factor = [(factor if value >= 0 else 1.0) for (factor, value) in zip(value_at_risk_factor, bet_sizes_values)]
@@ -1127,6 +1128,7 @@ class TripleDrawAIPlayer():
             # E. Now... try to map gaussian mixture distribution from the data
             # F. Choose a bet size... from the Gaussian mixture.
             # G. [Option to adjust risk-adjusted model?] Ok to bet big... but bias against large bets.
+            """
             max_value_index = np.argmax(bet_sizes_values)
             best_bet_size = bet_sizes_vector[max_value_index]
             #if debug:
@@ -1138,7 +1140,8 @@ class TripleDrawAIPlayer():
             # Do we (instead) choose bet size from the smoothing of these values?
             # TODO: Skip this (slightly) expensive step, if we are not making a bet/raise.
             if BET_SIZE_FROM_SMOOTHED:
-                best_bet_size, value = best_bet_with_smoothing(bets = bet_sizes_vector, values = bet_sizes_values)
+                best_bet_size, value = best_bet_with_smoothing(bets = bet_sizes_vector, values = bet_sizes_values,
+                                                               min_bet = min_bet, pot_size = pot_size)
                 if debug:
                     print('\tsmoothing recommends:\tbet: %d\tvalue: %.2f' % (best_bet_size, value))
                 recommended_bet_size = np.clip(best_bet_size, min_bet, stack_size)

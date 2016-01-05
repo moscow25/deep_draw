@@ -94,10 +94,27 @@ def sample_bets_range(pot_size, min_bet, max_bet):
 # NOTE: Order matters. Since bet_size == $200 in position[0] is not quite the same output as bet_size == $200 in position[3]
 # TODO: Create a stochastic version, but permuting outputs randomly, and re-fitting.
 # Code example from: http://stackoverflow.com/questions/15178146/line-smoothing-algorithm-in-python
-def best_bet_with_smoothing(bets, values, debug = False):
+def best_bet_with_smoothing(bets, values, min_bet = 0.0, pot_size = 0.0, risk_power = 0.25, debug = True):
     # bets_data
     x = bets
     y = values
+
+    # Estimate min_bet and pot_size if not provided (should be given)
+    if not min_bet:
+        min_bet = bets[0]
+    if not pot_size:
+        max_bet = bets[-1]
+        chips_bet = BIG_BET_FULL_STACK - max_bet
+        pot_size = max(2 * chips_bet, 2 * min_bet)
+
+    # If we're using a risk factor, divide (positive) values by a factor of the bet_size.    
+    if risk_power:
+        value_at_risk_factor = [((pot_size + min_bet)/(value + pot_size))**risk_power for value in bets]
+        value_at_risk_factor = np.array([(factor if value >= 0 else 1.0/factor) for (factor, value) in zip(value_at_risk_factor, values)])
+        if debug:
+            print(value_at_risk_factor)
+        values = np.multiply(values, value_at_risk_factor)
+        y = values
 
     t = np.linspace(0, 1, len(x))
     t2 = np.linspace(0, 1, 100) # 100 points, for which we interpolate
