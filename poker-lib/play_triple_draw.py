@@ -183,7 +183,9 @@ CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR = 0.3 # pretty liberal ratio, in terms of pot
 USE_FOLD_PERCENTAGE = True
 MINIMUM_FOLD_RATE_TO_FOLD = 0.03
 MAXIMUM_FOLD_RATE_TO_CALL = 1.0 - MINIMUM_FOLD_RATE_TO_FOLD
-MAXIMUM_CALL_TO_FOLD_WITH_CFR = 300.0 # The *best* hand we'd ever fold, based on CFR strategy?
+# The *best* hand we'd ever fold, based on CFR strategy?
+# TODO: Some sort of percentage cutoff?? What if 2k value, but facing 10k bet? 
+MAXIMUM_CALL_TO_FOLD_WITH_CFR = 2 * 300.0 
 MINIMUM_CALL_VALUE_TO_CALL_WITH_CFR = -1.0 * MAXIMUM_CALL_TO_FOLD_WITH_CFR # The *worst* had we'll ever call, based on CFR strategy?
 
 # Do we choose bet sizing from smoothed bet-values?
@@ -214,7 +216,7 @@ BET_SIZE_FROM_SMOOTHED = True
 #
 # Solution: twist aggro% from model, by X%. Now obviously it's not (aggro + X) --> aggro.
 # So largest difference is applied at the 50/50 mark. Take that +20%: 50% -> 60% aggressive.
-AGGRESSION_PERCENTAGE_TWIST_FACTOR = 0.25
+AGGRESSION_PERCENTAGE_TWIST_FACTOR = 0.30
 
 # From experiments & guesses... what contitutes an 'average hand' (for our opponen), at this point?
 # TODO: Consider action so far (# of bets made this round)
