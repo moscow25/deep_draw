@@ -11,4 +11,4 @@ export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
 
 # Python NLH player
 # TODO: Take localhost & port from the command line
-python nlh_acpc_player.py --address=$1 --port=$2 --holdem_model=$HE_MODEL --CNN_model=$CNN_MODEL --CNN_old_model=$CNN_OLD_MODEL
+python nlh_acpc_player.py --address=$1 --port=$2 --holdem_model=$HE_MODEL --CNN_model=$CNN_MODEL
