@@ -95,7 +95,7 @@ def sample_bets_range(pot_size, min_bet, max_bet):
 # TODO: Create a stochastic version, but permuting outputs randomly, and re-fitting.
 # Code example from: http://stackoverflow.com/questions/15178146/line-smoothing-algorithm-in-python
 def best_bet_with_smoothing(bets, values, min_bet = 0.0, pot_size = 0.0, allin_win = 0.0,
-                            risk_power = 0.33, max_bet_pot_factor = 4.0, debug = True):
+                            risk_power = 0.5, max_bet_pot_factor = 4.0, debug = True):
     # bets_data
     x = bets
     y = values
