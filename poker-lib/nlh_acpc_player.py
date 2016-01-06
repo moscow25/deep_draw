@@ -102,7 +102,7 @@ def reformat_bets_string(bets_string):
 
     # Do we end with a '/'?
     if bets_string and bets_string[-1] == '/':
-        bets_string_reformat += '/'
+        #bets_string_reformat += '/'
         previous_round_bet = bet_size_progression[-1]
         bet_progression_this_round = []
 
@@ -369,7 +369,7 @@ while 1:
         if action == 'f':
             action_enums.append(FOLD_HAND)
         elif action == 'r' and not turn:
-            if ('f' not in set(actions)) and not (rounds_left == 3 and bets[-1] == '0'):
+            if ('f' not in set(actions)) and not (rounds_left == 3 and (bets[-1] == '0' or bets[-1] == 'c')):
                 action_enums.append(BET_NO_LIMIT)
             else:
                 action_enums.append(RAISE_NO_LIMIT)
