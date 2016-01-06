@@ -98,7 +98,16 @@ def reformat_bets_string(bets_string):
                 bet_size_progression.append(int(bet_amount))
                 
                 # bets made this round...
-                bet_progression_this_round.append(bet_amount_this_street)
+                # NOTE: Very tricky. We expect this to be the order of bet sizes made. 
+                # So "b200" prelop would be [100, 50, 150] and then "b200b500" continues [100, 50, 150, 400]
+                #already_bet_this_street = 0
+                if len(bet_progression_this_round) == 2 and bet_progression_this_round[0:2] == [100, 50]:
+                    already_bet_this_street = bet_progression_this_round[1] # $50 small blind
+                elif len(bet_progression_this_round) >=2:
+                    already_bet_this_street = bet_progression_this_round[-2] # two bets ago
+                else:
+                    already_bet_this_street = 0
+                bet_progression_this_round.append(bet_amount_this_street - already_bet_this_street)
 
     # Do we end with a '/'?
     if bets_string and bets_string[-1] == '/':
