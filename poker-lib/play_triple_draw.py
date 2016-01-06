@@ -34,6 +34,11 @@ from triple_draw_poker_full_output import expand_parameters_input_to_match # exp
 
 print('parsing command line args %s' % sys.argv)
 parser = argparse.ArgumentParser(description='Play heads-up triple draw against a convolutional network. Or see two networks battle it out.')
+# ---- Added for benefit of ACPC server ------
+# To connect with the server!
+parser.add_argument('-address', '--address', default='localhost', help='ACPC server/dealer address')
+parser.add_argument('-port', '--port', default='48777', help='ACPC server/dealer PORT')
+# ------------------------------------------------------------------------------------
 parser.add_argument('-draw_model', '--draw_model', default=None, help='neural net model for draws, or simulate betting if no bet model') # draws, from 32-length array
 parser.add_argument('-holdem_model', '--holdem_model', default=None, help='neural net model for Holdem hands, with first value 0-1.0 value vs random hand, other values the odds of making specific hand types. Baseline value for any valid hand and flop, turn or river')
 parser.add_argument('-output', '--output', help='output CSV') # CSV output file, in append mode.
@@ -787,7 +792,11 @@ class TripleDrawAIPlayer():
             bets_string = ''
             #print('actions_this_round: |%s|' % actions_this_round)
             if FORMAT == 'nlh':
-                bets_string = encode_big_bets_string(actions_this_round)
+                print('encoding NLH actions_this_round: |%s|' % actions_this_round)
+                if actions_this_round and isinstance(actions_this_round, basestring):
+                    bets_string = actions_this_round
+                else:
+                    bets_string = encode_big_bets_string(actions_this_round)
             elif actions_this_round and isinstance(actions_this_round, basestring):
                 print('detected actions_this_round is string: %s' % actions_this_round)
                 for action in actions_this_round:
@@ -801,16 +810,6 @@ class TripleDrawAIPlayer():
                 print(bets_string)
             else:
                 bets_string = encode_limit_bets_string(actions_this_round)
-                """
-                for action in actions_this_round:
-                    if action.type in ALL_BETS_SET:
-                        bets_string += '1'
-                    elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
-                        bets_string += '0'
-                    else:
-                        # Don't encode non-bets
-                        continue
-                        """
             #print('bets_string |%s|' % bets_string)
 
             # Repeat the same for 'whole game' bets string
@@ -819,7 +818,11 @@ class TripleDrawAIPlayer():
             all_rounds_bets_string = ''
             #print('actions_whole_hand %s' % actions_whole_hand)
             if FORMAT == 'nlh':
-                all_rounds_bets_string = encode_big_bets_string(actions_whole_hand)
+                print('encoding NLH actions_whole_hand: |%s|' % actions_whole_hand)
+                if actions_whole_hand and isinstance(actions_whole_hand, basestring):
+                    all_rounds_bets_string = actions_whole_hand
+                else:
+                    all_rounds_bets_string = encode_big_bets_string(actions_whole_hand)
             elif actions_whole_hand and isinstance(actions_whole_hand, basestring):
                 print('detected actions_whole_hand is string: %s' % actions_whole_hand)
                 for action in actions_whole_hand:
@@ -833,16 +836,6 @@ class TripleDrawAIPlayer():
                 print(all_rounds_bets_string)
             else:
                 all_rounds_bets_string = encode_limit_bets_string(actions_whole_hand)
-                """
-                for action in actions_whole_hand:
-                    if action.type in ALL_BETS_SET:
-                        all_rounds_bets_string += '1'
-                    elif action.type == CHECK_HAND or action.type in ALL_CALLS_SET:
-                        all_rounds_bets_string += '0'
-                    else:
-                        # Don't encode non-bets
-                        continue
-                        """
             #print('all_rounds_bets_string |%s|' % all_rounds_bets_string)
             
             # Now hand context
@@ -850,6 +843,7 @@ class TripleDrawAIPlayer():
                 if self.is_dense_model:
                     print('~ DNN model ~')
                 if FORMAT == 'holdem' or FORMAT == 'nlh':
+                    # print('bets this street: %s' % bets_this_street)
                     print('context %s' % ([cards_string, flop_string, turn_string, river_string, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))
                 else:
                     print('context %s' % ([hand_string_dealt, num_draws_left, has_button, pot_size, bets_string, cards_kept, opponent_cards_kept,  all_rounds_bets_string]))

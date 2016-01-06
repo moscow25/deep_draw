@@ -379,7 +379,7 @@ def big_bet_get_previous_round_string(all_round_string, current_round_bets_strin
     # print('previous round bets: %s' % bets)
     if bets and current_round_bets_string:
         # first round of betting should be current bets
-        assert bets[0] == current_round_bets_string, 'in bets history, current bets (%s) not match full history (%s)' % (current_round_bets_string, all_round_string)
+        assert bets[0] == current_round_bets_string, 'in bets history, current bets |%s| (%s) not match full history (%s)' % (bets[0], current_round_bets_string, all_round_string)
         bets = bets[1:]
     bets += ['', '', '']
 
