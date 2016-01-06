@@ -792,7 +792,7 @@ class TripleDrawAIPlayer():
             bets_string = ''
             #print('actions_this_round: |%s|' % actions_this_round)
             if FORMAT == 'nlh':
-                print('encoding NLH actions_this_round: |%s|' % actions_this_round)
+                #print('encoding NLH actions_this_round: |%s|' % actions_this_round)
                 if actions_this_round and isinstance(actions_this_round, basestring):
                     bets_string = actions_this_round
                 else:
@@ -818,7 +818,7 @@ class TripleDrawAIPlayer():
             all_rounds_bets_string = ''
             #print('actions_whole_hand %s' % actions_whole_hand)
             if FORMAT == 'nlh':
-                print('encoding NLH actions_whole_hand: |%s|' % actions_whole_hand)
+                #print('encoding NLH actions_whole_hand: |%s|' % actions_whole_hand)
                 if actions_whole_hand and isinstance(actions_whole_hand, basestring):
                     all_rounds_bets_string = actions_whole_hand
                 else:
