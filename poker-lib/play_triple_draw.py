@@ -176,7 +176,7 @@ MAXIMUM_MIN_CALL_CHIP_VALUE = 300.0
 # Do we ask the player to make highest-value play, or to follow CFR as close as possible?
 IMITATE_CFR_AGGRO_STRATEGY = True 
 IMITATE_CFR_FOLD_STRATEGY = True # Parallel adjustment, for fold vs call [if EV close, use the percentage]
-IMITATE_CFR_BETTING_PERCENTAGE = 0.95 # 0.8 # 0.7 # How often to imitate CFR, and how often to choose best-value action? (per-hand basis)
+IMITATE_CFR_BETTING_PERCENTAGE = 0.8 # 0.95 # 0.8 # 0.7 # How often to imitate CFR, and how often to choose best-value action? (per-hand basis)
 CLOSE_BET_RATIO_CUTOFF_IMITATE_CFR = 0.3 # pretty liberal ratio, in terms of pot size, to choose bet based on CFR aggro%
 
 # If we are given FOLD%... use it to
