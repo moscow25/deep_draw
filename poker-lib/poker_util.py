@@ -56,8 +56,62 @@ def hand_string_to_array(hand_string):
 
 
 #####################################################################
-## Include poker-independent math functions here, for sampling, etc
+## Include poker-independent math/Scipy functions here, for sampling, etc
 #####################################################################
+
+# Given a bet (or other value) and non-decreasing array of buckets, return [0.0-1.0] vector for each bucket.
+# Linear interpolation. Copy weight, if buckets exactly the same (via clip, etc). Only on boundaries, etc.
+def bet_to_buckets_vector(bet, buckets, debug=False):
+    bet_size = bet
+    bet_sizes_vector = np.array(buckets)
+    bet_sizes_weights = [0.0 for item in buckets]
+
+    # C. Apply closest value to bet size actually made... or whatever algorithm to split/project
+    bet_difference_vector = np.abs(bet_sizes_vector - bet_size)
+    if debug:
+        print('subtract bet %.0f:\t%s' % (bet_size, bet_difference_vector))
+    closest_bet_index = bet_difference_vector.argmin()
+    closest_bet = bet_sizes_vector[closest_bet_index]
+    if debug:
+        print('closest bet size %.0f' % (closest_bet))
+
+    # Exact match. Otherwise, spread weight linearly between closest values
+    second_closest_bet_index = closest_bet_index
+    if closest_bet == bet_size or (closest_bet_index == 0 and closest_bet > bet_size) or (closest_bet_index >= len(bet_sizes_vector) - 1 and closest_bet < bet_size):
+        if debug:
+            print('perfect match (or out of bounds)')
+        # Apply to every other value that matches.
+        for index in range(len(bet_sizes_vector)):
+            if bet_difference_vector[index] == abs(bet_size - closest_bet):
+                bet_sizes_weights[index] = 1.0
+    elif bet_size < closest_bet:
+        second_closest_bet_index = closest_bet_index - 1
+        if debug:
+            print('real bet smaller')
+    else:
+        second_closest_bet_index = closest_bet_index + 1
+        if debug:
+            print('real bet larger')
+
+    second_closest_bet = bet_sizes_vector[second_closest_bet_index]
+    if second_closest_bet_index != closest_bet_index:
+        a = abs(closest_bet - bet_size)
+        b = abs(second_closest_bet - bet_size)
+        closest_bet_weight = max(a,b)/(a+b)
+        second_closest_bet_weight = min(a,b)/(a+b)
+        bet_sizes_weights[closest_bet_index] = closest_bet_weight
+        bet_sizes_weights[second_closest_bet_index] = second_closest_bet_weight
+
+        # Don't forget to spread weight to equal edge buckets... 
+        # TODO: If small difference, would make sense to spread weight further...
+        for index in range(len(bet_sizes_vector)):
+            if bet_difference_vector[index] == (bet_size - closest_bet):
+                bet_sizes_weights[index] = closest_bet_weight
+            elif bet_difference_vector[index] == (bet_size - second_closest_bet):
+                bet_sizes_weights[index] = second_closest_bet_weight
+    
+    # Final vector, with 0.0-1.0 weights for each bucket.
+    return bet_sizes_weights
 
 # If we know the mean and stdev of our beta-distribution, can just compute & output
 # return (alpha, beta, scale, loc) so matches beta-fit [can just scale=1.0, loc = 0.0]

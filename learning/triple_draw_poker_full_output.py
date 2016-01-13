@@ -123,11 +123,11 @@ def linear_error(x, t):
 # D. special row = (sum of actions) - 1.0
 # E. special row = (value/action sum)
 
-first_five_vector = np.zeros(32)
-only_first_five_vector = np.zeros(32)
-only_first_five_with_actions_vector = np.zeros(32) # First five, and action%
-only_second_five_vector = np.zeros(32) # only draws
-only_holdem_category_vector = np.zeros(32) # only valid categories for holdem hands
+first_five_vector = np.zeros(ARRAY_OUTPUT_LENGTH)
+only_first_five_vector = np.zeros(ARRAY_OUTPUT_LENGTH)
+only_first_five_with_actions_vector = np.zeros(ARRAY_OUTPUT_LENGTH) # First five, and action%
+only_second_five_vector = np.zeros(ARRAY_OUTPUT_LENGTH) # only draws
+only_holdem_category_vector = np.zeros(ARRAY_OUTPUT_LENGTH) # only valid categories for holdem hands
 for i in ALL_ACTION_CATEGORY_SET: 
     first_five_vector[i] = 1.0
     only_first_five_vector[i] = 1.0
@@ -157,7 +157,7 @@ elif TRAINING_FORMAT == 'holdem':
 elif TRAINING_FORMAT == 'nlh_events':
     OUTPUT_CATEGORY_DEFAULT_MASK =  only_first_five_mask
 else:
-    OUTPUT_CATEGORY_DEFAULT_MASK = np.ones((32,100))
+    OUTPUT_CATEGORY_DEFAULT_MASK = np.ones((ARRAY_OUTPUT_LENGTH,100))
 
 
 # Automatically computes the correct mask, from target matrix (see what values exist for data)
@@ -204,7 +204,7 @@ def value_action_error(output_matrix, target_matrix, format = TRAINING_FORMAT):
     category_mask_results, mask_updates = theano.scan(fn=set_mask_at_row_from_target,
                                                       outputs_info=None,
                                                       sequences=[np.asarray([[index, 0] for index in range(BATCH_SIZE)] , dtype=np.int32)],
-                                                      non_sequences=[np.zeros((BATCH_SIZE,32), dtype=np.float32), target_matrix])
+                                                      non_sequences=[np.zeros((BATCH_SIZE,ARRAY_OUTPUT_LENGTH), dtype=np.float32), target_matrix])
     output_category_mask = category_mask_results.sum(axis=1)
 
     # Apply mask to values that matter.
@@ -363,7 +363,7 @@ def load_data():
         input_height=X_train.shape[2],
         input_width=X_train.shape[3],
         #input_dim=X_train.shape[1] * X_train.shape[2] * X_train.shape[3], # How much size per input?? 5x4x13 data (cards, suits, ranks)
-        output_dim=32, # output cases
+        output_dim=ARRAY_OUTPUT_LENGTH, # output cases
     )
 
 # Alternatively, compare to same input... but two fully connected layers
@@ -829,7 +829,7 @@ def create_iter_functions_full_output(dataset, output_layer,
         category_mask_results, mask_updates = theano.scan(fn=set_mask_at_row_from_target,
                                                           outputs_info=None,
                                                           sequences=[np.asarray([[index, 0] for index in range(BATCH_SIZE)] , dtype=np.int32)],
-                                                          non_sequences=[np.zeros((BATCH_SIZE,32), dtype=np.float32), z_batch])
+                                                          non_sequences=[np.zeros((BATCH_SIZE,ARRAY_OUTPUT_LENGTH), dtype=np.float32), z_batch])
         output_category_mask = category_mask_results.sum(axis=1)
 
 
@@ -1118,6 +1118,34 @@ def expand_parameters_input_to_match(all_param_values, zero_fill = False):
             print(first_layer_params.shape)
         all_param_values[0] = first_layer_params
         print(all_param_values[0].shape)
+
+    # Similarly for output (32 vs 64, etc)
+    last_layer_params = all_param_values[-2]
+    last_layer_shape = last_layer_params.shape
+    output_len = last_layer_shape[1]
+    output_layer_params = all_param_values[-1]
+    if output_len != ARRAY_OUTPUT_LENGTH:
+        print('unmatching output len %d vs expected %d' % (output_len, ARRAY_OUTPUT_LENGTH))
+        # As above, fill the units, one by one, from random row
+        # NOTE: We fill in transitions from final layer to output layer [-2], and weight for output layer [-1]
+        fill_len = ARRAY_OUTPUT_LENGTH - output_len
+        for i in range(fill_len):
+            random_row = np.random.randint(output_len)
+            params_per_output = last_layer_params[:,random_row:random_row+1]
+            param_output = output_layer_params[random_row]
+            if zero_fill:
+                params_per_output = np.zeros_like(params_per_output, dtype=TRAINING_INPUT_TYPE)
+                param_output = 0.0
+            print('adding output row...')
+            print(params_per_output.shape)
+            # Append it, to serve as noise for missing input in model
+            last_layer_params = np.concatenate((last_layer_params, params_per_output), axis = 1)
+            output_layer_params = np.concatenate((output_layer_params, [param_output]))
+            print(last_layer_params.shape)
+        all_param_values[-2] = last_layer_params
+        all_param_values[-1] = output_layer_params
+        print(all_param_values[-2].shape)
+        print(all_param_values[-1].shape)
 
 def main(num_epochs=NUM_EPOCHS, out_file=None):
     print("Loading data...")
