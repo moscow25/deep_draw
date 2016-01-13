@@ -63,7 +63,7 @@ MOMENTUM = 0.9
 
 # Do we include all data? Sure... but maybe not.
 # If we keep everything, almost 60% of data falls into "keep 2" nodes. 
-DATA_SAMPLING_KEEP_ALL = [1.0 for i in range(32)]
+DATA_SAMPLING_KEEP_ALL = [1.0 for i in range(STANDARD_OUTPUT_LENGTH)]
 # Choose 50% of "keep two cards" moves, and 50% of "keep one card" moves
 DATA_SAMPLING_REDUCE_KEEP_TWO = [1.0] + [0.5] * 5 + [0.5] * 10 + [1.0] * 10 + [1.0] * 5 + [1.0] 
 DATA_SAMPLING_REDUCE_KEEP_TWO_W_EQUIVALENCES = [0.25] + [0.10] * 5 + [0.10] * 10 + [0.50] * 10 + [0.25] * 5 + [1.0]
@@ -92,7 +92,7 @@ CARDS_INPUT_ALL_ZERO = False # True # Set true, to map xCards to x0. Why? To tra
 # hold value == [0.0, 1.0] value of keep-all-five hand.
 # Anything >= 0.5 is a really good pat hand
 # Anything <= 0.075 is a pair, straight or flush...
-SAMPLE_BY_HOLD_VALUE = True # Default == true, for all 32-length draws. As it focuses on cases that matter.
+SAMPLE_BY_HOLD_VALUE = True # Default == true, for all ARRAY_OUTPUT_LENGTH-length draws. As it focuses on cases that matter.
 
 # If we load the input arrays without refactoring... might save memory.
 TRAINING_INPUT_TYPE = theano.config.floatX # np.int32
@@ -379,7 +379,7 @@ def big_bet_get_previous_round_string(all_round_string, current_round_bets_strin
     # print('previous round bets: %s' % bets)
     if bets and current_round_bets_string:
         # first round of betting should be current bets
-        assert bets[0] == current_round_bets_string, 'in bets history, current bets (%s) not match full history (%s)' % (current_round_bets_string, all_round_string)
+        assert bets[0] == current_round_bets_string, 'in bets history, current bets |%s| (%s) not match full history (%s)' % (bets[0], current_round_bets_string, all_round_string)
         bets = bets[1:]
     bets += ['', '', '']
 
@@ -660,7 +660,7 @@ def sample_rate_for_hold_value(hold_value):
     return prob_keep
 
 # Turn each hand into an input (cards array) + output (32-line value)
-# if output_best_class==TRUE, instead outputs index 0-32 of the best value (for softmax category output)
+# if output_best_class==TRUE, instead outputs index 0-ARRAY_OUTPUT_LENGTH of the best value (for softmax category output)
 # Why? A. Easier to train B. Can re-use MNIST setup.
 def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_draws = False, include_full_hand = False, include_hand_context = False):
     #print(data_array)
@@ -703,7 +703,7 @@ def read_poker_line(data_array, csv_key_map, adjust_floats='video', include_num_
 
         assert(output_category >= 0)
 
-        output_values = [0]*32 # Hack to just return empty array.
+        output_values = [0]*ARRAY_OUTPUT_LENGTH # Hack to just return empty array.
                
     # Output all three things. Cards input, best category (0-32) and 32-row vector, of the weights
     return (cards_inputs, output_category, output_values) 
@@ -720,7 +720,7 @@ def read_holdem_poker_line(data_array, csv_key_map):
 
     # For outputs, grab holdem value keys. All values [0.0, 1.0] so ReLU good, and no need to adjust values.
     holdem_values = np.array([float(data_array[csv_key_map[holdem_value_key]]) for holdem_value_key in HOLDEM_VALUE_KEYS], dtype=TRAINING_INPUT_TYPE)
-    zeros_fill = np.zeros(32 - (2 * len(HOLDEM_VALUE_KEYS)), dtype=TRAINING_INPUT_TYPE)
+    zeros_fill = np.zeros(ARRAY_OUTPUT_LENGTH - (2 * len(HOLDEM_VALUE_KEYS)), dtype=TRAINING_INPUT_TYPE)
     # Concant twice. We want to output values at the beginning (for compatibility) and and the end (since NLH model has them there)
     output_values = np.concatenate((holdem_values, zeros_fill, holdem_values), axis = 0)
 
@@ -745,8 +745,10 @@ def read_holdem_poker_line(data_array, csv_key_map):
 # output_array --> 32-length output... but only the 'output_class' index matters. The rest are zero
 # Thus, we can train on the same model as 3-round draw decisions... resulting good initialization.
 def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_to_fit = PAD_INPUT, include_hand_context = False, 
-                          num_draw_out_position = 0, num_draw_in_position = 0, actions_this_round = '', debug=DEBUG): 
+                          num_draw_out_position = 0, num_draw_in_position = 0, actions_this_round = '', debug=DEBUG, 
+                          prev_line=None, peek_line=None): 
     if debug:
+        print('')
         print(data_array) 
 
     # If we are told which player agent made this move, skip moves from players except those whom we trust.
@@ -924,7 +926,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         #print('acceptable & useful betting action %s' % action_taken)
         bets_action = True
 
-        # Which place in the 32-vector array does this action map to?
+        # Which place in the ARRAY_OUTPUT_LENGTH-vector array does this action map to?
         output_category = category_from_event_action(action_taken)
         
         # TODO: Add option to quit early, if we only want draw actions (no bet actions)
@@ -934,7 +936,7 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         #print('draw action with %d cards kept' % len(cards_kept))
         bets_action = False
 
-        # Which place in the 32-vector array does this action map to?
+        # Which place in the ARRAY_OUTPUT_LENGTH-vector array does this action map to?
         output_category = category_from_event_action(action_taken, cards_kept = len(cards_kept))
 
         # Important case: all "pat" draws.
@@ -957,8 +959,8 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
     ###############################################
 
     # In parallel, encode the values that we observed, to train on.
-    output_mask_classes = np.zeros(32)
-    output_array = np.zeros(32)
+    output_mask_classes = np.zeros(ARRAY_OUTPUT_LENGTH)
+    output_array = np.zeros(ARRAY_OUTPUT_LENGTH)
 
     # The most important observed number: "margin_result" == win/loss from this bet.
     # *includes results of future bets*
@@ -1060,51 +1062,8 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
     bet_sizes_vector = np.clip([pot_size * percent for percent in NL_BET_BUCKET_SIZES], min_bet, stack_size)
     if debug:
         print('bet buckets (pot %.0f)\t%s' % (pot_size, bet_sizes_vector))
+    bet_sizes_weights = bet_to_buckets_vector(bet=bet_size, buckets=bet_sizes_vector, debug=debug)
 
-    # C. Apply closest value to bet size actually made... or whatever algorithm to split/project
-    bet_difference_vector = np.abs(bet_sizes_vector - bet_size)
-    if debug:
-        print('subtract bet %.0f:\t%s' % (bet_size, bet_difference_vector))
-    closest_bet_index = bet_difference_vector.argmin()
-    closest_bet = bet_sizes_vector[closest_bet_index]
-    if debug:
-        print('closest bet size %.0f' % (closest_bet))
-
-    # Exact match. Otherwise, spread weight linearly between closest values
-    second_closest_bet_index = closest_bet_index
-    if closest_bet == bet_size or closest_bet_index == 0 or closest_bet_index >= len(bet_sizes_vector) - 1 :
-        if debug:
-            print('perfect match (or out of bounds)')
-        # Apply to every other value that matches.
-        for index in range(len(bet_sizes_vector)):
-            if bet_difference_vector[index] == abs(bet_size - closest_bet):
-                bet_sizes_weights[index] = 1.0
-    elif bet_size < closest_bet:
-        second_closest_bet_index = closest_bet_index - 1
-        if debug:
-            print('real bet smaller')
-    else:
-        second_closest_bet_index = closest_bet_index + 1
-        if debug:
-            print('real bet larger')
-
-    second_closest_bet = bet_sizes_vector[second_closest_bet_index]
-    if second_closest_bet_index != closest_bet_index:
-        a = abs(closest_bet - bet_size)
-        b = abs(second_closest_bet - bet_size)
-        closest_bet_weight = max(a,b)/(a+b)
-        second_closest_bet_weight = min(a,b)/(a+b)
-        bet_sizes_weights[closest_bet_index] = closest_bet_weight
-        bet_sizes_weights[second_closest_bet_index] = second_closest_bet_weight
-
-        # Don't forget to spread weight to equal edge buckets... 
-        # TODO: If small difference, would make sense to spread weight further...
-        for index in range(len(bet_sizes_vector)):
-            if bet_difference_vector[index] == (bet_size - closest_bet):
-                bet_sizes_weights[index] = closest_bet_weight
-            elif bet_difference_vector[index] == (bet_size - second_closest_bet):
-                bet_sizes_weights[index] = second_closest_bet_weight
-        
     # The weights that we will encode... 
     if debug:
         print(bet_sizes_weights)
@@ -1126,6 +1085,15 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
                 output_mask_classes[MIN_BET_CATEGORY + index] = TINY_WEIGHT_UNKNOWN_BET_SIZE
                 output_array[MIN_BET_CATEGORY + index] = regressed_margin_value
 
+        # Also, encode bet-size bucket. In other words, just 0.0-1.0 odds that bet of this bucket was made
+        # NOTE: If no bet was made, bet-size is not zero... but unknown. 
+        if debug:
+            print('Encoding bet-size buckets (was bet made?): %s' % bet_sizes_weights)
+        for index in range(len(bet_sizes_weights)):
+            # NOTE: We learn values for *all* bet sizes, including 0.0 value for bets not made (as long as we are betting)
+            weight = bet_sizes_weights[index]
+            output_mask_classes[MIN_BET_CATEGORY_PERCENT + index] = MONTE_CARLO_RESULTS_SCALE
+            output_array[MIN_BET_CATEGORY_PERCENT + index] = weight
     #else:
     #    print('Action taken is not a bet. So move on...')    
 
@@ -1152,12 +1120,68 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         monte_carlo_values[HAND_CATEGORIES_OUTPUT_OFFSET + high_hand_categories_index[cat]] = val
     if debug:
         print(monte_carlo_values)
+
+    # To predict/debug opponent's hand in 2D, also learn buckets for our value vs opponent.
+    # Not just the average, but how distributed is, say "0.5 win" along 0.0-1.0 axis?
+    # NOTE: Same logic as for bet-size buckets.
+    allin_vs_oppn_buckets = ALLIN_VS_OPPONENT_BUCKET_SIZES # [0%, ... 50% ... 100%]
+    allin_vs_oppn_weights = bet_to_buckets_vector(bet=allin_vs_oppn, buckets=allin_vs_oppn_buckets, debug=debug)
+    if debug:
+        print('--> allin value (%.4f) buckets: %s' % (allin_vs_oppn, allin_vs_oppn_weights))
+    for index in range(len(allin_vs_oppn_weights)):
+        # NOTE: Allin value, and allin value bucket, for every situation.
+        weight = allin_vs_oppn_weights[index]
+        output_mask_classes[ALLIN_VS_OPPONENT_000_CATEGORY + index] = EXTENDED_OUTPUT_RESULTS_SCALE 
+        output_array[ALLIN_VS_OPPONENT_000_CATEGORY + index] = weight
     
+    ######################################################################
+    ## If available, encode information about the opponent's hand. {especially, category buckets}
+    ## To this end, we are passed previous, and next CSV line. 
+    #######################################################################    
+    # A. Check lines for legal match, strting with prev_line.
+    # - parses, same hand (and same round), different player (cards don't match)
+    # B. Look for hand categories information. Everything else is symmetrical.
+    # C. Handle missing input
+    oppn_value_categories = None
+    #print('prev and next oppn categories: %s' % [prev_line, peek_line])
+    for oppn_line in [prev_line, peek_line]:
+        try:
+            assert len(oppn_line) == len(data_array)
+            oppn_cards = oppn_line[csv_key_map['hand']]
+            assert oppn_cards != cards_string
+            round = data_array[csv_key_map['draws_left']]
+            oppn_round = oppn_line[csv_key_map['draws_left']]
+            assert round == oppn_round
+            values = ast.literal_eval(oppn_line[csv_key_map['allin_categories_vector']])
+            if debug:
+                print(values)
+                print('oppn odds for flush %.3f' % values[high_hand_categories_index[FLUSH]])
+            assert len(values) == len(HIGH_HAND_CATEGORIES)
+            oppn_value_categories = values
+            if debug:
+                print('Found useful oppn hand buckets:\n %s' % oppn_value_categories)
+            break
+        except AssertionError:
+            if debug:
+                print('ungood prev/next line for oppn values:\n%s' % oppn_line)
+
+    if oppn_value_categories:
+        assert len(oppn_value_categories) == len(HIGH_HAND_CATEGORIES)
+        for cat, val in zip(HIGH_HAND_CATEGORIES, oppn_value_categories):
+            # NOTE: category is FLUSH or ONE_PAIR. We want index of this category.
+            monte_carlo_values[OPPN_HAND_CATEGORIES_OUTPUT_OFFSET + high_hand_categories_index[cat]] = val
+        if debug:
+            print(monte_carlo_values)
+
     # Write these Monte Carlo stats directly to output, and to output mask
+    # NOTE: Opponent hand values are optional. If missing, mask == 0
     for cat in monte_carlo_values.keys():
         output_array[cat] = monte_carlo_values[cat]
-        output_mask_classes[cat] = MONTE_CARLO_RESULTS_SCALE
-    
+        if cat < STANDARD_OUTPUT_LENGTH:
+            output_mask_classes[cat] = MONTE_CARLO_RESULTS_SCALE
+        else:
+            output_mask_classes[cat] = EXTENDED_OUTPUT_RESULTS_SCALE
+        
     #######################################################################
     ## Encode bets that were made, or which can 100% be implied (we know result if fold anytime, or call on the river)
     #######################################################################
@@ -1314,15 +1338,15 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
     # TODO: Fix hardcoding of input sizes...
     X_train = np.empty((max_input, FULL_INPUT_LENGTH, 17, 17), dtype=TRAINING_INPUT_TYPE)
     y_train_not_np = [] # "best category" for each item
-    z_train_not_np = [] # 32-length vectors for all weights
-    m_train_not_np = [] # 32-length "mask" for which weights matter. 1 = yes 0 = N/A or ??
+    z_train_not_np = [] # ARRAY_OUTPUT_LENGTH-length vectors for all weights
+    m_train_not_np = [] # ARRAY_OUTPUT_LENGTH-length "mask" for which weights matter. 1 = yes 0 = N/A or ??
     hands = 0
     last_hands_print = -1
     lines = 0
     important_training_cases = 0 # How many cases do we include, ignoring sampling, since worth training focus (pat hands, etc)
 
     # Sample down even harder, if outputting equivalent hands by permuted suit (fewer examples for flushes)
-    # NOTE: This samples by "best class" [32]
+    # NOTE: This samples by "best class" [ARRAY_OUTPUT_LENGTH]
     # TODO: Alternatively, sample by the *value* of class[31] (keep all)
     if keep_all_data:
         sampling_policy = DATA_SAMPLING_KEEP_ALL
@@ -1330,8 +1354,18 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
         sampling_policy = DATA_SAMPLING_REDUCE_KEEP_TWO 
 
     # compute histogram of how many hands, output "correct draw" to each of 32 choices
-    y_count_by_bucket = [0 for i in range(32)] 
-    for line in csv_reader:
+    y_count_by_bucket = [0 for i in range(ARRAY_OUTPUT_LENGTH)] 
+
+    # Sometimes we need to remember the next or previous input row from csv_reader. 
+    # A. Save 'previous' and 'next' item. Clear these, if from a different hand
+    # B. Use generator to track these update, via .next()
+    # C. Don't worry about rare boundary conditions, like mid-hand CSV, last line in file, or mangled/missing data
+    # D. Do handle it if we don't have the correct stats.
+    # NOTE: Fix going forward with more output to CSV line. But needs backward-compatible.
+    prev_line = None
+    line = csv_reader.next()
+    peek_line = csv_reader.next()
+    while line:
         lines += 1
         if lines % 5000 == 0:
             print('Read %d lines' % lines)
@@ -1341,6 +1375,12 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             print('CSV key' + str(line))
             csv_key = line
             csv_key_map = CreateMapFromCSVKey(csv_key)
+
+            # Look ahead to the next line, from the generator
+            prev_line = line
+            line = peek_line
+            peek_line = csv_reader.next()
+            continue
         else:
             # Skip any mail-formed lines.
             try:
@@ -1355,6 +1395,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # TODO: Fix data collection...
                     if line and line[csv_key_map['action']]:
                         action_name = line[csv_key_map['action']]
+                        assert actionNameToAction[action_name], 'Unknown action |%s|' % action_name
                         action = actionNameToAction[action_name]
                         if action in ALL_BLINDS_SET:
                             #print('resetting # draws for both players')
@@ -1365,7 +1406,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     # For less confusion, if input data is "events" ie bets, checks, etc... 
                     # Data gets zipped into the same training format, trained with same shape, but just initialize it differently
                     # (re-use sub functions for encoding a hand, etc, whereever possible)
-                    hand_input, output_class, output_array, output_mask_classes, important_training_case = read_poker_event_line(line, csv_key_map, format = format, include_hand_context = include_hand_context, num_draw_out_position = num_draw_out_position, num_draw_in_position = num_draw_in_position, actions_this_round = actions_this_round)
+                    hand_input, output_class, output_array, output_mask_classes, important_training_case = read_poker_event_line(line, csv_key_map, format = format, include_hand_context = include_hand_context, num_draw_out_position = num_draw_out_position, num_draw_in_position = num_draw_in_position, actions_this_round = actions_this_round, prev_line=prev_line, peek_line=peek_line)
 
                     # Now, after line processed, upate # of cards drawn, if applicable
                     if format == 'deuce_events' and line and line[csv_key_map['action']]:
@@ -1397,10 +1438,16 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                     print('unknown input format: %s' % format)
                     sys.exit(-3)
             
+            #except (AssertionError): # Even fewer errors. Don't forget to return in production!
             #except (KeyError, AssertionError, NotImplementedError): # Fewer errors, for debugging
             except (TypeError, IndexError, ValueError, KeyError, AssertionError, NotImplementedError): # Any reading error
                 if lines % 1000 == 0:
                     print('\nskipping malformed/unusable input line:\n|%s|\n' % line)
+
+                # Look ahead to the next line, from the generator
+                prev_line = line
+                line = peek_line
+                peek_line = csv_reader.next()
                 continue
 
 
@@ -1481,7 +1528,7 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
                         """
 
                 else:
-                    output_mask = np.zeros(32)
+                    output_mask = np.zeros(ARRAY_OUTPUT_LENGTH)
                     output_mask[output_class] = 1.0
                 
                 if (hands % FULL_DEBUG_STEP == 1) and hands != last_hands_print:
@@ -1538,6 +1585,11 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
             if hands >= max_input:
                 break
 
+            # Look ahead to the next line, from the generator
+            prev_line = line
+            line = peek_line
+            peek_line = csv_reader.next()
+
             #sys.exit(-3)
 
     # Show histogram... of counts by 32 categories.
@@ -1550,12 +1602,12 @@ def _load_poker_csv(filename=DATA_FILENAME, max_input=MAX_INPUT_SIZE, output_bes
         for i in range(len(HOLDEM_VALUE_KEYS)):
             action = HOLDEM_VALUE_KEYS[i]
             DRAW_VALUE_KEYS[i] = action
-    print('count ground truth for 32 categories:\n%s\n' % ('\n'.join([str([DRAW_VALUE_KEYS[i],y_count_by_bucket[i],'%.1f%%' % (y_count_by_bucket[i]*100.0/hands)]) for i in range(32)])))
+    print('count ground truth for 32 categories:\n%s\n' % ('\n'.join([str([DRAW_VALUE_KEYS[i],y_count_by_bucket[i],'%.1f%%' % (y_count_by_bucket[i]*100.0/hands)]) for i in range(STANDARD_OUTPUT_LENGTH)])))
 
     #X_train = np.array(X_train_not_np)
     y_train = np.array(y_train_not_np)
-    z_train = np.array(z_train_not_np) # 32-length vectors
-    m_train = np.array(m_train_not_np) # 32-length masks
+    z_train = np.array(z_train_not_np) # ARRAY_OUTPUT_LENGTH-length vectors
+    m_train = np.array(m_train_not_np) # ARRAY_OUTPUT_LENGTH-length masks
 
     print('Read %d data points. Shape below:' % len(y_train_not_np))
     #print(X_train)
@@ -1613,7 +1665,7 @@ def load_data():
         num_examples_valid=X_valid.shape[0],
         num_examples_test=X_test.shape[0],
         input_dim=X_train.shape[1] * X_train.shape[2] * X_train.shape[3], # How much size per input?? 5x4x13 data (cards, suits, ranks)
-        output_dim=32, # output cases
+        output_dim=ARRAY_OUTPUT_LENGTH, # output cases
     )
 
 def build_model(input_dim, output_dim,

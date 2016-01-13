@@ -149,6 +149,16 @@ ALL_RAISES_SET = set([RAISE_SMALL_STREET, RAISE_BIG_STREET, RAISE_NO_LIMIT])
 ALL_CALLS_SET = set([CALL_SMALL_STREET, CALL_BIG_STREET, CALL_NO_LIMIT])
 ALL_BLINDS_SET = set([POST_BIG_BLIND, POST_SMALL_BLIND])
 
+
+################################################################
+## Various output units, for different games.
+## 32-length array for all games, up to NLH "extended output"
+################################################################
+
+STANDARD_OUTPUT_LENGTH = 32
+EXTENDED_OUTPUT_LENGTH = 64 # A little bit in reserve...
+ARRAY_OUTPUT_LENGTH = EXTENDED_OUTPUT_LENGTH
+
 # Now... map (some) of these actions, to 32-length arrays.
 # Treat all bets and calls as the same, regardless of big or small bet. Ignore blind posts, etc.
 BET_CATEGORY = 0
@@ -187,6 +197,17 @@ NL_BET_300_CATEGORY = 10 # 3.0x pot
 NL_BET_800_CATEGORY = 11 # 8.0x pot
 MAX_BET_CATEGORY = 12
 
+# Similarly, compute buckets, just for how likely we are to make a bet of this size:
+# NOTE: Extended case only.
+MIN_BET_CATEGORY_PERCENT = 43 # 32 + 11 [after oppn hand categories]
+NL_BET_020_CATEGORY_PERCENT = 44 # 0.2x pot
+NL_BET_050_CATEGORY_PERCENT = 45 # 0.5x pot
+NL_BET_100_CATEGORY_PERCENT = 46 # 1.0x pot
+NL_BET_150_CATEGORY_PERCENT = 47 # 1.5x pot
+NL_BET_300_CATEGORY_PERCENT = 48 # 3.0x pot
+NL_BET_800_CATEGORY_PERCENT = 49 # 8.0x pot
+MAX_BET_CATEGORY_PERCENT = 50
+
 # NOTE: Vast majority of action will be in the 0.5x - 1.5x pot size. We need the other values, to smooth out curve between min and max.
 # NOTE: If performance looks weird, we can very easily restrict output to the more normal range. No need to bet tiny of huge, until pot catch up.
 NL_BET_BUCKET_SIZES = [0.0, 0.2, 0.5, 1.0, 1.5, 3.0, 8.0, 1000.0] # Bucket values, limited by min bet and max bet
@@ -209,6 +230,17 @@ FOLD_PERCENT = 17 # Same as aggressive%, we need to estimate how often good trai
 # 0.0-1.0 odds the describe strength of our current hand. Abstractly, and vs opponent
 # NOTE: These take the last 15 bits of output. Add more bits if needed, expand from 32 --> more outputs
 ALLIN_VS_OPPONENT = 18
+
+# Compute buckets for ALLIN_VS_OPPONENT also. Use these to project in 2D, what kind of hand we're up against.
+# How often are we buried, and how often way ahead?
+# NOTE: Extended output case only.
+ALLIN_VS_OPPONENT_000_CATEGORY = 51
+ALLIN_VS_OPPONENT_033_CATEGORY = 52
+ALLIN_VS_OPPONENT_050_CATEGORY = 53
+ALLIN_VS_OPPONENT_066_CATEGORY = 54
+ALLIN_VS_OPPONENT_100_CATEGORY = 55
+ALLIN_VS_OPPONENT_BUCKET_SIZES = [0.0, 0.33, 0.5, 0.66, 1.0]
+
 # STDEV_VS_OPPONENT = 18 # Exclude. This just don't make sense!
 ALLIN_VS_RANDOM = 19
 # Replacing STDEV_VS_RANDOM -- useful but not used -- with AGGRESSION_PERCENT -- from observed data
@@ -217,11 +249,17 @@ ALLIN_VS_RANDOM = 19
 # The case we care about: good hand (or not): hand_val(bet) close to hand_val(check). When to explore a bet more?
 AGGRESSION_PERCENT = 20
 AGGRESSION_PERCENT_RESULTS_SCALE = 0.2 # 0.1 # Really volatile number, so reduce its relevence in the model (or just track seprately)
+EXTENDED_OUTPUT_RESULTS_SCALE = 0.2 # How hard to learn values, like opponent hand values?
 ## STDEV_VS_RANDOM = 20
 # Also, output all (11) High-hand categories, from this offset.
 # So flush value would be stored at (offset + high_hand_categories_index[FLUSH]). Too much... but ok since categories order fixed.
 # NOTE: We could combine Royal, Str8 flush and Quads into one super-category... but easier to keep structure
 HAND_CATEGORIES_OUTPUT_OFFSET = 21 # 32 - 11
+
+# NOTE: Extended-output case only.
+# Record the same (11) categories... for opponent hand (likely to make FLUSH, etc in allin)
+OPPN_HAND_CATEGORIES_OUTPUT_OFFSET = 32 # Categories, for opponent's hand. What are we up against? 
+
 
 # TODO: If we were smart, also output *bet size* as a single number. Try to predict what the training set would do here. Grrr..
 # Other numbers I'd try to predict:
