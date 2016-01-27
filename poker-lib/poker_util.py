@@ -10,6 +10,7 @@ import numpy as np
 from scipy.stats import beta 
 # from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter1d
+from scipy.interpolate import interp1d
 
 # Fill in dense features vector from sparse features map. Keys: 'key':row, Data: 'key':datum.
 def VectorFromKeysAndSparseMap(keys, sparse_data_map, default_value = 0):
@@ -149,7 +150,7 @@ def sample_bets_range(pot_size, min_bet, max_bet):
 # TODO: Create a stochastic version, but permuting outputs randomly, and re-fitting.
 # Code example from: http://stackoverflow.com/questions/15178146/line-smoothing-algorithm-in-python
 def best_bet_with_smoothing(bets, values, min_bet = 0.0, pot_size = 0.0, allin_win = 0.0,
-                            risk_power = 0.5, max_bet_pot_factor = 4.0, debug = True):
+                            risk_power = 0.5*0.5, max_bet_pot_factor = 4.0, debug = True):
     # bets_data
     x = bets
     y = values
@@ -221,3 +222,67 @@ def best_bet_with_smoothing(bets, values, min_bet = 0.0, pot_size = 0.0, allin_w
         print(zip(x4, y4))
 
     return (x3[max_arg], y3[max_arg])
+
+
+
+# Similarly to above, given point estimates for bet sizes, smooth (a little)
+# and project to 500(?) points. Sample at projected probability. 
+# Returns single bet size between [min_bet, max_bet]
+# NOTE: Minimal error checking. Feed this guy good inputs.
+def sample_smoothed_bet_probability_vector(bets, bet_size_probs, min_bet = 0.0, pot_size = 0.0, 
+                                           max_bet = 0.0, debug = True):
+    # cleanup
+    bets = np.clip(bets, min_bet, max_bet)
+    
+    # Hack... pull down over-value of larger bets. Negatives get zero'ed out later.
+    # 10x pot bet --> minus 5% [smoothing encourages huge bets too much]
+    adjustments = np.array([min(0.0, (bet / pot_size) * -0.005) for bet in bets])
+    bet_size_probs += adjustments
+    bet_size_probs = np.clip(bet_size_probs, -0.1, 1.0) # We don't want to eliminate negative values.
+    
+    x = bets
+    y = bet_size_probs
+
+    # Allins, etc.
+    if min_bet == max_bet or len(x) < 2:
+        return min_bet
+
+    # Project into both X and Y space, to smooth each section.
+    t = np.linspace(0, 1, len(x))
+    t2 = np.linspace(0, 1, 100)
+    x2 = np.interp(t2, t, x)
+    y2 = np.interp(t2, t, y)
+
+    # Now, apply a bit of smoothing.
+    sigma = 5 # 10
+    x3 = x2 # don't smooth in the x-direction
+    y3 = gaussian_filter1d(y2, sigma)
+
+    # Problem: On min-bet side... we might get repeated values. Take the last element, and move on.
+    head_indices = len(np.where(x3==x3[0])[0])
+    #print(head_indices)
+    #print('%s head indices are the same!' % (head_indices))
+    x3 = x3[head_indices-1:]
+    y3 = y3[head_indices-1:]
+    # TODO: Same for tail... maybe.
+    # For histogram... sample again. This time, regular points betwen min-bet and max-bet
+    interped_x = np.linspace(min_bet, max_bet, 700) # XXX points from minraise to allin (need large number, to make bet sizing non-discrete)
+    interped_histogram = interp1d(x3, y3)(interped_x) # Function! that iterpolates the XXX points
+    interped_histogram = np.clip(interped_histogram, 0.0, 1.0)
+
+    # interp_histogram will be the individual odds of each bet.
+    if interped_histogram.sum() <= 0:
+        return min_bet
+    interped_histogram = interped_histogram/interped_histogram.sum()
+    
+    # OK, now for a single sample, just return np.choice() [or 10 sample and take one, if debug]
+    if debug:
+        bet_samples = []
+        for _ in range(10):
+            bet_size = np.random.choice(interped_x, p=interped_histogram)
+            bet_samples.append(bet_size)
+        bet_samples.sort()
+        print([int(bet) for bet in bet_samples])
+    else:
+        bet_size = np.random.choice(interped_x, p=interped_histogram)
+    return bet_size
