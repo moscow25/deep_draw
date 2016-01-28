@@ -52,4 +52,5 @@ print('%d hands\n-------------------' % line_count)
 print(agent_sums)
 print('-------------------')
 print(agent_detail_sums)
+print({name: agent_detail_sums[name]/line_count for name in agent_detail_sums.keys()})
 
