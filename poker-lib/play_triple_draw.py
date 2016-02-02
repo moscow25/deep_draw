@@ -199,7 +199,8 @@ MINIMUM_CALL_VALUE_TO_CALL_WITH_CFR = -1.0 * MAXIMUM_CALL_TO_FOLD_WITH_CFR # The
 # NOTE: Order of inputs matters (for smoothing), even if multiple x == same. Why? min-bet has meaning. Also, easier.
 BET_SIZE_FROM_SMOOTHED = True
 BET_SIZE_FROM_PROBABILITY_VECTOR = True
-BET_SIZE_FROM_PROBABILITY_RATE = 0.80 # Odds with which we take the "bet size rate" bet, over the highest-value bet 
+BET_SIZE_FROM_PROBABILITY_RATE = 0.90 # 0.80 # Odds with which we take the "bet size rate" bet, over the highest-value bet 
+BET_AGGRESSIVELY_PROBABILITY_RATE = 0.20 # How often do we over-sample from the aggressive bets?
 
 # Given a check/bet number in range [not 0.0 or 1.0], do we need to add in a bias?
 # Why? Experimentally, the system imitates CFR, but plays too passively. 
@@ -1207,8 +1208,11 @@ class TripleDrawAIPlayer():
             # most likely made by CFR training (or by other good training examples)
             if BET_SIZE_FROM_PROBABILITY_VECTOR and np.random.random() <= BET_SIZE_FROM_PROBABILITY_RATE:
                 # Point estimates, for a player to make a bet in different sizes
+                # Do we bet as vector recommends, or over-sample the aggressive bet? Mostly, the recommended.
+                bet_aggressively = True if np.random.random() <= BET_AGGRESSIVELY_PROBABILITY_RATE else False
                 sampled_bet_size = sample_smoothed_bet_probability_vector(bets = bet_sizes_vector, bet_size_probs = bet_sizes_rates, 
-                                                                          pot_size = pot_size, min_bet = min_bet, max_bet = stack_size)
+                                                                          pot_size = pot_size, min_bet = min_bet, max_bet = stack_size,
+                                                                          aggressive_betting = bet_aggressively)
                 if debug:
                     print('\tsampling recommends:\t%d\tfrom p-vector: %s' % (sampled_bet_size, bet_sizes_rates)) 
                 recommended_bet_size = np.clip(sampled_bet_size, min_bet, stack_size)

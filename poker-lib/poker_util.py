@@ -12,6 +12,18 @@ from scipy.stats import beta
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
 
+# Try a few options or defaults for bet-sizing.
+
+# Logic bug that spreads bet-size sampling to uniform, even if smaller size bets under-sampled 
+# If True, massively over-samples from the large-bet buckets. If False, truer to what CFR does.
+AGGRESSIVE_BETSIZING = False # True 
+
+# For large bets that commit us, do we just go allin, instead of 90% allin, 80% allin, even 70% allin?
+PUSH_ALLIN_COMMITTED_BETS = True
+# Once odds (remainder) / (pot + bet) pretty good to call oppn allin,
+# start to push probabilty mass toward the allin bet ourselves.
+PUSH_ALLIN_COMMIT_MIN_ODDS = 1. / 2. # Note that we don't count opponent bet, in odds we'd get in callin the allin next.
+
 # Fill in dense features vector from sparse features map. Keys: 'key':row, Data: 'key':datum.
 def VectorFromKeysAndSparseMap(keys, sparse_data_map, default_value = 0):
     dense_data_vector = [default_value] * len(keys)
@@ -229,15 +241,18 @@ def best_bet_with_smoothing(bets, values, min_bet = 0.0, pot_size = 0.0, allin_w
 # and project to 500(?) points. Sample at projected probability. 
 # Returns single bet size between [min_bet, max_bet]
 # NOTE: Minimal error checking. Feed this guy good inputs.
-def sample_smoothed_bet_probability_vector(bets, bet_size_probs, min_bet = 0.0, pot_size = 0.0, 
-                                           max_bet = 0.0, debug = True):
+def sample_smoothed_bet_probability_vector(bets, bet_size_probs, min_bet = 0.0, pot_size = 0.0, max_bet = 0.0, 
+                                           aggressive_betting = AGGRESSIVE_BETSIZING, 
+                                           push_allin_committed = PUSH_ALLIN_COMMITTED_BETS, debug = True):
     # cleanup
     bets = np.clip(bets, min_bet, max_bet)
     
     # Hack... pull down over-value of larger bets. Negatives get zero'ed out later.
     # 10x pot bet --> minus 5% [smoothing encourages huge bets too much]
-    adjustments = np.array([min(0.0, (bet / pot_size) * -0.005) for bet in bets])
-    bet_size_probs += adjustments
+    # If aggro bet sizing... tweak down a bit, on the high end.
+    if aggressive_betting:
+        adjustments = np.array([min(0.0, (bet / pot_size) * -0.005) for bet in bets])
+        bet_size_probs += adjustments
     bet_size_probs = np.clip(bet_size_probs, -0.1, 1.0) # We don't want to eliminate negative values.
     
     x = bets
@@ -260,15 +275,51 @@ def sample_smoothed_bet_probability_vector(bets, bet_size_probs, min_bet = 0.0, 
 
     # Problem: On min-bet side... we might get repeated values. Take the last element, and move on.
     head_indices = len(np.where(x3==x3[0])[0])
-    #print(head_indices)
-    #print('%s head indices are the same!' % (head_indices))
+    # print(head_indices)
+    # print('%s head indices are the same!' % (head_indices))
     x3 = x3[head_indices-1:]
     y3 = y3[head_indices-1:]
-    # TODO: Same for tail... maybe.
-    # For histogram... sample again. This time, regular points betwen min-bet and max-bet
-    interped_x = np.linspace(min_bet, max_bet, 700) # XXX points from minraise to allin (need large number, to make bet sizing non-discrete)
+    # Same for tail... maybe.
+    tail_indices = len(np.where(x3==x3[-1])[0])
+    # print(tail_indices)
+    # print('%s tail indices are the same!' % (tail_indices))
+    if tail_indices > 1:
+        x3 = x3[: -1 * (tail_indices-1)]
+        y3 = y3[: -1 * (tail_indices-1)]
+
+    # If aggressive, re-sample evently in bet-size. For fair sample, keep distribution adjusting to input points.
+    if aggressive_betting:
+        # For histogram... sample again. This time, regular points betwen min-bet and max-bet
+        interped_x = np.linspace(min_bet, max_bet, 700) # XXX points from minraise to allin (need large number, to make bet sizing non-discrete)
+    else:
+        # Just take the points, interpolated between unevent-spaced bet sizes. 
+        interped_x = x3
+    # print(interped_x)
     interped_histogram = interp1d(x3, y3)(interped_x) # Function! that iterpolates the XXX points
     interped_histogram = np.clip(interped_histogram, 0.0, 1.0)
+
+    # Do we want to push large bets toward allin?
+    # Why? Not great idea to bet 80% of the pot.
+    # If we want to push large non-allin bets toward allin, here is the spot to do that.
+    # In short, find a cutoff, then linearly interpolate what % of a bet's odds to push to the allin-bet instead.
+    if push_allin_committed:
+        # Linearly interpolate how much odds to push into allin: [cutoff, 0.0] X [0.0, 1.0]
+        # print([pot, allin, PUSH_ALLIN_COMMIT_MIN_ODDS, (pot + allin),  PUSH_ALLIN_COMMIT_MIN_ODDS * (pot + allin), PUSH_ALLIN_COMMIT_MIN_ODDS * (pot + allin) / (1. + PUSH_ALLIN_COMMIT_MIN_ODDS)])
+        remainder_cutoff = PUSH_ALLIN_COMMIT_MIN_ODDS * (pot_size + max_bet) / (1. + PUSH_ALLIN_COMMIT_MIN_ODDS)
+        # print([remainder_cutoff, allin - remainder_cutoff])
+        push_allin_percent_func = interp1d([remainder_cutoff, 0.0], [0.0, 1.0])
+        for i in xrange(len(interped_histogram)):
+            bet_size = interped_x[i]
+            bet_odds = interped_histogram[i]
+            remainder = max_bet - bet_size
+            if remainder < remainder_cutoff:
+                push_allin_shift = push_allin_percent_func(remainder)
+                # If we're not allin, but kind of close, push some of the odds toward allin bet
+                if remainder > 0.0:
+                    odds_to_shift = push_allin_shift * bet_odds
+                    # print('shifting %.4f%% odds from bet size %d to allin! (out of %.4f%%)' % (odds_to_shift * 100.0, int(bet_size), bet_odds*100))
+                    interped_histogram[i] -= odds_to_shift
+                    interped_histogram[-1] += odds_to_shift
 
     # interp_histogram will be the individual odds of each bet.
     if interped_histogram.sum() <= 0:
