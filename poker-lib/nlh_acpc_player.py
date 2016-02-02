@@ -141,7 +141,7 @@ if args:
         holdem_output_layer, holdem_input_layer, holdem_layers  = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
             HAND_TO_MATRIX_PAD_SIZE,
-            32,
+            STANDARD_OUTPUT_LENGTH,
         )
 
         #print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
@@ -166,7 +166,7 @@ if args:
         bets_output_layer, bets_input_layer, bets_layers  = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
             HAND_TO_MATRIX_PAD_SIZE,
-            32,
+            ARRAY_OUTPUT_LENGTH,
         )
 
         #print('filling model with shape %s, with %d params' % (str(bets_output_layer.get_output_shape()), len(bets_all_param_values_from_file)))

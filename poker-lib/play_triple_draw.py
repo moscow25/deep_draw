@@ -198,6 +198,8 @@ MINIMUM_CALL_VALUE_TO_CALL_WITH_CFR = -1.0 * MAXIMUM_CALL_TO_FOLD_WITH_CFR # The
 # For now, just take best value. Could (easily) make it a little stochastic.
 # NOTE: Order of inputs matters (for smoothing), even if multiple x == same. Why? min-bet has meaning. Also, easier.
 BET_SIZE_FROM_SMOOTHED = True
+BET_SIZE_FROM_PROBABILITY_VECTOR = True
+BET_SIZE_FROM_PROBABILITY_RATE = 0.80 # Odds with which we take the "bet size rate" bet, over the highest-value bet 
 
 # Given a check/bet number in range [not 0.0 or 1.0], do we need to add in a bias?
 # Why? Experimentally, the system imitates CFR, but plays too passively. 
@@ -889,9 +891,21 @@ class TripleDrawAIPlayer():
             if debug:
                 if FORMAT == 'nlh':
                     print(('vals\t%s' % (['%.5f' % (val - 2.0) for val in bets_vector[:5]])).replace("'", ''))
-                    print(('betsize\t%s' % (['%.2f' % ((val - 2.0) * 10000) for val in bets_vector[5:13]])).replace("'", '')) # If betting, value by size
-                    print(('chips\t%s' % (['%.2f' % ((val) * 10000) for val in bets_vector[13:17]])).replace("'", '')) # chips already in the pot
-                    print(('allins\t%s' % (['%.4f' % (val) for val in bets_vector[17:]])).replace("'", '')) # Odds and chances to make a hand
+                    if ARRAY_OUTPUT_LENGTH > STANDARD_OUTPUT_LENGTH:
+                        # If betting, what bet size was made by players?
+                        print(('betsize\t%s' % (['%.2f' % (val) for val in bets_vector[MIN_BET_CATEGORY_PERCENT:MAX_BET_CATEGORY_PERCENT+1]])).replace("'", ''))
+                    print(('betval\t%s' % (['%.2f' % ((val - 2.0) * 10000) for val in bets_vector[MIN_BET_CATEGORY:MAX_BET_CATEGORY+1]])).replace("'", '')) # If betting, value by size
+                    print(('chips\t%s' % (['%.2f' % ((val) * 10000) for val in bets_vector[BET_SIZE_MADE:STACK_SIZE+1]])).replace("'", '')) # chips already in the pot
+                    # Fold%, allin value, aggro% + hand categories
+                    print(('allins\t%s\t\t%s' % (['%.4f' % (val) for val in bets_vector[FOLD_PERCENT:AGGRESSION_PERCENT+1]],
+                                               ['%.3f' % (val) for val in bets_vector[HAND_CATEGORIES_OUTPUT_OFFSET:HAND_CATEGORIES_OUTPUT_OFFSET + len(HIGH_HAND_CATEGORIES)]])).replace("'", '')) # Odds and chances to make a hand
+                    if ARRAY_OUTPUT_LENGTH > STANDARD_OUTPUT_LENGTH:
+                        # If available, further breakdown of oppn's hand projection
+                        # buckets for "allin_vs_oppn" number [0.0, .. 0.5 .. 1.0] + categories for opponent hand
+                        # NOTE: All trained as independent units, so numbers may not add up!
+                        print(('vs_oppn\t%s\t%s' % (['%.4f' % (val) for val in bets_vector[ALLIN_VS_OPPONENT_000_CATEGORY:ALLIN_VS_OPPONENT_100_CATEGORY+1]],
+                                                    ['%.3f' % (val) for val in bets_vector[OPPN_HAND_CATEGORIES_OUTPUT_OFFSET:OPPN_HAND_CATEGORIES_OUTPUT_OFFSET + len(HIGH_HAND_CATEGORIES)]])).replace("'", ''))
+
                 else:
                     print('vals\t%s' % ([(val - 2.0) for val in bets_vector[:5]]))
                     print('acts\t%s' % ([val for val in bets_vector[5:10]]))
@@ -1152,6 +1166,7 @@ class TripleDrawAIPlayer():
             # C. Smooth out -- especially at the edges (same value getting different recommendations)
             # D. Save best bet value
             bet_sizes_values = (bets_vector[5:13] - 2.0) * chip_bet_ratio
+            bet_sizes_rates =  bets_vector[MIN_BET_CATEGORY_PERCENT:MAX_BET_CATEGORY_PERCENT+1] # odds 0.0-1.0
             if debug:
                 print('bet values (for buckets)\t%s' %  bet_sizes_values)
             
@@ -1188,6 +1203,15 @@ class TripleDrawAIPlayer():
                     print('\tsmoothing recommends:\tbet: %d\tvalue: %.2f' % (best_bet_size, value))
                 recommended_bet_size = np.clip(best_bet_size, min_bet, stack_size)
 
+            # We can, and if possible we should, also sample from the bet sizes
+            # most likely made by CFR training (or by other good training examples)
+            if BET_SIZE_FROM_PROBABILITY_VECTOR and np.random.random() <= BET_SIZE_FROM_PROBABILITY_RATE:
+                # Point estimates, for a player to make a bet in different sizes
+                sampled_bet_size = sample_smoothed_bet_probability_vector(bets = bet_sizes_vector, bet_size_probs = bet_sizes_rates, 
+                                                                          pot_size = pot_size, min_bet = min_bet, max_bet = stack_size)
+                if debug:
+                    print('\tsampling recommends:\t%d\tfrom p-vector: %s' % (sampled_bet_size, bet_sizes_rates)) 
+                recommended_bet_size = np.clip(sampled_bet_size, min_bet, stack_size)
 
             # Use this space to fix bad logic in the values. Things that could not *possibly* be true.
             # A. Check has value < 0.0. 
@@ -2077,7 +2101,7 @@ def generate_player_models(draw_model_filename=None, holdem_model_filename=None,
         output_layer, input_layer, layers  = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
             HAND_TO_MATRIX_PAD_SIZE,
-            32,
+            ARRAY_OUTPUT_LENGTH,
         )
 
         #print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
@@ -2105,7 +2129,7 @@ def generate_player_models(draw_model_filename=None, holdem_model_filename=None,
         holdem_output_layer, holdem_input_layer, holdem_layers  = build_model(
             HAND_TO_MATRIX_PAD_SIZE, 
             HAND_TO_MATRIX_PAD_SIZE,
-            32,
+            ARRAY_OUTPUT_LENGTH,
         )
 
         #print('filling model with shape %s, with %d params' % (str(output_layer.get_output_shape()), len(all_param_values_from_file)))
@@ -2134,20 +2158,20 @@ def generate_player_models(draw_model_filename=None, holdem_model_filename=None,
              bets_output_layer, bets_input_layer, bets_layers  = build_fully_connected_model(
                  HAND_TO_MATRIX_PAD_SIZE, 
                  HAND_TO_MATRIX_PAD_SIZE,
-                 32,
+                 ARRAY_OUTPUT_LENGTH,
                  )
         elif len(bets_all_param_values_from_file) == 16:
             bets_output_layer, bets_input_layer, bets_layers  = build_nopool_model(
                  HAND_TO_MATRIX_PAD_SIZE, 
                  HAND_TO_MATRIX_PAD_SIZE,
-                 32,
+                 ARRAY_OUTPUT_LENGTH,
                  num_filters=64,
                  )
         else:
             bets_output_layer, bets_input_layer, bets_layers  = build_model(
                 HAND_TO_MATRIX_PAD_SIZE, 
                 HAND_TO_MATRIX_PAD_SIZE,
-                32,
+                ARRAY_OUTPUT_LENGTH,
                 )
 
         #print('filling model with shape %s, with %d params' % (str(bets_output_layer.get_output_shape()), len(bets_all_param_values_from_file)))
@@ -2174,13 +2198,13 @@ def generate_player_models(draw_model_filename=None, holdem_model_filename=None,
              old_bets_output_layer, old_bets_input_layer, old_bets_layers  = build_fully_connected_model(
                  HAND_TO_MATRIX_PAD_SIZE, 
                  HAND_TO_MATRIX_PAD_SIZE,
-                 32,
+                 ARRAY_OUTPUT_LENGTH,
                  )
         else:
             old_bets_output_layer, old_bets_input_layer, old_bets_layers = build_model(
                 HAND_TO_MATRIX_PAD_SIZE, 
                 HAND_TO_MATRIX_PAD_SIZE,
-                32,
+                ARRAY_OUTPUT_LENGTH,
                 )
         #print('filling model with shape %s, with %d params' % (str(old_bets_output_layer.get_output_shape()), len(old_bets_all_param_values_from_file)))
         lasagne.layers.set_all_param_values(old_bets_output_layer, old_bets_all_param_values_from_file)
@@ -2204,13 +2228,13 @@ def generate_player_models(draw_model_filename=None, holdem_model_filename=None,
              other_old_bets_output_layer, other_old_bets_input_layer, other_old_bets_layers = build_fully_connected_model(
                  HAND_TO_MATRIX_PAD_SIZE, 
                  HAND_TO_MATRIX_PAD_SIZE,
-                 32,
+                 ARRAY_OUTPUT_LENGTH,
                  )
         else:
             other_old_bets_output_layer, other_old_bets_input_layer, other_old_bets_layers = build_model(
                 HAND_TO_MATRIX_PAD_SIZE, 
                 HAND_TO_MATRIX_PAD_SIZE,
-                32,
+                ARRAY_OUTPUT_LENGTH,
                 )
         #print('filling model with shape %s, with %d params' % (str(other_old_bets_output_layer.get_output_shape()), len(other_old_bets_all_param_values_from_file)))
         lasagne.layers.set_all_param_values(other_old_bets_output_layer, other_old_bets_all_param_values_from_file)
