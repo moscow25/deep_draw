@@ -1182,6 +1182,12 @@ def read_poker_event_line(data_array, csv_key_map, format = 'deuce_events', pad_
         else:
             output_mask_classes[cat] = EXTENDED_OUTPUT_RESULTS_SCALE
         
+    # Final Hack! Set mask to small value > 0.0, for all unused output units
+    # (units not used ever, not unknown for given data)
+    for i in range(ARRAY_OUTPUT_LENGTH):
+        if i > LAST_OUTPUT_INDEX and output_mask_classes[i] == 0.0:
+            output_mask_classes[i] = UNUSED_OUTPUT_RESULTS_SCALE
+
     #######################################################################
     ## Encode bets that were made, or which can 100% be implied (we know result if fold anytime, or call on the river)
     #######################################################################
