@@ -48,13 +48,18 @@ elif TRAINING_FORMAT == 'video':
 MAX_INPUT_SIZE = 740000 # 700000 # 110000 # 120000 # 10000000 # Remove this constraint, as needed
 VALIDATION_SIZE = 40000
 TEST_SIZE = 0 # 5000
-NUM_EPOCHS = 20 # 100 # 100 # 20 # 50 # 100 # 500
+NUM_EPOCHS = 10 # 100 # 100 # 20 # 50 # 100 # 500
 BATCH_SIZE = 100 # 50 #100
 BORDER_SHAPE = "valid" # "full" = pads to prev shape "valid" = shrinks [bad for small input sizes]
 NUM_FILTERS = 24 # 16 # 32 # 16 # increases 2x at higher level
 NUM_HIDDEN_UNITS = 1024 # 512 # 256 #512
 LEARNING_RATE = 0.02 # 0.02 # 0.1 # 0.05
 MOMENTUM = 0.9
+
+# Do we train side-outputs, like softmax for opponent hand categories?
+TRAIN_SIDE_OUTPUTS = True
+SIDE_OUTPUT_LOSS_FACTOR = 0.1 # How much to factor side-loss (softmaxes on hand strength, opponent categories of hands)
+
 # Fix and test, before epoch switch...
 EPOCH_SWITCH_ADAPT = 20 # 12 # 10 # 30 # switch to adaptive training after X epochs of learning rate & momentum with Nesterov
 
@@ -758,12 +763,46 @@ def build_model(input_width, input_height, output_dim,
     print('final layer l_out, into %d dimension. Shape %s' % (output_dim, str(l_out.output_shape)))
     print('produced network of %d layers. TODO: name \'em!' % len(layers))
 
-    # Don't really need l_out... but easy to access that way
-    return (l_out, l_in, layers)
+    # Do we also train side-outputs? 
+    # For NLH, softmax for opponent hand has biggest value.
+    if TRAIN_SIDE_OUTPUTS:
+        # Our hand: prob to make pair, flush, etc.
+        l_out_hand_values = lasagne.layers.DenseLayer(
+            l_hidden1_dropout,
+            num_units=len(HIGH_HAND_CATEGORIES), # all high-hand poker categories
+            nonlinearity=lasagne.nonlinearities.softmax,
+            W=lasagne.init.GlorotUniform(),
+        )
+        print('final layer l_out_hand_values, into %d dimension. Shape %s' % (len(HIGH_HAND_CATEGORIES), 
+                                                                              str(l_out_hand_values.output_shape)))
+        # Oppn hand probability to make categories
+        l_out_oppn_hand_values = lasagne.layers.DenseLayer(
+            l_hidden1_dropout,
+            num_units=len(HIGH_HAND_CATEGORIES), # all high-hand poker categories
+            nonlinearity=lasagne.nonlinearities.softmax,
+            W=lasagne.init.GlorotUniform(),
+        )
+        print('final layer l_out_oppn_hand_values, into %d dimension. Shape %s' % (len(HIGH_HAND_CATEGORIES), 
+                                                                                   str(l_out_oppn_hand_values.output_shape)))
+        # Buckets of value vs oppn. [0% .. 50% .. 100%] -- useful debug distribution
+        l_out_win_percent_categories = lasagne.layers.DenseLayer(
+            l_hidden1_dropout,
+            num_units=len(ALLIN_VS_OPPONENT_BUCKET_SIZES), #  [0.0, 0.33, 0.5, 0.66, 1.0] or similar
+            nonlinearity=lasagne.nonlinearities.softmax,
+            W=lasagne.init.GlorotUniform(),
+        )
+        print('final layer l_out_win_percent_categories, into %d dimension. Shape %s' % (len(ALLIN_VS_OPPONENT_BUCKET_SIZES), 
+                                                                                         str(l_out_win_percent_categories.output_shape)))
+        
+        # Just dump side-outputs in an array. 
+        return (l_out, l_in, layers, [l_out_hand_values, l_out_oppn_hand_values, l_out_win_percent_categories])
+    else:
+        # Don't really need l_out... but easy to access that way
+        return (l_out, l_in, layers)
 
 
 # Adjust from the standard create_iter_functions, to deal with z_batch being vector of values.
-def create_iter_functions_full_output(dataset, output_layer,
+def create_iter_functions_full_output(dataset, output_layer, side_output_layers = None,
                                       input_var = None, # optionally supply input layer, model execution w/o theano.shared()
                                       input_layer = None,
                                       X_tensor_type=T.tensor4, # T.matrix,
@@ -799,9 +838,28 @@ def create_iter_functions_full_output(dataset, output_layer,
         # NOTE: X_batch will be loaded into "shared". To not do this... do function.eval({input_layer.var_in: data})
 
         # For training, not determinisitc
-        output_batch = lasagne.layers.get_output(output_layer) # , deterministic=DETERMINISTIC_MODEL_RUN)
+        output_batch = lasagne.layers.get_output(output_layer)
         loss_train_mask = value_action_error(output_batch, z_batch) * m_batch
         loss_train_mask = loss_train_mask.mean()
+
+        # If given side-outputs, evaluate those too!
+        if side_output_layers:
+            # Bit of a hack. Assume three side-outputs, in fixed order.
+            l_out_hand_values = side_output_layers[0]
+            l_out_oppn_hand_values = side_output_layers[1]
+            l_out_win_percent_categories = side_output_layers[2]
+            # Now get network output for each
+            hand_values_batch = lasagne.layers.get_output(l_out_hand_values)
+            oppn_hand_values_batch = lasagne.layers.get_output(l_out_oppn_hand_values)
+            win_percent_categories = lasagne.layers.get_output(l_out_win_percent_categories)
+            # As pure hack, compare to appropriate columns in z_batch (truth values)
+            hand_values_truth = z_batch[:,HAND_CATEGORIES_OUTPUT_OFFSET:(HAND_CATEGORIES_OUTPUT_OFFSET+len(HIGH_HAND_CATEGORIES))]
+            oppn_hand_values_truth = z_batch[:,OPPN_HAND_CATEGORIES_OUTPUT_OFFSET:(OPPN_HAND_CATEGORIES_OUTPUT_OFFSET+len(HIGH_HAND_CATEGORIES))]
+            win_percent_categories_truth = z_batch[:,ALLIN_VS_OPPONENT_000_CATEGORY:(ALLIN_VS_OPPONENT_000_CATEGORY+len(ALLIN_VS_OPPONENT_BUCKET_SIZES))]
+            # Finally, compute the cross-entropy loss!
+            loss_hand_values = (lasagne.objectives.categorical_crossentropy(hand_values_batch, hand_values_truth)).mean()
+            loss_oppn_hand_values = (lasagne.objectives.categorical_crossentropy(oppn_hand_values_batch, oppn_hand_values_truth)).mean()
+            loss_win_percent_categories = (lasagne.objectives.categorical_crossentropy(win_percent_categories, win_percent_categories_truth)).mean()
 
         # For eval, deterministic!
         output_batch_eval = lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN)
@@ -812,6 +870,8 @@ def create_iter_functions_full_output(dataset, output_layer,
         print('--> We are told to use \'masked\' loss function. So training & validation loss will be computed on inputs with mask == 1 only')
         #objective = objective_mask
         loss_train = loss_train_mask
+        if side_output_layers:
+            loss_train += SIDE_OUTPUT_LOSS_FACTOR * (loss_hand_values + loss_oppn_hand_values + loss_win_percent_categories)
         loss_eval = loss_eval_mask
     else:
         #objective = objective_no_mask
@@ -839,7 +899,16 @@ def create_iter_functions_full_output(dataset, output_layer,
         pred = T.argmax(lasagne.layers.get_output(output_layer, deterministic=DETERMINISTIC_MODEL_RUN) * OUTPUT_CATEGORY_DEFAULT_MASK, axis=1)
     accuracy = T.mean(T.eq(pred, y_batch), dtype=theano.config.floatX)
 
-    all_params = lasagne.layers.get_all_params(output_layer)
+    # If we look at side-outputs... include those parameters also!
+    if side_output_layers:
+        # HACK: Assume exactly three side-outputs. Note the overlapping parameters get combined. 
+        all_params = list(set(lasagne.layers.get_all_params(output_layer) + 
+                              lasagne.layers.get_all_params(side_output_layers[0]) + 
+                              lasagne.layers.get_all_params(side_output_layers[1]) + 
+                              lasagne.layers.get_all_params(side_output_layers[2])))
+    else:
+        all_params = lasagne.layers.get_all_params(output_layer)
+
     # Default: Nesterov momentum. Try something else?
     print('Building updates.nesterov_momentum with learning rate %.8ff, momentum %.2f' % (learning_rate, momentum))
     updates_nesterov = lasagne.updates.nesterov_momentum(loss_train, all_params, learning_rate, momentum)
@@ -1178,7 +1247,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
             input_var = input_var,
             )
     else:
-        output_layer, input_layer, layers = build_model(
+        output_layer, input_layer, layers, side_output_layers = build_model(
             input_height=dataset['input_height'],
             input_width=dataset['input_width'],
             output_dim=dataset['output_dim'],
@@ -1209,6 +1278,7 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
     iter_funcs = create_iter_functions_full_output(
         dataset,
         output_layer,
+        side_output_layers=side_output_layers,
         input_layer = input_layer,
         X_tensor_type=T.tensor4,
         input_var = input_var
@@ -1234,6 +1304,15 @@ def main(num_epochs=NUM_EPOCHS, out_file=None):
 
             # Save model, after every epoch.
             save_model(out_file=out_file, output_layer=output_layer)
+            
+            # If training side tasks, save those paramaters also
+            # NOTE: Will save the whole stack, including shared parameters. But that's good.
+            # Just a pain to load back into a shared network.
+            if TRAIN_SIDE_OUTPUTS and side_output_layers:
+                # Hack: Just save three models as part-1, part-2, part3
+                save_model(out_file=('side_values_'+out_file), output_layer=side_output_layers[0]) # hand category probabilities
+                save_model(out_file=('side_oppn_values_'+out_file), output_layer=side_output_layers[1]) # oppn hand category probabilities
+                save_model(out_file=('side_win_prob_'+out_file), output_layer=side_output_layers[2]) # distribution of allin odds vs oppn
 
             if epoch['number'] >= num_epochs:
                 break

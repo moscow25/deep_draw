@@ -241,6 +241,10 @@ ALLIN_VS_OPPONENT_066_CATEGORY = 54
 ALLIN_VS_OPPONENT_100_CATEGORY = 55
 ALLIN_VS_OPPONENT_BUCKET_SIZES = [0.0, 0.33, 0.5, 0.66, 1.0]
 
+# Another hack. If we have unused units, set them to 0.0 (for cleaner looking output)
+UNUSED_OUTPUT_RESULTS_SCALE = 0.01
+LAST_OUTPUT_INDEX = ALLIN_VS_OPPONENT_100_CATEGORY
+
 # STDEV_VS_OPPONENT = 18 # Exclude. This just don't make sense!
 ALLIN_VS_RANDOM = 19
 # Replacing STDEV_VS_RANDOM -- useful but not used -- with AGGRESSION_PERCENT -- from observed data
@@ -259,7 +263,6 @@ HAND_CATEGORIES_OUTPUT_OFFSET = 21 # 32 - 11
 # NOTE: Extended-output case only.
 # Record the same (11) categories... for opponent hand (likely to make FLUSH, etc in allin)
 OPPN_HAND_CATEGORIES_OUTPUT_OFFSET = 32 # Categories, for opponent's hand. What are we up against? 
-
 
 # TODO: If we were smart, also output *bet size* as a single number. Try to predict what the training set would do here. Grrr..
 # Other numbers I'd try to predict:
